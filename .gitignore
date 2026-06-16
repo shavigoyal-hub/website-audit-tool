@@ -1,0 +1,6 @@
+output/*.xlsx
+output/*.b64
+output/*.json
+__pycache__/
+*.pyc
+.venv/

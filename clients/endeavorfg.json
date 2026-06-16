@@ -1,0 +1,10 @@
+{
+  "client": "endeavorfg",
+  "live_url": "https://www.endeavorfg.com/",
+  "mockup_url": "https://gushwork-endeavorfg.vercel.app/",
+  "sf_internal_all_csv": "inputs/endeavorfg_internal_all.csv",
+  "sf_images_csv": null,
+  "exclude_url_patterns": ["/blog", "/category", "?page="],
+  "pagespeed_strategy": "mobile",
+  "drive_folder_id": null
+}
