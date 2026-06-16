@@ -36,35 +36,65 @@ def _visible_text(html):
     return re.sub(r"\s+", " ", text).strip()
 
 
-def _has_schema(html):
-    jsonld = re.search(r'type=["\']application/ld\+json["\']', html, re.I)
-    micro = re.search(r"itemscope|itemtype\s*=", html, re.I)
-    return bool(jsonld or micro)
+# What schema.org type(s) each PAGE TYPE should carry. A page passes if it has
+# ANY of the listed types. `label` is shown in the observation example.
+EXPECTED_SCHEMA = {
+    "Homepage":          {"types": ["organization", "website", "localbusiness"], "label": "Organization / WebSite"},
+    "Service / Product": {"types": ["service", "product", "offer"],              "label": "Service / Product"},
+    "About / Process":   {"types": ["organization", "aboutpage", "professionalservice"], "label": "Organization / AboutPage"},
+    "Contact":           {"types": ["localbusiness", "contactpage", "contactpoint", "organization"], "label": "LocalBusiness / ContactPoint"},
+    "Article / Blog":    {"types": ["article", "blogposting", "newsarticle"],    "label": "Article / BlogPosting"},
+    "Other / Landing":   {"types": ["webpage", "breadcrumblist", "faqpage"],     "label": "WebPage / Breadcrumb"},
+}
+
+
+def _schema_types(html):
+    """Return the set of lowercase schema.org @type values present (JSON-LD + microdata)."""
+    types = set(t.lower() for t in re.findall(r'"@type"\s*:\s*"([^"]+)"', html))
+    for it in re.findall(r'itemtype\s*=\s*["\']https?://schema\.org/([^"\']+)', html, re.I):
+        types.add(it.lower())
+    return types
 
 
 def analyze(reps):
-    """reps = {page_type: url}. Returns a dict of findings + per-page detail."""
+    """reps = {page_type: url}. Returns a dict of findings + per-page detail.
+
+    Structured data is checked PER PAGE TYPE: each representative page must carry
+    the schema expected for its type (homepage -> Organization/WebSite, service ->
+    Service, blog -> Article, etc.). One example per type is surfaced.
+    """
     pages = []
     for ptype, url in reps.items():
         sc, html = fetch(url)
         if sc != 200 or not isinstance(html, str):
             pages.append({"type": ptype, "url": url, "ok": False})
             continue
+        types = _schema_types(html)
+        exp = EXPECTED_SCHEMA.get(ptype, {"types": [], "label": "schema markup"})
+        has_expected = bool(exp["types"]) and any(t in types for t in exp["types"])
         pages.append({
             "type": ptype, "url": url, "ok": True,
-            "schema": _has_schema(html),
+            "schema": bool(types),
+            "schema_types": sorted(types),
+            "schema_expected": exp["label"],
+            "schema_ok": has_expected,
             "text_chars": len(_visible_text(html)),
         })
 
     checked = [p for p in pages if p.get("ok")]
-    schema_pages = [p for p in checked if p["schema"]]
+    # one example per page type missing its expected schema (canonical type order)
+    order = ["Homepage", "Service / Product", "About / Process", "Contact",
+             "Article / Blog", "Other / Landing"]
+    schema_gaps = sorted(
+        [{"type": p["type"], "url": p["url"], "expected": p["schema_expected"]}
+         for p in checked if not p.get("schema_ok")],
+        key=lambda g: order.index(g["type"]) if g["type"] in order else 99)
     blank_pages = [p for p in checked if p["text_chars"] < RENDER_MIN_CHARS]
 
     return {
         "pages": pages,
-        # Structured data: flagged if NO checked page has any schema markup.
-        "structured_data_absent": bool(checked) and not schema_pages,
-        # Rendering: flagged only if some page is an empty shell without JS.
+        "schema_gaps": schema_gaps,                 # type-aware structured-data gaps
+        "structured_data_absent": bool(schema_gaps),
         "render_blocked": blank_pages,
         "render_ok": bool(checked) and not blank_pages,
     }

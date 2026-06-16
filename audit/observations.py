@@ -212,13 +212,15 @@ def build_rows(findings, psi_observations, extra_rows):
 def render_rows(html_result):
     """Turn the html_checks result into observation rows + the keys that passed."""
     rows, passed = [], []
-    if html_result.get("structured_data_absent"):
+    gaps = html_result.get("schema_gaps") or []
+    if gaps:
         spec = CATALOG["structured_data"]
-        ex = next((p["url"] for p in html_result["pages"] if p.get("ok")), "")
+        # one example per page type, naming the schema that type should have
+        ex_lines = [f"{g['type']}: {g['url']} (missing {g['expected']} schema)" for g in gaps]
         rows.append({"category": CATEGORY["structured_data"],
-                     "observation": f"{spec[1]}\nEg: {ex}" if ex else spec[1],
+                     "observation": f"{spec[1]}\nEg: {ex_lines[0]}",
                      "priority": spec[0], "impact": spec[2],
-                     "reference": "Verify on validator.schema.org"})
+                     "reference": "\n".join(ex_lines)})
     else:
         passed.append("structured_data")
     if html_result.get("render_blocked"):
