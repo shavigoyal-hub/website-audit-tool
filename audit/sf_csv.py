@@ -28,17 +28,43 @@ def _num(df, name):
     return pd.Series([pd.NA] * len(df), index=df.index)
 
 
+# Always dropped — crawler/system URLs that are never real pages.
+SYSTEM_EXCLUDE = ["/cdn-cgi/"]
+
+# Pages that exist but are NOT organic-SEO landing pages. Excluded from
+# content-quality checks (thin content, content depth, readability) and from
+# the PageSpeed representative selection so we never report on, e.g., a staff
+# bio or a client-login page as if it were a money page.
+NON_SEO_PATTERNS = [
+    "/team-member", "/team/", "/staff", "/author", "/client-login", "/client-logins",
+    "/login", "/log-in", "/my-account", "/account", "/cart", "/checkout",
+    "/privacy", "/terms", "/disclosure", "/disclaimer", "/legal", "/sitemap",
+    "/search", "/thank-you", "/thank_you", "/404", "/wp-",
+]
+
+
+def _matches_any(addr_series, patterns):
+    mask = pd.Series([False] * len(addr_series), index=addr_series.index)
+    for pat in patterns:
+        mask |= addr_series.str.contains(re.escape(pat), case=False, regex=True)
+    return mask
+
+
 def load(csv_path, exclude_patterns):
     df = pd.read_csv(csv_path, dtype=str, keep_default_na=False, low_memory=False)
     df.columns = [c.strip() for c in df.columns]
     addr = _col(df, "Address")
-    # Drop feeds / excluded paths from the *observation* scope.
-    if exclude_patterns:
-        mask = pd.Series([True] * len(df), index=df.index)
-        for pat in exclude_patterns:
-            mask &= ~addr.str.contains(re.escape(pat), case=False, regex=True)
-        df = df[mask].reset_index(drop=True)
+    # Always drop crawler/system URLs (e.g. Cloudflare /cdn-cgi/), then drop
+    # client-specific feeds paths from the *observation* scope.
+    drop = (exclude_patterns or []) + SYSTEM_EXCLUDE
+    if drop:
+        df = df[~_matches_any(addr, drop)].reset_index(drop=True)
     return df
+
+
+def is_non_seo(df):
+    """Mask of pages that are not organic-SEO landing pages (bios, logins, etc.)."""
+    return _matches_any(_col(df, "Address"), NON_SEO_PATTERNS)
 
 
 def is_html(df):
@@ -74,13 +100,15 @@ def classify_page_type(url):
     return "Other / Landing"
 
 
-def representative_pages(df_full):
+def representative_pages(df_scoped):
     """One representative URL per page type, lowest crawl depth first.
 
-    df_full = the UN-excluded dataframe (we still want a blog representative to
-    characterise that template, even though feeds are out of observation scope).
+    df_scoped = the observation-scoped dataframe (feeds + system URLs already
+    removed). We additionally drop non-SEO pages (bios, logins) so PageSpeed
+    is only ever reported on real organic landing pages, never a feeds/category
+    or utility page.
     """
-    html = df_full[is_html(df_full)].copy()
+    html = df_scoped[is_html(df_scoped) & ~is_non_seo(df_scoped)].copy()
     html = html[_num(html, "Status Code").fillna(0).astype(int) == 200]
     if html.empty:
         return {}
@@ -130,21 +158,32 @@ def run_checks(df, df_full, has_images_csv):
                                        if "Redirect URL" in df.columns else
                                        df.loc[redir, ["Address", "Status Code"]].values.tolist())))
 
-    # Non-indexable (HTML only)
-    nonidx = html_mask & (indexable == "non-indexable")
-    findings.append(_finding("non_indexable", addr[nonidx].tolist(),
-                             evidence=("Non-Indexable", ["Address", "Indexability Status"],
-                                       df.loc[nonidx, ["Address", "Indexability Status"]].values.tolist()
+    # Non-indexable — ONLY pages explicitly blocked with a `noindex` directive.
+    # (Pages that are "non-indexable" merely because they redirect or are
+    #  canonicalised are NOT a problem and are deliberately excluded.)
+    robots = _col(df, "Meta Robots 1").str.lower()
+    ix_status = _col(df, "Indexability Status").str.lower()
+    xrobots = _col(df, "X-Robots-Tag 1").str.lower()
+    noindexed = html_mask & (
+        robots.str.contains("noindex") | ix_status.str.contains("noindex") | xrobots.str.contains("noindex")
+    )
+    findings.append(_finding("non_indexable", addr[noindexed].tolist(),
+                             evidence=("Non-Indexable", ["Address", "Meta Robots 1", "Indexability Status"],
+                                       df.loc[noindexed, ["Address", "Meta Robots 1", "Indexability Status"]].values.tolist()
                                        if "Indexability Status" in df.columns else
-                                       [[u, ""] for u in addr[nonidx]])))
+                                       [[u, "", ""] for u in addr[noindexed]])))
 
     # Indexable HTML 200s — the scope for content/meta checks
     ok = html_mask & (status == 200) & (indexable != "non-indexable")
+    # SEO-page scope = indexable pages that are real organic landing pages
+    # (excludes staff bios, client-login, legal/utility pages). Used for the
+    # content-quality checks where a thin bio page would be a false positive.
+    seo = ok & ~is_non_seo(df)
 
     # Titles
     title = _col(df, "Title 1")
     tlen = _num(df, "Title 1 Length").fillna(0)
-    long_title = ok & (tlen > 60)
+    long_title = ok & (tlen > 80)
     findings.append(_finding("title_long",
                              [f"{u}: {t}" for u, t in zip(addr[long_title], title[long_title])],
                              evidence=("Long Titles", ["Address", "Title 1", "Title 1 Length"],
@@ -159,19 +198,19 @@ def run_checks(df, df_full, has_images_csv):
     ks = ok & title.map(stuffed)
     findings.append(_finding("title_stuffed",
                              [f"{u}: {t}" for u, t in zip(addr[ks], title[ks])]))
-    # duplicate titles
-    dup_titles = []
+    # duplicate titles — two+ distinct URLs sharing the exact same <title>
     tnorm = title.where(ok, "")
     counts = Counter(t for t in tnorm if t.strip())
     dupset = {t for t, c in counts.items() if c > 1}
-    if dupset:
-        dup_titles = addr[tnorm.isin(dupset)].tolist()
-    findings.append(_finding("title_duplicate", dup_titles))
+    dup_mask = tnorm.isin(dupset) if dupset else pd.Series([False] * len(df), index=df.index)
+    findings.append(_finding("title_duplicate", addr[dup_mask].tolist(),
+                             evidence=("Duplicate Titles", ["Address", "Title 1"],
+                                       df.loc[dup_mask, ["Address", "Title 1"]].sort_values("Title 1").values.tolist())))
 
     # Meta description
     md = _col(df, "Meta Description 1")
     mdlen = _num(df, "Meta Description 1 Length").fillna(0)
-    findings.append(_finding("meta_long", addr[ok & (mdlen > 160)].tolist()))
+    findings.append(_finding("meta_long", addr[ok & (mdlen > 200)].tolist()))
     findings.append(_finding("meta_missing", addr[ok & (md.str.strip() == "")].tolist()))
 
     # H1
@@ -182,13 +221,13 @@ def run_checks(df, df_full, has_images_csv):
     h12 = _col(df, "H1-2")
     findings.append(_finding("h1_multiple", addr[ok & (h12.str.strip() != "")].tolist()))
 
-    # Thin content
+    # Thin content (SEO landing pages only — bios/logins excluded)
     wc = _num(df, "Word Count").fillna(0)
-    thin = ok & (wc < 300)
+    thin = seo & (wc < 300)
     findings.append(_finding("thin_content", addr[thin].tolist(),
                              evidence=("Thin Content", ["Address", "Word Count"],
                                        df.loc[thin, ["Address", "Word Count"]].values.tolist())))
-    very_thin = ok & (wc < 120)
+    very_thin = seo & (wc < 120)
     findings.append(_finding("content_depth", addr[very_thin].tolist()))
 
     # Near duplicates
@@ -213,12 +252,6 @@ def run_checks(df, df_full, has_images_csv):
     if not has_images_csv:
         findings.append({"key": "alt_text_skipped", "count": 0, "examples": [], "evidence": None, "detail": None})
 
-    # Response time
-    rt = _num(df, "Response Time").fillna(0)
-    slow = ok & (rt > 1.0)
-    findings.append(_finding("slow_response",
-                             [f"{u}: {r:.2f}s" for u, r in zip(addr[slow], rt[slow])]))
-
     # Carbon
     carbon = _col(df, "Carbon Rating").str.upper()
     findings.append(_finding("high_carbon", addr[ok & carbon.isin(["E", "F"])].tolist()))
@@ -236,9 +269,37 @@ def run_checks(df, df_full, has_images_csv):
     gr = _num(df, "Grammar Errors").fillna(0)
     findings.append(_finding("spelling_grammar", addr[ok & ((sp > 0) | (gr > 0))].tolist()))
 
-    # Readability
+    # Readability (SEO landing pages only)
     fre = _num(df, "Flesch Reading Ease Score")
-    poor_read = ok & (fre < 30) & fre.notna()
+    poor_read = seo & (fre < 30) & fre.notna()
     findings.append(_finding("poor_readability", addr[poor_read].tolist()))
 
     return [f for f in findings if f and (f["count"] > 0 or f["key"] == "alt_text_skipped")]
+
+
+# Master list of every CSV check that runs, with a friendly label, for the
+# "Checks Passed" tab. A check is "passed" when it produced no finding.
+CSV_CHECK_LABELS = {
+    "render_error": "No JavaScript / rendering errors",
+    "error_404": "No broken pages (404 errors)",
+    "error_5xx": "No server errors (5xx)",
+    "redirects": "No internal redirects",
+    "non_indexable": "No pages blocked by a noindex directive",
+    "title_long": "Title tag lengths within limit (≤80 chars)",
+    "title_missing": "All pages have a title tag",
+    "title_stuffed": "No keyword-stuffed titles",
+    "title_duplicate": "No duplicate title tags",
+    "meta_long": "Meta description lengths within limit (≤200 chars)",
+    "meta_missing": "All pages have a meta description",
+    "h1_missing": "All pages have an H1 tag",
+    "h1_multiple": "Single H1 per page",
+    "thin_content": "Content depth healthy (≥300 words on SEO pages)",
+    "content_depth": "Key informational sections present",
+    "near_duplicate": "No near-duplicate content",
+    "image_large": "Images within weight budget (≤100 KB)",
+    "high_carbon": "Acceptable page weight / carbon rating",
+    "deep_crawl": "Healthy crawl depth (≤4 clicks)",
+    "canonical_missing": "Canonical tags present",
+    "spelling_grammar": "No spelling / grammar errors",
+    "poor_readability": "Readable copy (Flesch ≥30)",
+}

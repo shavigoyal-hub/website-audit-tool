@@ -134,11 +134,32 @@ Union of both reference audits + additions. Each fires only if instances exist; 
 - [ ] `audit/report_xlsx.py` — multi-tab xlsx writer (format match).
 - [ ] `audit.py` — CLI wiring.
 - [ ] `clients/endeavorfg.json`.
-- [ ] Run end-to-end on endeavorfg → `output/endeavorfg_audit.xlsx`.
-- [ ] Verify zero errors, sanity-check observations against raw data.
-- [ ] Upload to Google Drive as a Google Sheet → share link.
+- [x] Run end-to-end on endeavorfg → `output/endeavorfg_audit.xlsx` (16 observations).
+- [x] Verify: fixed a `JS Error` false-positive (it's a count, not a flag); sanity-checked LCP/CLS/titles against raw data.
+- [x] Created Google Sheet in Drive (7 tabs): https://docs.google.com/spreadsheets/d/1kN6wromYMF_GHJKlXdduLpsv6nr_0ohEGPYczK44wgU/edit
 
 ---
+
+## 6b. v2 revisions (from client review of endeavorfg)
+
+Changes applied after the first pass, per reviewer feedback:
+
+- [x] **Title length** threshold 60 → **80** chars (3 pages flagged, not 23).
+- [x] **Meta description** threshold 160 → **200** chars; copy is now **"missing"** only (dropped "auto-generated" — undetectable).
+- [x] **404s** — `/cdn-cgi/` (Cloudflare Zaraz/email-protection) now always excluded; the lone 404 was a system URL → check no longer fires.
+- [x] **Non-indexable** — only fires on a real `noindex` directive (Meta Robots / X-Robots / Indexability Status), not on redirected/canonicalised pages.
+- [x] **Content-quality checks** (thin, content-depth, readability) scoped to **SEO pages** via `NON_SEO_PATTERNS` (team bios, client-login, legal/utility excluded).
+- [x] **PageSpeed** representatives now drawn from the **scoped + non-SEO-filtered** set (no more category/feeds page perf scores). Perf: <50 = High, 50–89 = Medium, ≥90 passes.
+- [x] **Slow response time** check removed.
+- [x] **CLS** threshold documented = **>0.25** (Google "poor").
+- [x] **Duplicate titles** now has its own evidence tab showing both URLs in each group.
+- [x] **Structured data** — real detection (`audit/html_checks.py` parses JSON-LD / microdata from fetched HTML); cites validator.schema.org.
+- [x] **Rendering** — real fetch-and-render check (no-JS body text); endeavorfg renders server-side → **passes** (in Checks Passed). Mirrors technicalseo.com/fetch-render & page-replica.
+- [x] **CRO** — qualitative review (live vs Gushwork mockup benchmark) → `cro_observations` in the client JSON (5 High-priority findings for endeavorfg).
+- [x] **"Checks Passed" tab** — every parameter tested that came back clean (18 items).
+- [x] **"All Pages (crawl)" tab** — 185 HTML pages × 13 SEO columns pasted into the sheet. (The complete 969-row × 79-col SF export, incl. image/CSS/JS assets, stays in `output/<client>_audit.xlsx` — Drive auto-converts it on drag-in. Pasting all 76k cells via the Sheets API is not reliable.)
+
+Result: endeavorfg → **16 observations** (9 High incl. 5 CRO, 7 Medium), 18 checks passed. Sheet: https://docs.google.com/spreadsheets/d/1kN6wromYMF_GHJKlXdduLpsv6nr_0ohEGPYczK44wgU/edit
 
 ## 6. Open / future
 

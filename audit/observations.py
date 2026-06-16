@@ -40,7 +40,7 @@ CATALOG = {
         "Multiple pages found with meta descriptions that are too long",
         "Over-length descriptions get truncated, hurting click-through rates."),
     "meta_missing": ("High",
-        "Multiple pages found with missing or auto-generated meta descriptions",
+        "Multiple pages found with missing meta descriptions",
         "Missing descriptions let search engines pick weak snippets, lowering CTR."),
     "h1_missing": ("High",
         "Multiple pages found with missing H1 tags",
@@ -92,20 +92,45 @@ CATALOG = {
     "perf_low": ("High",
         "Multiple pages found with low overall performance scores",
         "Poor performance suppresses rankings and increases bounce rates."),
+    "perf_moderate": ("Medium",
+        "Multiple pages found scoring below Google's recommended performance threshold (90)",
+        "Below-target performance scores slow the site and can hold back rankings and conversions."),
     "render_blocking": ("Medium",
         "Multiple pages found with render-blocking resources",
         "Render-blocking scripts and styles delay first paint and slow the page."),
     "unoptimized_images": ("Medium",
         "Multiple pages found serving unoptimized / non-next-gen images",
         "Unoptimized images inflate page weight and slow load times."),
-    # Sitewide heuristics
+    # Render-time (raw HTML / fetch-and-render)
     "structured_data": ("Medium",
-        "Structured data (schema markup) not detected sitewide",
-        "Search engines miss critical context, reducing visibility and rich-result opportunities."),
+        "Multiple pages found with no structured data (schema markup)",
+        "Without schema, pages miss rich-result eligibility and lose visibility in search "
+        "(verifiable on validator.schema.org)."),
+    "render_blocked": ("Critical",
+        "Multiple pages found that do not render content without JavaScript",
+        "Crawlers that don't execute JavaScript may index an empty page, causing severe ranking loss."),
+    # CRO (qualitative, benchmarked against the Gushwork build)
+    "cro": ("High",
+        None,  # observation text supplied per-item
+        None),
 }
 
 
-def build_rows(findings, psi_observations, sitewide):
+# Friendly labels for the PageSpeed + render-time checks (Checks Passed tab).
+PSI_CHECK_LABELS = {
+    "lcp": "Largest Contentful Paint within target (PageSpeed)",
+    "cls": "Cumulative Layout Shift within target — <0.25 (PageSpeed)",
+    "perf": "Overall performance score at or above target — 90+ (PageSpeed)",
+    "render_blocking": "No render-blocking resources (PageSpeed)",
+    "unoptimized_images": "Images served in optimized / next-gen formats (PageSpeed)",
+}
+RENDER_CHECK_LABELS = {
+    "structured_data": "Structured data (schema markup) present",
+    "render_blocked": "Content renders for crawlers without JavaScript",
+}
+
+
+def build_rows(findings, psi_observations, extra_rows):
     rows = []
     notes = []
     for f in findings:
@@ -121,15 +146,76 @@ def build_rows(findings, psi_observations, sitewide):
         rows.append(_row(obs, priority, impact, f))
 
     rows.extend(psi_observations)
-
-    for key in sitewide:
-        spec = CATALOG.get(key)
-        if spec:
-            rows.append({"observation": spec[1], "priority": spec[0],
-                         "impact": spec[2], "reference": "-"})
+    rows.extend(extra_rows or [])   # pre-built rows: render-time + CRO
 
     rows.sort(key=lambda r: PRIORITY_ORDER.get(r["priority"], 9))
     return rows, notes
+
+
+def render_rows(html_result):
+    """Turn the html_checks result into observation rows + the keys that passed."""
+    rows, passed = [], []
+    if html_result.get("structured_data_absent"):
+        spec = CATALOG["structured_data"]
+        ex = next((p["url"] for p in html_result["pages"] if p.get("ok")), "")
+        rows.append({"observation": f"{spec[1]}\nEg: {ex}" if ex else spec[1],
+                     "priority": spec[0], "impact": spec[2],
+                     "reference": "Verify on validator.schema.org"})
+    else:
+        passed.append("structured_data")
+    if html_result.get("render_blocked"):
+        spec = CATALOG["render_blocked"]
+        ex = html_result["render_blocked"][0]["url"]
+        rows.append({"observation": f"{spec[1]}\nEg: {ex}", "priority": spec[0],
+                     "impact": spec[2], "reference": "Verify on technicalseo.com/tools/fetch-render/"})
+    elif html_result.get("render_ok"):
+        passed.append("render_blocked")
+    return rows, passed
+
+
+def cro_rows(cro_items):
+    """cro_items = list of {observation, impact}. All High priority CRO findings."""
+    out = []
+    for it in cro_items or []:
+        out.append({"observation": it["observation"], "priority": "High",
+                    "impact": it["impact"], "reference": it.get("reference", "-")})
+    return out
+
+
+def build_passed_tab(fired_csv_keys, psi_passed, render_passed):
+    """Compile the 'Checks Passed' tab: every parameter tested that came back clean."""
+    from audit.sf_csv import CSV_CHECK_LABELS
+    rows = []
+    for key, label in CSV_CHECK_LABELS.items():
+        if key not in fired_csv_keys:
+            rows.append([label])
+    for key in psi_passed:
+        rows.append([PSI_CHECK_LABELS[key]])
+    for key in render_passed:
+        rows.append([RENDER_CHECK_LABELS[key]])
+    return rows
+
+
+def psi_status(psi_live):
+    """Return (failed_keys, passed_keys) for the five PageSpeed checks."""
+    failed = set()
+    for r in psi_live.values():
+        if not r or r.get("error"):
+            continue
+        if r.get("lcp_s") is not None and r["lcp_s"] >= 2.5:
+            failed.add("lcp")
+        if r.get("cls") is not None and r["cls"] > 0.25:
+            failed.add("cls")
+        if r.get("performance_score") is not None and r["performance_score"] < 90:
+            failed.add("perf")
+        opp = [t.lower() for t, _ in r.get("opportunities", [])]
+        if any("render-block" in t or "render block" in t for t in opp):
+            failed.add("render_blocking")
+        if any("image" in t for t in opp):
+            failed.add("unoptimized_images")
+    ran = bool([r for r in psi_live.values() if r and not r.get("error")])
+    passed = [k for k in PSI_CHECK_LABELS if ran and k not in failed]
+    return failed, passed
 
 
 def _row(obs, priority, impact, f):
@@ -158,7 +244,7 @@ def psi_to_observations(psi_live):
             lcp.append((url, r["lcp_s"]))
         if r.get("cls") is not None and r["cls"] > 0.25:
             cls.append((url, round(r["cls"], 2)))
-        if r.get("performance_score") is not None and r["performance_score"] < 50:
+        if r.get("performance_score") is not None and r["performance_score"] < 90:
             perf.append((url, r["performance_score"]))
         opp_titles = [t.lower() for t, _ in r.get("opportunities", [])]
         if any("render-block" in t or "render block" in t for t in opp_titles):
@@ -179,7 +265,7 @@ def psi_to_observations(psi_live):
         add("cls_high", f"{u} (CLS {v})")
     if perf:
         u, v = min(perf, key=lambda x: x[1])
-        add("perf_low", f"{u} (score {v}/100)")
+        add("perf_low" if v < 50 else "perf_moderate", f"{u} (score {v}/100)")
     if rb:
         add("render_blocking", rb[0])
     if img:
