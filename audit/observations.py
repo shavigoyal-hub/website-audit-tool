@@ -6,6 +6,41 @@ as "Multiple ... found" per house style, even for a single instance.
 
 PRIORITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 
+# Short 2-3 word header/category for each observation (shown as the first column).
+CATEGORY = {
+    "render_error": "Rendering",
+    "error_404": "Broken Links",
+    "error_5xx": "Server Errors",
+    "redirects": "Redirects",
+    "non_indexable": "Indexability",
+    "title_long": "Title Length",
+    "title_missing": "Missing Titles",
+    "title_stuffed": "Keyword Stuffing",
+    "title_duplicate": "Duplicate Titles",
+    "meta_long": "Meta Description",
+    "meta_missing": "Meta Description",
+    "h1_missing": "Missing H1",
+    "h1_multiple": "Multiple H1",
+    "thin_content": "Thin Content",
+    "content_depth": "Content Depth",
+    "near_duplicate": "Duplicate Content",
+    "image_large": "Image Size",
+    "high_carbon": "Page Weight",
+    "deep_crawl": "Crawl Depth",
+    "canonical_missing": "Canonical Tags",
+    "spelling_grammar": "Spelling & Grammar",
+    "poor_readability": "Readability",
+    "lcp_high": "Page Speed",
+    "lcp_medium": "Page Speed",
+    "cls_high": "Layout Shift",
+    "perf_low": "Page Speed",
+    "perf_moderate": "Page Speed",
+    "render_blocking": "Page Speed",
+    "unoptimized_images": "Image Optimization",
+    "structured_data": "Schema Markup",
+    "render_blocked": "Rendering",
+}
+
 # key -> (priority, observation_template, impact)
 # {ex} is replaced with the first example ("Eg: ...").
 CATALOG = {
@@ -158,7 +193,8 @@ def render_rows(html_result):
     if html_result.get("structured_data_absent"):
         spec = CATALOG["structured_data"]
         ex = next((p["url"] for p in html_result["pages"] if p.get("ok")), "")
-        rows.append({"observation": f"{spec[1]}\nEg: {ex}" if ex else spec[1],
+        rows.append({"category": CATEGORY["structured_data"],
+                     "observation": f"{spec[1]}\nEg: {ex}" if ex else spec[1],
                      "priority": spec[0], "impact": spec[2],
                      "reference": "Verify on validator.schema.org"})
     else:
@@ -166,7 +202,8 @@ def render_rows(html_result):
     if html_result.get("render_blocked"):
         spec = CATALOG["render_blocked"]
         ex = html_result["render_blocked"][0]["url"]
-        rows.append({"observation": f"{spec[1]}\nEg: {ex}", "priority": spec[0],
+        rows.append({"category": CATEGORY["render_blocked"],
+                     "observation": f"{spec[1]}\nEg: {ex}", "priority": spec[0],
                      "impact": spec[2], "reference": "Verify on technicalseo.com/tools/fetch-render/"})
     elif html_result.get("render_ok"):
         passed.append("render_blocked")
@@ -177,8 +214,8 @@ def cro_rows(cro_items):
     """cro_items = list of {observation, impact}. All High priority CRO findings."""
     out = []
     for it in cro_items or []:
-        out.append({"observation": it["observation"], "priority": "High",
-                    "impact": it["impact"], "reference": it.get("reference", "-")})
+        out.append({"category": it.get("category", "CRO"), "observation": it["observation"],
+                    "priority": "High", "impact": it["impact"], "reference": it.get("reference", "-")})
     return out
 
 
@@ -228,7 +265,8 @@ def _row(obs, priority, impact, f):
         ref = f["evidence"][0]  # evidence tab name
     elif f.get("examples"):
         ref = "\n".join(f["examples"])
-    return {"observation": text, "priority": priority, "impact": impact, "reference": ref}
+    return {"category": CATEGORY.get(f["key"], "General"), "observation": text,
+            "priority": priority, "impact": impact, "reference": ref}
 
 
 # ---- PageSpeed -> observations (deduped across page types) ----
@@ -254,7 +292,8 @@ def psi_to_observations(psi_live):
 
     def add(key, ex):
         spec = CATALOG[key]
-        rows.append({"observation": f"{spec[1]}\nEg: {ex}" if ex else spec[1],
+        rows.append({"category": CATEGORY.get(key, "Page Speed"),
+                     "observation": f"{spec[1]}\nEg: {ex}" if ex else spec[1],
                      "priority": spec[0], "impact": spec[2], "reference": "-"})
 
     if lcp:

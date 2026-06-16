@@ -32,15 +32,15 @@ def build(path, client, rows, notes, df_raw, evidence_tabs):
     # --- Observation tab ---
     ws = wb.active
     ws.title = "Observation"
-    ws.append(["Observation", "Priority", "Impact", "Reference"])
-    _style_header(ws, 4)
+    ws.append(["Category", "Observation", "Priority", "Impact", "Reference"])
+    _style_header(ws, 5)
     for r in rows:
-        ws.append([r["observation"], r["priority"], r["impact"], r["reference"]])
+        ws.append([r.get("category", ""), r["observation"], r["priority"], r["impact"], r["reference"]])
         row_i = ws.max_row
         fill = PRIORITY_FILL.get(r["priority"])
         if fill:
-            ws.cell(row=row_i, column=2).fill = fill
-        for c in range(1, 5):
+            ws.cell(row=row_i, column=3).fill = fill
+        for c in range(1, 6):
             ws.cell(row=row_i, column=c).alignment = WRAP
     if notes:
         ws.append([])
@@ -49,7 +49,7 @@ def build(path, client, rows, notes, df_raw, evidence_tabs):
         for n in notes:
             ws.append([n])
             ws.cell(row=ws.max_row, column=1).alignment = WRAP
-    _autosize(ws, [70, 12, 55, 40])
+    _autosize(ws, [20, 66, 12, 55, 40])
     ws.freeze_panes = "A2"
 
     # --- Evidence tabs ---
