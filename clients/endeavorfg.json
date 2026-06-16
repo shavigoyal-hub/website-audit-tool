@@ -4,34 +4,38 @@
   "mockup_url": "https://gushwork-endeavorfg.vercel.app/",
   "sf_internal_all_csv": "inputs/endeavorfg_internal_all.csv",
   "sf_images_csv": null,
-  "exclude_url_patterns": ["/blog", "/category", "?page="],
+  "exclude_url_patterns": [
+    "/blog",
+    "/category",
+    "?page="
+  ],
   "pagespeed_strategy": "mobile",
   "drive_folder_id": null,
   "cro_observations": [
     {
       "category": "Lead Capture",
       "observation": "Homepage has no embedded lead-capture form above the fold; visitors must click through to a separate contact page to enquire",
-      "impact": "Extra steps between intent and contact reduce conversion; an inline form would capture leads on the landing page itself."
+      "impact": "Extra clicks to enquire lose leads."
     },
     {
       "category": "Call-to-Action",
       "observation": "Weak / buried primary call-to-action — the main CTA appears only mid-page and uses vague wording ('Contact Us Now') with no single, repeated, action-led button (e.g. 'Book a Meeting')",
-      "impact": "An unclear, unrepeated CTA lowers click-through and lead volume."
+      "impact": "Unclear CTA loses clicks and leads."
     },
     {
       "category": "Trust Signals",
       "observation": "Trust signals largely absent above the fold — no client testimonials, no credentials (CFP/CFA), no review badges, no quantified proof (years in business, clients served, AUM)",
-      "impact": "Financial-services visitors rely on trust cues to convert; their absence increases bounce and lowers form completion."
+      "impact": "No trust cues, so visitors don't convert."
     },
     {
       "category": "Value Proposition",
       "observation": "Generic, undifferentiated hero value proposition ('personalized planning', 'trusted advisor') with no clear positioning statement",
-      "impact": "A generic headline fails to communicate why to choose this firm, weakening above-the-fold conversion."
+      "impact": "Doesn't say why to choose this firm."
     },
     {
       "category": "Social Proof",
       "observation": "No social proof or media/credential strip (client logos, 'as seen in', segment validation) and no gated lead magnet (guide, calculator, checklist)",
-      "impact": "Missing proof and lead magnets reduce both credibility and top-of-funnel capture."
+      "impact": "No proof to build credibility or capture leads."
     }
   ]
 }
