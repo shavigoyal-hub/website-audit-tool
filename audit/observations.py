@@ -17,10 +17,17 @@ CATEGORY = {
     "title_missing": "Missing Titles",
     "title_stuffed": "Keyword Stuffing",
     "title_duplicate": "Duplicate Titles",
+    "title_short": "Title Length",
     "meta_long": "Meta Description",
     "meta_missing": "Meta Description",
+    "meta_short": "Meta Description",
+    "meta_duplicate": "Meta Description",
     "h1_missing": "Missing H1",
     "h1_multiple": "Multiple H1",
+    "h1_long": "H1 Tags",
+    "h1_short": "H1 Tags",
+    "h1_duplicate": "H1 Tags",
+    "url_long": "URL Length",
     "thin_content": "Thin Content",
     "content_depth": "Content Depth",
     "near_duplicate": "Duplicate Content",
@@ -71,6 +78,27 @@ CATALOG = {
     "title_duplicate": ("Medium",
         "Multiple pages found sharing duplicate title tags",
         "Duplicate titles confuse search engines about which page to rank."),
+    "title_short": ("Low",
+        "Multiple pages found with very short title tags (under 30 characters)",
+        "Short titles waste SERP real estate and under-describe the page topic."),
+    "meta_short": ("Low",
+        "Multiple pages found with very short meta descriptions (under 70 characters)",
+        "Short descriptions under-use the snippet and can lower click-through."),
+    "meta_duplicate": ("Medium",
+        "Multiple pages found sharing duplicate meta descriptions",
+        "Duplicate descriptions weaken snippet relevance and differentiation."),
+    "h1_long": ("Low",
+        "Multiple pages found with overly long H1 tags (over 70 characters)",
+        "Long H1s dilute the primary heading signal and read poorly."),
+    "h1_short": ("Low",
+        "Multiple pages found with very short H1 tags (under 20 characters)",
+        "Very short H1s under-describe the page and weaken topical relevance."),
+    "h1_duplicate": ("Medium",
+        "Multiple pages found sharing duplicate H1 tags",
+        "Duplicate H1s blur which page is most relevant for a topic."),
+    "url_long": ("Low",
+        "Multiple pages found with overly long URLs (over 115 characters)",
+        "Long URLs are harder to share, can be truncated, and look less trustworthy."),
     "meta_long": ("High",
         "Multiple pages found with meta descriptions that are too long",
         "Over-length descriptions get truncated, hurting click-through rates."),
@@ -170,10 +198,6 @@ def build_rows(findings, psi_observations, extra_rows):
     notes = []
     for f in findings:
         key = f["key"]
-        if key == "alt_text_skipped":
-            notes.append("Alt-text check skipped: requires the Screaming Frog 'Images' export "
-                         "(internal_all does not contain alt attributes).")
-            continue
         spec = CATALOG.get(key)
         if not spec or spec[0] is None:
             continue

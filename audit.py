@@ -14,7 +14,7 @@ import os
 import sys
 
 from audit import config as cfg_mod
-from audit import sf_csv, pagespeed, observations, report_xlsx, html_checks
+from audit import sf_csv, pagespeed, observations, report_xlsx, html_checks, parameters
 
 
 def main():
@@ -75,8 +75,18 @@ def main():
             print(f"   [html] {p['type']}: schema={p['schema']} text={p['text_chars']}c")
     cro_obs = observations.cro_rows(cfg.get("cro_observations"))
 
+    # 3c. Site-level + live parameters (presence, robots, sitemap, favicon,
+    #     www/http redirects, multiple title/meta, alt text, soft 404, crawl budget)
+    site = parameters.evaluate(df, reps, cfg["live_url"])
+    site_obs = [{"category": i["category"], "observation": i["observation"],
+                 "priority": i["priority"], "impact": i["impact"], "reference": i["reference"]}
+                for i in site["issues"]]
+    for i in site["issues"]:
+        print(f"   [site] ISSUE {i['key']}")
+
     # 4. Build observation rows
-    rows, notes = observations.build_rows(findings, psi_rows, render_obs + cro_obs)
+    rows, notes = observations.build_rows(findings, psi_rows, render_obs + cro_obs + site_obs)
+    notes.extend(f"Not evaluated — {x}" for x in site["na"])
     print(f"   -> {len(rows)} observations")
 
     # 5. Evidence tabs
@@ -85,6 +95,7 @@ def main():
     # 5b. "Checks Passed" tab — every parameter tested that came back clean
     fired_csv = {f["key"] for f in findings if f["count"] > 0}
     passed = observations.build_passed_tab(fired_csv, psi_passed, render_passed)
+    passed.extend([p] for p in site["passed"])   # site-level + live passes
     evidence_tabs.append(("Checks Passed", ["Parameter tested — no issues found"], passed))
 
     # 6. Write xlsx

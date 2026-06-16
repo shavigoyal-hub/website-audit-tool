@@ -189,6 +189,8 @@ def run_checks(df, df_full, has_images_csv):
                              evidence=("Long Titles", ["Address", "Title 1", "Title 1 Length"],
                                        df.loc[long_title, ["Address", "Title 1", "Title 1 Length"]].values.tolist())))
     findings.append(_finding("title_missing", addr[ok & (title.str.strip() == "")].tolist()))
+    # short title (<30 chars, excluding empty) on SEO pages
+    findings.append(_finding("title_short", addr[seo & (tlen > 0) & (tlen < 30)].tolist()))
     # keyword-stuffed: 3+ pipe separators OR a token repeated 3+ times
     def stuffed(t):
         if t.count("|") >= 3:
@@ -212,6 +214,14 @@ def run_checks(df, df_full, has_images_csv):
     mdlen = _num(df, "Meta Description 1 Length").fillna(0)
     findings.append(_finding("meta_long", addr[ok & (mdlen > 200)].tolist()))
     findings.append(_finding("meta_missing", addr[ok & (md.str.strip() == "")].tolist()))
+    # short meta description (<70 chars, excluding empty) on SEO pages
+    findings.append(_finding("meta_short", addr[seo & (mdlen > 0) & (mdlen < 70)].tolist()))
+    # duplicate meta descriptions across pages
+    mdnorm = md.where(ok & (mdlen > 0), "")
+    md_counts = Counter(m for m in mdnorm if m.strip())
+    md_dupset = {m for m, c in md_counts.items() if c > 1}
+    md_dup_mask = mdnorm.isin(md_dupset) if md_dupset else pd.Series([False] * len(df), index=df.index)
+    findings.append(_finding("meta_duplicate", addr[md_dup_mask].tolist()))
 
     # H1
     h1 = _col(df, "H1-1")
@@ -220,6 +230,19 @@ def run_checks(df, df_full, has_images_csv):
                              evidence=("Missing H1", ["Address"], [[u] for u in addr[miss_h1]])))
     h12 = _col(df, "H1-2")
     findings.append(_finding("h1_multiple", addr[ok & (h12.str.strip() != "")].tolist()))
+    # H1 length + duplicate H1 (SEO pages)
+    h1len = _num(df, "H1-1 Length").fillna(0)
+    findings.append(_finding("h1_long", addr[seo & (h1len > 70)].tolist()))
+    findings.append(_finding("h1_short", addr[seo & (h1len > 0) & (h1len < 20)].tolist()))
+    h1norm = h1.where(seo & (h1.str.strip() != ""), "")
+    h1_counts = Counter(x for x in h1norm if x.strip())
+    h1_dupset = {x for x, c in h1_counts.items() if c > 1}
+    h1_dup_mask = h1norm.isin(h1_dupset) if h1_dupset else pd.Series([False] * len(df), index=df.index)
+    findings.append(_finding("h1_duplicate", addr[h1_dup_mask].tolist()))
+
+    # URL length (overly long URLs on SEO pages)
+    findings.append(_finding("url_long",
+                             [f"{u}: {len(u)} chars" for u in addr[seo & (addr.str.len() > 115)]]))
 
     # Thin content (SEO landing pages only — bios/logins excluded)
     wc = _num(df, "Word Count").fillna(0)
@@ -248,10 +271,6 @@ def run_checks(df, df_full, has_images_csv):
                              evidence=("Images > 100 Kb", ["Address", "Size (Bytes)"],
                                        df.loc[big, ["Address", "Size (Bytes)"]].values.tolist())))
 
-    # Missing alt text — only derivable from a dedicated Images export
-    if not has_images_csv:
-        findings.append({"key": "alt_text_skipped", "count": 0, "examples": [], "evidence": None, "detail": None})
-
     # Carbon
     carbon = _col(df, "Carbon Rating").str.upper()
     findings.append(_finding("high_carbon", addr[ok & carbon.isin(["E", "F"])].tolist()))
@@ -274,7 +293,7 @@ def run_checks(df, df_full, has_images_csv):
     poor_read = seo & (fre < 30) & fre.notna()
     findings.append(_finding("poor_readability", addr[poor_read].tolist()))
 
-    return [f for f in findings if f and (f["count"] > 0 or f["key"] == "alt_text_skipped")]
+    return [f for f in findings if f and f["count"] > 0]
 
 
 # Master list of every CSV check that runs, with a friendly label, for the
@@ -286,13 +305,20 @@ CSV_CHECK_LABELS = {
     "redirects": "No internal redirects",
     "non_indexable": "No pages blocked by a noindex directive",
     "title_long": "Title tag lengths within limit (≤80 chars)",
+    "title_short": "Title tags not too short (≥30 chars)",
     "title_missing": "All pages have a title tag",
     "title_stuffed": "No keyword-stuffed titles",
     "title_duplicate": "No duplicate title tags",
     "meta_long": "Meta description lengths within limit (≤200 chars)",
+    "meta_short": "Meta descriptions not too short (≥70 chars)",
     "meta_missing": "All pages have a meta description",
+    "meta_duplicate": "No duplicate meta descriptions",
     "h1_missing": "All pages have an H1 tag",
     "h1_multiple": "Single H1 per page",
+    "h1_long": "H1 tag lengths within limit (≤70 chars)",
+    "h1_short": "H1 tags not too short (≥20 chars)",
+    "h1_duplicate": "No duplicate H1 tags",
+    "url_long": "URL lengths healthy (≤115 chars)",
     "thin_content": "Content depth healthy (≥300 words on SEO pages)",
     "content_depth": "Key informational sections present",
     "near_duplicate": "No near-duplicate content",
