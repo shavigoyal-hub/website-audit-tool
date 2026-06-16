@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Website Audit Tool — generate a technical SEO/UX audit of a client's live site.
+"""Website Audit Tool : generate a technical SEO/UX audit of a client's live site.
 
 Usage:
     export PAGESPEED_API_KEY=...
@@ -86,17 +86,17 @@ def main():
 
     # 4. Build observation rows
     rows, notes = observations.build_rows(findings, psi_rows, render_obs + cro_obs + site_obs)
-    notes.extend(f"Not evaluated — {x}" for x in site["na"])
+    notes.extend(f"Not evaluated : {x}" for x in site["na"])
     print(f"   -> {len(rows)} observations")
 
     # 5. Evidence tabs
     evidence_tabs = [f["evidence"] for f in findings if f.get("evidence")]
 
-    # 5b. "Checks Passed" tab — every parameter tested that came back clean
+    # 5b. "Checks Passed" tab : every parameter tested that came back clean
     fired_csv = {f["key"] for f in findings if f["count"] > 0}
     passed = observations.build_passed_tab(fired_csv, psi_passed, render_passed)
     passed.extend([p] for p in site["passed"])   # site-level + live passes
-    evidence_tabs.append(("Checks Passed", ["Parameter tested — no issues found"], passed))
+    evidence_tabs.append(("Checks Passed", ["Parameter tested : no issues found"], passed))
 
     # 6. Write xlsx
     os.makedirs("output", exist_ok=True)

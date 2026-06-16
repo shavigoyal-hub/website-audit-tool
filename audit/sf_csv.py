@@ -28,7 +28,7 @@ def _num(df, name):
     return pd.Series([pd.NA] * len(df), index=df.index)
 
 
-# Always dropped — crawler/system URLs that are never real pages.
+# Always dropped : crawler/system URLs that are never real pages.
 SYSTEM_EXCLUDE = ["/cdn-cgi/"]
 
 # Pages that exist but are NOT organic-SEO landing pages. Excluded from
@@ -158,7 +158,7 @@ def run_checks(df, df_full, has_images_csv):
                                        if "Redirect URL" in df.columns else
                                        df.loc[redir, ["Address", "Status Code"]].values.tolist())))
 
-    # Non-indexable — ONLY pages explicitly blocked with a `noindex` directive.
+    # Non-indexable : ONLY pages explicitly blocked with a `noindex` directive.
     # (Pages that are "non-indexable" merely because they redirect or are
     #  canonicalised are NOT a problem and are deliberately excluded.)
     robots = _col(df, "Meta Robots 1").str.lower()
@@ -173,7 +173,7 @@ def run_checks(df, df_full, has_images_csv):
                                        if "Indexability Status" in df.columns else
                                        [[u, "", ""] for u in addr[noindexed]])))
 
-    # Indexable HTML 200s — the scope for content/meta checks
+    # Indexable HTML 200s : the scope for content/meta checks
     ok = html_mask & (status == 200) & (indexable != "non-indexable")
     # SEO-page scope = indexable pages that are real organic landing pages
     # (excludes staff bios, client-login, legal/utility pages). Used for the
@@ -200,7 +200,7 @@ def run_checks(df, df_full, has_images_csv):
     ks = ok & title.map(stuffed)
     findings.append(_finding("title_stuffed",
                              [f"{u}: {t}" for u, t in zip(addr[ks], title[ks])]))
-    # duplicate titles — two+ distinct URLs sharing the exact same <title>
+    # duplicate titles : two+ distinct URLs sharing the exact same <title>
     tnorm = title.where(ok, "")
     counts = Counter(t for t in tnorm if t.strip())
     dupset = {t for t, c in counts.items() if c > 1}
@@ -244,7 +244,7 @@ def run_checks(df, df_full, has_images_csv):
     findings.append(_finding("url_long",
                              [f"{u}: {len(u)} chars" for u in addr[seo & (addr.str.len() > 115)]]))
 
-    # Thin content (SEO landing pages only — bios/logins excluded)
+    # Thin content (SEO landing pages only : bios/logins excluded)
     wc = _num(df, "Word Count").fillna(0)
     thin = seo & (wc < 300)
     findings.append(_finding("thin_content", addr[thin].tolist(),

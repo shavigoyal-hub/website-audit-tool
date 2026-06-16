@@ -3,11 +3,11 @@
 We fetch the raw HTML of the representative pages (no JavaScript, i.e. what a
 crawler sees) and check two things:
 
-  1. Structured data (schema.org) — is there any JSON-LD or microdata at all?
+  1. Structured data (schema.org) : is there any JSON-LD or microdata at all?
      Mirrors what https://validator.schema.org/ reports. Absence is an SEO gap
      (no rich-result eligibility).
 
-  2. Rendering — does meaningful content appear WITHOUT JavaScript? This is the
+  2. Rendering : does meaningful content appear WITHOUT JavaScript? This is the
      same question the fetch-and-render tools answer
      (https://technicalseo.com/tools/fetch-render/ , https://page-replica.com).
      If a page is an empty shell without JS, crawlers may index nothing.

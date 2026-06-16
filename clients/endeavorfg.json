@@ -15,27 +15,27 @@
     {
       "category": "Lead Capture",
       "observation": "Homepage has no embedded lead-capture form above the fold; visitors must click through to a separate contact page to enquire",
-      "impact": "Extra clicks to enquire lose leads."
+      "impact": "May reduce lead conversions from high-intent visitors."
     },
     {
       "category": "Call-to-Action",
-      "observation": "Weak / buried primary call-to-action — the main CTA appears only mid-page and uses vague wording ('Contact Us Now') with no single, repeated, action-led button (e.g. 'Book a Meeting')",
-      "impact": "Unclear CTA loses clicks and leads."
+      "observation": "Weak / buried primary call-to-action : the main CTA appears only mid-page and uses vague wording ('Contact Us Now') with no single, repeated, action-led button (e.g. 'Book a Meeting')",
+      "impact": "An unclear call-to-action lowers click-through and lead volume."
     },
     {
       "category": "Trust Signals",
-      "observation": "Trust signals largely absent above the fold — no client testimonials, no credentials (CFP/CFA), no review badges, no quantified proof (years in business, clients served, AUM)",
-      "impact": "No trust cues, so visitors don't convert."
+      "observation": "Trust signals largely absent above the fold : no client testimonials, no credentials (CFP/CFA), no review badges, no quantified proof (years in business, clients served, AUM)",
+      "impact": "Missing trust cues increase bounce and lower conversions."
     },
     {
       "category": "Value Proposition",
       "observation": "Generic, undifferentiated hero value proposition ('personalized planning', 'trusted advisor') with no clear positioning statement",
-      "impact": "Doesn't say why to choose this firm."
+      "impact": "A generic message fails to communicate why to choose the firm."
     },
     {
       "category": "Social Proof",
       "observation": "No social proof or media/credential strip (client logos, 'as seen in', segment validation) and no gated lead magnet (guide, calculator, checklist)",
-      "impact": "No proof to build credibility or capture leads."
+      "impact": "Missing proof and lead magnets reduce credibility and lead capture."
     }
   ]
 }

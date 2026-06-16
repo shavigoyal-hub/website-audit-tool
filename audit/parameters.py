@@ -4,7 +4,7 @@ Returns a dict:
     {
       "issues": [ {key, category, priority, observation, impact, reference}, ... ],
       "passed": [ "label", ... ],
-      "na":     [ "label — reason not evaluated", ... ],
+      "na":     [ "label : reason not evaluated", ... ],
     }
 
 `issues` flow into the Observation tab; `passed` into the "Checks Passed" tab;
@@ -45,13 +45,13 @@ def evaluate(df, reps, live_url):
         "About / company page present" if has_about else _issue(
             "about_missing", "About / Company Page", "Medium",
             "No clear About / company page found in the crawl",
-            "No About page weakens brand trust."))
+            "A missing About page weakens brand trust signals."))
     has_contact = bool(addr.str.contains(r"/contact|book-meeting|/get-in-touch|/schedule").any())
     (passed if has_contact else issues).append(
         "Contact page present" if has_contact else _issue(
             "contact_missing", "Contact Page", "High",
             "No contact / booking page found in the crawl",
-            "Hard to contact you means lost leads."))
+            "A missing contact path reduces conversions and local SEO."))
 
     # --- Soft 404s (indexable 200 HTML that look like error pages) ---
     html_mask = is_html(df)
@@ -64,7 +64,7 @@ def evaluate(df, reps, live_url):
     if int(soft.sum()) > 0:
         issues.append(_issue("soft_404", "Soft 404", "Medium",
                              "Multiple pages found that return 200 but look like error / empty pages (soft 404)",
-                             "Empty pages waste crawl budget.",
+                             "Soft 404s waste crawl budget and can drop from the index.",
                              reference="\n".join(_col(df, "Address")[soft].head(8).tolist())))
     else:
         passed.append("No soft 404s detected")
@@ -74,8 +74,8 @@ def evaluate(df, reps, live_url):
     waste = int((status.between(300, 599) | (_col(df, "Indexability").str.lower() == "non-indexable")).sum())
     if waste / total_html > 0.10:
         issues.append(_issue("crawl_budget", "Crawl Budget", "Low",
-                             f"Multiple pages found wasting crawl budget — {waste} of {total_html} crawled URLs are redirects, errors or non-indexable",
-                             "Dead URLs steal crawl budget from real pages."))
+                             f"Multiple pages found wasting crawl budget : {waste} of {total_html} crawled URLs are redirects, errors or non-indexable",
+                             "Crawl budget spent on dead URLs starves real money pages."))
     else:
         passed.append(f"Crawl budget healthy ({waste}/{total_html} URLs redirect/error/non-indexable)")
 
@@ -89,7 +89,7 @@ def evaluate(df, reps, live_url):
         if blocked:
             issues.append(_issue("robots_block", "Robots.txt", "Critical",
                                  "Site appears blocked by robots.txt (Disallow: / for all agents)",
-                                 "Google can't crawl or rank the site."))
+                                 "A site-wide robots block prevents crawling and ranking."))
         else:
             passed.append("robots.txt present and not blocking the site")
         passed.append("Sitemap referenced in robots.txt" if has_sitemap_ref
@@ -97,7 +97,7 @@ def evaluate(df, reps, live_url):
     else:
         issues.append(_issue("robots_missing", "Robots.txt", "Low",
                              "No accessible robots.txt found",
-                             "No control over what crawlers access."))
+                             "A missing robots.txt removes control over crawler access."))
 
     # --- XML sitemap ---
     sm = _get(f"{origin}/sitemap.xml")
@@ -107,7 +107,7 @@ def evaluate(df, reps, live_url):
     else:
         issues.append(_issue("sitemap_missing", "XML Sitemap", "Medium",
                              "No XML sitemap found at /sitemap.xml",
-                             "Pages get found and indexed slower."))
+                             "Without a sitemap, pages are discovered and indexed slower."))
 
     # --- Favicon ---
     home = _get(origin + "/")
@@ -118,7 +118,7 @@ def evaluate(df, reps, live_url):
     else:
         issues.append(_issue("favicon_missing", "Favicon", "Low",
                              "No favicon detected",
-                             "Weak brand recognition in tabs and search."))
+                             "A missing favicon weakens brand recognition in tabs and search."))
 
     # --- www / non-www + http / https redirection ---
     bare = host[4:] if host.startswith("www.") else "www." + host
@@ -128,18 +128,18 @@ def evaluate(df, reps, live_url):
     elif alt is not None and alt.status_code in (302, 307):
         issues.append(_issue("wwwredir_temp", "WWW Redirect", "Low",
                              f"www / non-www handled with a temporary redirect ({alt.status_code}) instead of 301",
-                             "Link equity not consolidated to one host."))
+                             "Temporary redirects do not consolidate link equity."))
     else:
         issues.append(_issue("wwwredir_missing", "WWW Redirect", "Medium",
                              "www and non-www versions do not redirect to a single canonical host",
-                             "Two versions split ranking signals."))
+                             "Both www and non-www resolving splits ranking signals."))
     httpr = _get(f"http://{host}/", allow_redirects=False)
     if httpr is not None and httpr.status_code in (301, 308) and "https" in (httpr.headers.get("Location", "")):
         passed.append("HTTP redirects to HTTPS")
     else:
         issues.append(_issue("httpsredir_missing", "HTTPS Redirect", "High",
                              "HTTP does not 301-redirect to HTTPS",
-                             "Insecure URLs hurt trust and rankings."))
+                             "Serving HTTP without HTTPS hurts trust and rankings."))
 
     # --- Per-rep-page HTML: multiple title/meta + alt text ---
     title_counts, meta_counts, alt_rows = [], [], []
@@ -159,28 +159,28 @@ def evaluate(df, reps, live_url):
         passed.append("Single <title> tag per page") if max(title_counts) <= 1 else issues.append(
             _issue("title_multiple", "Multiple Titles", "Medium",
                    "Multiple pages found with more than one <title> tag",
-                   "Google can't tell which title to use."))
+                   "Multiple titles confuse search engines about the page title."))
     if meta_counts:
         passed.append("Single meta description per page") if max(meta_counts) <= 1 else issues.append(
             _issue("meta_multiple", "Multiple Meta", "Low",
                    "Multiple pages found with more than one meta description tag",
-                   "Mixed signals about the page snippet."))
+                   "Duplicate meta tags send mixed signals about the snippet."))
     if alt_rows:
         bad = [r for r in alt_rows if r[1] > 0]
         if bad:
             ex = "; ".join(f"{u} ({n}/{t} missing)" for u, n, t in bad[:5])
             issues.append(_issue("alt_missing", "Alt Tags", "Medium",
                                  f"Multiple pages found with images missing alt text\nEg: {bad[0][0]} ({bad[0][1]}/{bad[0][2]} images missing)",
-                                 "Hurts accessibility and image search.",
+                                 "Missing alt text hurts accessibility and image-search visibility.",
                                  reference=ex))
-            na.append("Full image alt-text audit — evaluated on representative pages only; a complete pass needs the Screaming Frog 'Images' export")
+            na.append("Full image alt-text audit : evaluated on representative pages only; a complete pass needs the Screaming Frog 'Images' export")
         else:
             passed.append("Images have alt text (representative pages)")
 
     # --- Not derivable without extra inputs ---
-    na.append("Keywords in Title Tags — needs a target-keyword list per page")
-    na.append("Keywords in Meta Description — needs a target-keyword list per page")
-    na.append("CTA above the fold — assessed qualitatively under the CRO findings (see Call-to-Action)")
+    na.append("Keywords in Title Tags : needs a target-keyword list per page")
+    na.append("Keywords in Meta Description : needs a target-keyword list per page")
+    na.append("CTA above the fold : assessed qualitatively under the CRO findings (see Call-to-Action)")
 
     return {"issues": issues, "passed": passed, "na": na}
 
