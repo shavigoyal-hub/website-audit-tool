@@ -293,6 +293,15 @@ def run_checks(df, df_full, has_images_csv):
     poor_read = seo & (fre < 30) & fre.notna()
     findings.append(_finding("poor_readability", addr[poor_read].tolist()))
 
+    # JS-dependent rendering (only when SF was crawled in JavaScript mode)
+    # Fires when raw HTML has almost no text but rendered version has full content,
+    # meaning the page's body is built entirely by JavaScript.
+    rend_wc = _num(df, "Rendered Word Count")
+    if rend_wc.notna().any():
+        rend_wc_f = rend_wc.fillna(0)
+        js_dep = ok & (wc < 100) & (rend_wc_f > 200)
+        findings.append(_finding("render_js_dependent", addr[js_dep].tolist()))
+
     return [f for f in findings if f and f["count"] > 0]
 
 
@@ -328,4 +337,5 @@ CSV_CHECK_LABELS = {
     "canonical_missing": "Canonical tags present",
     "spelling_grammar": "No spelling / grammar errors",
     "poor_readability": "Readable copy (Flesch ≥30)",
+    "render_js_dependent": "No pages with JS-only content (Screaming Frog JS rendering)",
 }

@@ -46,6 +46,7 @@ CATEGORY = {
     "unoptimized_images": "Image Optimization",
     "structured_data": "Schema Markup",
     "render_blocked": "Rendering",
+    "render_js_dependent": "Rendering",
 }
 
 # key -> (priority, observation_template, impact)
@@ -170,6 +171,9 @@ CATALOG = {
     "render_blocked": ("Critical",
         "Multiple pages found that do not render content without JavaScript",
         "Crawlers may index an empty page, causing severe ranking loss."),
+    "render_js_dependent": ("Critical",
+        "Multiple pages found where content is built entirely by JavaScript",
+        "Crawlers that do not execute JavaScript will index an empty page, causing significant ranking loss."),
     # CRO (qualitative, benchmarked against the Gushwork build)
     "cro": ("High",
         None,  # observation text supplied per-item

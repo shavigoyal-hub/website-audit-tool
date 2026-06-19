@@ -67,12 +67,18 @@ def main():
             psi_mockup = pagespeed.fetch_many(mock_reps, cfg["pagespeed_strategy"], args.api_key)
             _log_backend_compare(psi_live, psi_mockup)
 
-    # 3b. Render-time checks (structured data + fetch-and-render) on the same pages
-    html_result = html_checks.analyze(reps)
+    # 3b. Render-time checks (structured data + fetch-and-render) on the same pages.
+    # Pass df so html_checks can use SF's Rendered Word Count column directly
+    # when the crawl was done in JavaScript rendering mode (avoids a redundant
+    # HTTP fetch for the render-blocked check; schema check still runs live).
+    html_result = html_checks.analyze(reps, df=df)
     render_obs, render_passed = observations.render_rows(html_result)
+    render_mode = "SF JS mode" if html_result.get("sf_render_mode") else "live fetch"
+    print(f"   [html] render check source: {render_mode}")
     for p in html_result["pages"]:
         if p.get("ok"):
-            print(f"   [html] {p['type']}: schema={p['schema']} text={p['text_chars']}c")
+            src = p.get("render_source", "fetch")
+            print(f"   [html] {p['type']}: schema={p['schema']} text={p['text_chars']}c (src={src})")
     cro_obs = observations.cro_rows(cfg.get("cro_observations"))
 
     # 3c. Site-level + live parameters (presence, robots, sitemap, favicon,

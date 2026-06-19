@@ -56,13 +56,25 @@ def _schema_types(html):
     return types
 
 
-def analyze(reps):
+def analyze(reps, df=None):
     """reps = {page_type: url}. Returns a dict of findings + per-page detail.
 
     Structured data is checked PER PAGE TYPE: each representative page must carry
     the schema expected for its type (homepage -> Organization/WebSite, service ->
     Service, blog -> Article, etc.). One example per type is surfaced.
+
+    If df (the Screaming Frog dataframe) is supplied AND it contains a
+    'Rendered Word Count' column (i.e. SF was crawled in JavaScript mode), the
+    render-blocked check uses SF data directly instead of an HTTP fetch. The
+    schema check always runs via a live fetch regardless.
     """
+    # Detect whether SF was crawled in JavaScript mode (has rendered word counts).
+    sf_render_available = (
+        df is not None
+        and "Rendered Word Count" in df.columns
+        and "Word Count" in df.columns
+    )
+
     pages = []
     for ptype, url in reps.items():
         sc, html = fetch(url)
@@ -72,13 +84,33 @@ def analyze(reps):
         types = _schema_types(html)
         exp = EXPECTED_SCHEMA.get(ptype, {"types": [], "label": "schema markup"})
         has_expected = bool(exp["types"]) and any(t in types for t in exp["types"])
+
+        # Render-blocked: prefer SF rendered vs raw comparison; fall back to
+        # our own visible-char count from the no-JS fetch.
+        if sf_render_available:
+            import pandas as pd
+            row = df[df["Address"] == url]
+            if not row.empty:
+                raw_wc = pd.to_numeric(row["Word Count"].iloc[0], errors="coerce") or 0
+                rend_wc = pd.to_numeric(row["Rendered Word Count"].iloc[0], errors="coerce") or 0
+                # JS-dependent if raw is nearly empty but rendered has content.
+                text_chars = int(raw_wc) * 6  # approx chars (5 chars/word + space)
+                render_source = "sf"
+            else:
+                text_chars = len(_visible_text(html))
+                render_source = "fetch"
+        else:
+            text_chars = len(_visible_text(html))
+            render_source = "fetch"
+
         pages.append({
             "type": ptype, "url": url, "ok": True,
             "schema": bool(types),
             "schema_types": sorted(types),
             "schema_expected": exp["label"],
             "schema_ok": has_expected,
-            "text_chars": len(_visible_text(html)),
+            "text_chars": text_chars,
+            "render_source": render_source,
         })
 
     checked = [p for p in pages if p.get("ok")]
@@ -97,4 +129,5 @@ def analyze(reps):
         "structured_data_absent": bool(schema_gaps),
         "render_blocked": blank_pages,
         "render_ok": bool(checked) and not blank_pages,
+        "sf_render_mode": sf_render_available,      # True = SF was crawled with JS rendering
     }
