@@ -41,6 +41,7 @@ def _visible_text(html):
 EXPECTED_SCHEMA = {
     "Homepage":          {"types": ["organization", "website", "localbusiness"], "label": "Organization / WebSite"},
     "Service / Product": {"types": ["service", "product", "offer"],              "label": "Service / Product"},
+    "Industry":          {"types": ["service", "localbusiness", "professionalservice", "webpage"], "label": "Service / LocalBusiness"},
     "About / Process":   {"types": ["organization", "aboutpage", "professionalservice"], "label": "Organization / AboutPage"},
     "Contact":           {"types": ["localbusiness", "contactpage", "contactpoint", "organization"], "label": "LocalBusiness / ContactPoint"},
     "Article / Blog":    {"types": ["article", "blogposting", "newsarticle"],    "label": "Article / BlogPosting"},

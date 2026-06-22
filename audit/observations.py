@@ -11,7 +11,6 @@ CATEGORY = {
     "render_error": "Rendering",
     "error_404": "Broken Links",
     "error_5xx": "Server Errors",
-    "redirects": "Redirects",
     "non_indexable": "Indexability",
     "title_long": "Title Length",
     "title_missing": "Missing Titles",
@@ -29,14 +28,12 @@ CATEGORY = {
     "h1_duplicate": "H1 Tags",
     "url_long": "URL Length",
     "thin_content": "Thin Content",
-    "content_depth": "Content Depth",
     "near_duplicate": "Duplicate Content",
     "image_large": "Image Size",
     "high_carbon": "Page Weight",
-    "deep_crawl": "Crawl Depth",
     "canonical_missing": "Canonical Tags",
+    "canonical_not_self": "Canonical Tags",
     "spelling_grammar": "Spelling & Grammar",
-    "poor_readability": "Readability",
     "lcp_high": "Page Speed",
     "lcp_medium": "Page Speed",
     "cls_high": "Layout Shift",
@@ -47,6 +44,8 @@ CATEGORY = {
     "structured_data": "Schema Markup",
     "render_blocked": "Rendering",
     "render_js_dependent": "Rendering",
+    "title_multiple_tags": "Multiple Titles",
+    "meta_multiple_tags": "Multiple Meta",
 }
 
 # key -> (priority, observation_template, impact)
@@ -64,9 +63,9 @@ CATALOG = {
     "redirects": ("Medium",
         "Multiple pages found served via redirects",
         "Redirect hops waste crawl budget and can leak link equity."),
-    "non_indexable": ("Medium",
-        "Multiple pages found that are non-indexable",
-        "Non-indexable pages cannot rank, limiting organic visibility."),
+    "non_indexable": ("High",
+        "Multiple pages found with a noindex directive — excluded from search",
+        "Pages with noindex cannot rank in Google and are invisible to organic traffic."),
     "title_long": ("High",
         "Multiple pages found with title tags that are too long",
         "Truncated titles in search can reduce click-through and rankings."),
@@ -136,6 +135,9 @@ CATALOG = {
     "canonical_missing": ("Medium",
         "Multiple pages found with missing canonical tags",
         "Without canonicals, search engines may index the wrong URL."),
+    "canonical_not_self": ("High",
+        "Multiple pages found where the canonical tag points to a different URL",
+        "A non-self-referencing canonical signals to Google to index a different page, effectively de-indexing the current URL."),
     "spelling_grammar": ("Low",
         "Multiple pages found with spelling or grammar errors",
         "Errors reduce perceived quality and trust."),
@@ -174,6 +176,12 @@ CATALOG = {
     "render_js_dependent": ("Critical",
         "Multiple pages found where content is built entirely by JavaScript",
         "Crawlers that do not execute JavaScript will index an empty page, causing significant ranking loss."),
+    "title_multiple_tags": ("Medium",
+        "Multiple pages found with more than one <title> tag",
+        "Multiple title tags confuse search engines about the page title."),
+    "meta_multiple_tags": ("Low",
+        "Multiple pages found with more than one meta description tag",
+        "Duplicate meta tags send mixed signals about the snippet."),
     # CRO (qualitative, benchmarked against the Gushwork build)
     "cro": ("High",
         None,  # observation text supplied per-item
@@ -199,6 +207,8 @@ def build_rows(findings, psi_observations, extra_rows):
     rows = []
     notes = []
     for f in findings:
+        if f.get("suppress"):
+            continue  # evidence-only (e.g. redirects), not raised as observation
         key = f["key"]
         spec = CATALOG.get(key)
         if not spec or spec[0] is None:
@@ -224,7 +234,7 @@ def render_rows(html_result):
         rows.append({"category": CATEGORY["structured_data"],
                      "observation": f"{spec[1]}\nEg: {ex_lines[0]}",
                      "priority": spec[0], "impact": spec[2],
-                     "reference": "\n".join(ex_lines)})
+                     "reference": "Validate: https://validator.schema.org/\n" + "\n".join(ex_lines)})
     else:
         passed.append("structured_data")
     if html_result.get("render_blocked"):

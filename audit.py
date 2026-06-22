@@ -44,12 +44,22 @@ def main():
             print(f"   [csv] {f['key']}: {f['count']}")
 
     # SEO-page representatives (feeds, system & non-SEO pages already excluded)
-    reps = sf_csv.representative_pages(df)
+    reps = sf_csv.representative_pages(df, custom_patterns=cfg.get("page_type_patterns"))
 
     # 3. PageSpeed on representative page types (live; mockup backend-only)
+    # manual_psi in the config allows injecting known PSI results when the API
+    # quota is exhausted: {"Homepage": {"performance_score": 46, "lcp_s": 10.0,
+    #   "cls": 0.074, "tbt_ms": 740, "url": "https://...", "opportunities": []}}
     psi_live, psi_mockup = {}, {}
     psi_rows, psi_passed = [], []
-    if not args.no_psi:
+    if cfg.get("manual_psi"):
+        psi_live = cfg["manual_psi"]
+        print(f"   [psi] using manual_psi from config")
+        for pt, r in psi_live.items():
+            print(f"   [psi] {pt}: perf={r.get('performance_score')} LCP={r.get('lcp_s')}s CLS={r.get('cls')}")
+        psi_rows = observations.psi_to_observations(psi_live)
+        _, psi_passed = observations.psi_status(psi_live)
+    elif not args.no_psi:
         print(f"   page types -> {json.dumps(reps, indent=0)[:400]}")
         psi_live = pagespeed.fetch_many(reps, cfg["pagespeed_strategy"], args.api_key)
         for pt, r in psi_live.items():
@@ -83,7 +93,7 @@ def main():
 
     # 3c. Site-level + live parameters (presence, robots, sitemap, favicon,
     #     www/http redirects, multiple title/meta, alt text, soft 404, crawl budget)
-    site = parameters.evaluate(df, reps, cfg["live_url"])
+    site = parameters.evaluate(df, cfg["live_url"])
     site_obs = [{"category": i["category"], "observation": i["observation"],
                  "priority": i["priority"], "impact": i["impact"], "reference": i["reference"]}
                 for i in site["issues"]]

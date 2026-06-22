@@ -1,4 +1,5 @@
-"""Site-level + live parameters that the Screaming Frog CSV can't answer alone.
+"""Site-level checks derived from the Screaming Frog CSV + a small set of
+single-URL live checks (robots.txt, sitemap.xml, favicon.ico, redirect probes).
 
 Returns a dict:
     {
@@ -33,43 +34,30 @@ def _origin(live_url):
     return m.group(1) if m else live_url.rstrip("/")
 
 
-def evaluate(df, reps, live_url):
+def evaluate(df, live_url):
     issues, passed, na = [], [], []
     origin = _origin(live_url)
     host = re.sub(r"^https?://", "", origin)
-    addr = _col(df, "Address").str.lower()
+    addr = _col(df, "Address")
+    addr_l = addr.str.lower()
 
     # --- Presence checks (from the crawl) ---
-    has_about = bool(addr.str.contains(r"/about|who-we-serve|our-process|meet-the-team|/team").any())
+    has_about = bool(addr_l.str.contains(r"/about|who-we-serve|our-process|meet-the-team|/team").any())
     (passed if has_about else issues).append(
         "About / company page present" if has_about else _issue(
             "about_missing", "About / Company Page", "Medium",
             "No clear About / company page found in the crawl",
             "A missing About page weakens brand trust signals."))
-    has_contact = bool(addr.str.contains(r"/contact|book-meeting|/get-in-touch|/schedule").any())
+    has_contact = bool(addr_l.str.contains(r"/contact|book-meeting|/get-in-touch|/schedule").any())
     (passed if has_contact else issues).append(
         "Contact page present" if has_contact else _issue(
             "contact_missing", "Contact Page", "High",
             "No contact / booking page found in the crawl",
             "A missing contact path reduces conversions and local SEO."))
 
-    # --- Soft 404s (indexable 200 HTML that look like error pages) ---
+    # --- Crawl budget (share of redirects / errors / non-indexable) ---
     html_mask = is_html(df)
     status = _num(df, "Status Code").fillna(0).astype(int)
-    wc = _num(df, "Word Count").fillna(0)
-    title_l = _col(df, "Title 1").str.lower()
-    h1_l = _col(df, "H1-1").str.lower()
-    err_words = title_l.str.contains("not found|404|page not found") | h1_l.str.contains("not found|404|page not found")
-    soft = html_mask & (status == 200) & (wc < 50) & err_words
-    if int(soft.sum()) > 0:
-        issues.append(_issue("soft_404", "Soft 404", "Medium",
-                             "Multiple pages found that return 200 but look like error / empty pages (soft 404)",
-                             "Soft 404s waste crawl budget and can drop from the index.",
-                             reference="\n".join(_col(df, "Address")[soft].head(8).tolist())))
-    else:
-        passed.append("No soft 404s detected")
-
-    # --- Crawl budget (share of redirects / errors / non-indexable) ---
     total_html = int(html_mask.sum()) or 1
     waste = int((status.between(300, 599) | (_col(df, "Indexability").str.lower() == "non-indexable")).sum())
     if waste / total_html > 0.10:
@@ -83,7 +71,6 @@ def evaluate(df, reps, live_url):
     rb = _get(f"{origin}/robots.txt")
     if rb is not None and rb.status_code == 200:
         body = rb.text
-        # a bare "Disallow: /" under a wildcard agent blocks the whole site
         blocked = re.search(r"(?im)^\s*user-agent:\s*\*\s*[\s\S]*?^\s*disallow:\s*/\s*$", body)
         has_sitemap_ref = bool(re.search(r"(?im)^\s*sitemap:\s*http", body))
         if blocked:
@@ -92,8 +79,7 @@ def evaluate(df, reps, live_url):
                                  "A site-wide robots block prevents crawling and ranking."))
         else:
             passed.append("robots.txt present and not blocking the site")
-        passed.append("Sitemap referenced in robots.txt" if has_sitemap_ref
-                      else "robots.txt present")
+        passed.append("Sitemap referenced in robots.txt" if has_sitemap_ref else "robots.txt present")
     else:
         issues.append(_issue("robots_missing", "Robots.txt", "Low",
                              "No accessible robots.txt found",
@@ -120,66 +106,48 @@ def evaluate(df, reps, live_url):
                              "No favicon detected",
                              "A missing favicon weakens brand recognition in tabs and search."))
 
-    # --- www / non-www + http / https redirection ---
-    bare = host[4:] if host.startswith("www.") else "www." + host
-    alt = _get(f"https://{bare}/", allow_redirects=False)
-    if alt is not None and alt.status_code in (301, 308):
-        passed.append("www / non-www variants redirect to one canonical host")
-    elif alt is not None and alt.status_code in (302, 307):
-        issues.append(_issue("wwwredir_temp", "WWW Redirect", "Low",
-                             f"www / non-www handled with a temporary redirect ({alt.status_code}) instead of 301",
-                             "Temporary redirects do not consolidate link equity."))
-    else:
-        issues.append(_issue("wwwredir_missing", "WWW Redirect", "Medium",
-                             "www and non-www versions do not redirect to a single canonical host",
-                             "Both www and non-www resolving splits ranking signals."))
-    httpr = _get(f"http://{host}/", allow_redirects=False)
-    if httpr is not None and httpr.status_code in (301, 308) and "https" in (httpr.headers.get("Location", "")):
-        passed.append("HTTP redirects to HTTPS")
-    else:
-        issues.append(_issue("httpsredir_missing", "HTTPS Redirect", "High",
-                             "HTTP does not 301-redirect to HTTPS",
-                             "Serving HTTP without HTTPS hurts trust and rankings."))
-
-    # --- Per-rep-page HTML: multiple title/meta + alt text ---
-    title_counts, meta_counts, alt_rows = [], [], []
-    for ptype, url in reps.items():
-        r = _get(url)
-        if r is None or r.status_code != 200:
-            continue
-        h = r.text
-        title_counts.append(len(re.findall(r"<title[ >]", h, re.I)))
-        meta_counts.append(len(re.findall(r'<meta\s+[^>]*name=["\']description["\']', h, re.I)))
-        imgs = re.findall(r"<img\b[^>]*>", h, re.I)
-        noalt = [i for i in imgs if not re.search(r'\balt\s*=', i, re.I)]
-        if imgs:
-            alt_rows.append((url, len(noalt), len(imgs)))
-
-    if title_counts:
-        passed.append("Single <title> tag per page") if max(title_counts) <= 1 else issues.append(
-            _issue("title_multiple", "Multiple Titles", "Medium",
-                   "Multiple pages found with more than one <title> tag",
-                   "Multiple titles confuse search engines about the page title."))
-    if meta_counts:
-        passed.append("Single meta description per page") if max(meta_counts) <= 1 else issues.append(
-            _issue("meta_multiple", "Multiple Meta", "Low",
-                   "Multiple pages found with more than one meta description tag",
-                   "Duplicate meta tags send mixed signals about the snippet."))
-    if alt_rows:
-        bad = [r for r in alt_rows if r[1] > 0]
-        if bad:
-            ex = "; ".join(f"{u} ({n}/{t} missing)" for u, n, t in bad[:5])
-            issues.append(_issue("alt_missing", "Alt Tags", "Medium",
-                                 f"Multiple pages found with images missing alt text\nEg: {bad[0][0]} ({bad[0][1]}/{bad[0][2]} images missing)",
-                                 "Missing alt text hurts accessibility and image-search visibility.",
-                                 reference=ex))
-            na.append("Full image alt-text audit : evaluated on representative pages only; a complete pass needs the Screaming Frog 'Images' export")
+    # --- www / non-www redirect (from SF crawl data) ---
+    # SF will include www. or non-www variants in the crawl if it encountered them.
+    canonical_has_www = host.startswith("www.")
+    alt_prefix = f"http{'s' if origin.startswith('https') else ''}://" + (
+        host[4:] if canonical_has_www else "www." + host)
+    alt_in_crawl = df[addr.str.startswith(alt_prefix)]
+    if not alt_in_crawl.empty:
+        alt_status = _num(alt_in_crawl, "Status Code").fillna(0).astype(int)
+        if alt_status.isin([301, 308]).all():
+            passed.append("www / non-www variants redirect to canonical host (301/308)")
+        elif alt_status.isin([302, 307]).any():
+            issues.append(_issue("wwwredir_temp", "WWW Redirect", "Low",
+                                 f"www / non-www handled with a temporary redirect instead of 301",
+                                 "Temporary redirects do not consolidate link equity.",
+                                 reference=alt_in_crawl["Address"].head(3).tolist()))
         else:
-            passed.append("Images have alt text (representative pages)")
+            issues.append(_issue("wwwredir_missing", "WWW Redirect", "Medium",
+                                 "www and non-www versions do not redirect to a single canonical host",
+                                 "Both www and non-www resolving splits ranking signals."))
+    else:
+        na.append("www / non-www redirect : alt variant not in SF crawl — verify manually: curl -sI " + alt_prefix + "/")
+
+    # --- HTTP → HTTPS redirect (from SF crawl data) ---
+    http_prefix = "http://" + re.sub(r"^www\.", "", host)
+    http_in_crawl = df[addr.str.startswith(http_prefix) & ~addr.str.startswith("https://")]
+    if not http_in_crawl.empty:
+        http_status = _num(http_in_crawl, "Status Code").fillna(0).astype(int)
+        if http_status.isin([301, 308]).all():
+            passed.append("HTTP redirects to HTTPS (301/308)")
+        else:
+            bad_http = http_in_crawl.loc[~http_status.isin([301, 308]), "Address"].head(3).tolist()
+            issues.append(_issue("httpsredir_missing", "HTTPS Redirect", "High",
+                                 "HTTP does not 301-redirect to HTTPS",
+                                 "Serving HTTP without HTTPS hurts trust and rankings.",
+                                 reference="\n".join(bad_http)))
+    else:
+        na.append("HTTP→HTTPS redirect : http:// URLs not in SF crawl scope — verify manually: curl -sI http://" + host + "/")
 
     # --- Not derivable without extra inputs ---
     na.append("Keywords in Title Tags : needs a target-keyword list per page")
     na.append("Keywords in Meta Description : needs a target-keyword list per page")
+    na.append("Full image alt-text audit : needs Screaming Frog 'Images' export")
     na.append("CTA above the fold : assessed qualitatively under the CRO findings (see Call-to-Action)")
 
     return {"issues": issues, "passed": passed, "na": na}

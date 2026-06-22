@@ -1,6 +1,13 @@
-output/*.xlsx
-output/*.b64
-output/*.json
+output/
 __pycache__/
 *.pyc
 .venv/
+.env
+
+# Client crawl data — never commit raw CSVs
+inputs/
+clients/*.csv
+
+# API keys / secrets
+*.key
+
