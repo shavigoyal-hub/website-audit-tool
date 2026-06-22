@@ -1,7 +1,9 @@
 """Flask web app — wraps the CLI audit tool for Vercel hosting."""
+import glob
 import json
 import os
 import re
+import subprocess
 import tempfile
 import traceback
 
@@ -10,7 +12,26 @@ from flask import Flask, jsonify, render_template, request, send_file
 from audit import observations, pagespeed, parameters, report_xlsx, sf_csv
 
 app = Flask(__name__)
-app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB upload limit
+app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
+
+SF_CLI = "/Applications/Screaming Frog SEO Spider.app/Contents/MacOS/ScreamingFrogSEOSpiderLauncher"
+
+
+def _crawl_with_sf(url, output_dir):
+    """Run a headless Screaming Frog crawl and return path to internal_all.csv."""
+    cmd = [
+        SF_CLI,
+        "--headless",
+        "--crawl", url,
+        "--output-folder", output_dir,
+        "--export-tabs", "Internal:All",
+        "--overwrite",
+    ]
+    subprocess.run(cmd, check=True, timeout=600)
+    matches = glob.glob(os.path.join(output_dir, "internal_all.csv"))
+    if not matches:
+        raise FileNotFoundError("Crawl finished but internal_all.csv not found in output folder.")
+    return matches[0]
 
 
 @app.route("/")
@@ -20,7 +41,7 @@ def index():
 
 @app.route("/run", methods=["POST"])
 def run_audit():
-    tmp_csv = None
+    tmp_dir = None
     try:
         live_url = request.form.get("live_url", "").strip()
         mockup_url = request.form.get("mockup_url", "").strip()
@@ -28,14 +49,12 @@ def run_audit():
         if not live_url:
             return jsonify({"error": "Live URL is required."}), 400
 
-        # Derive client name from domain: https://www.invisionaz.com/ → invisionaz
         m = re.match(r"https?://(?:www\.)?([^/]+)", live_url)
         domain = m.group(1) if m else live_url
         client_name = re.sub(r"\.[^.]+$", "", domain).replace(".", "_").lower()
 
         psi_key = os.environ.get("PAGESPEED_API_KEY")
 
-        # Load client config if it exists (exclude patterns, page types, manual PSI)
         exclude_patterns, page_type_patterns, manual_psi = [], None, None
         client_json = os.path.join("clients", f"{client_name}.json")
         if os.path.exists(client_json):
@@ -47,16 +66,9 @@ def run_audit():
             if not mockup_url:
                 mockup_url = stored.get("mockup_url", "")
 
-        # CSV: uploaded file takes priority; fall back to pre-placed file on disk
-        csv_file = request.files.get("csv_file")
-        if csv_file and csv_file.filename:
-            tmp_csv = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
-            csv_file.save(tmp_csv.name)
-            csv_path = tmp_csv.name
-        else:
-            csv_path = os.path.join("inputs", f"{client_name}_internal_all.csv")
-            if not os.path.exists(csv_path):
-                return jsonify({"error": f"No CSV uploaded and no pre-placed file found at {csv_path}."}), 400
+        # Crawl via Screaming Frog — no manual CSV needed
+        tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
+        csv_path = _crawl_with_sf(live_url, tmp_dir)
 
         import pandas as pd
         df_raw = pd.read_csv(csv_path, dtype=str, keep_default_na=False, low_memory=False)
@@ -106,8 +118,9 @@ def run_audit():
         return jsonify({"error": traceback.format_exc()}), 500
 
     finally:
-        if tmp_csv:
-            os.unlink(tmp_csv.name)
+        if tmp_dir:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @app.route("/download/<path:filepath>")
