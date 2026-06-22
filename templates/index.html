@@ -48,6 +48,24 @@
     }
     input:focus { outline: none; border-color: #6366f1; background: #fff; }
 
+    .upload-zone {
+      border: 2px dashed #d1d5db;
+      border-radius: 10px;
+      padding: 24px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .upload-zone:hover { border-color: #6366f1; background: #f5f3ff; }
+    .upload-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; width: 100%; height: 100%;
+    }
+    .upload-zone .icon { font-size: 26px; margin-bottom: 6px; }
+    .upload-zone p { font-size: 13px; color: #6b7280; }
+    .upload-zone .file-name { font-size: 13px; font-weight: 600; color: #6366f1; margin-top: 6px; }
+
     button[type="submit"] {
       width: 100%;
       padding: 13px;
@@ -100,13 +118,24 @@
     <h1>SEO Audit Tool</h1>
     <p class="subtitle">Enter the client's live site and the Gushwork mockup to generate a full technical SEO report.</p>
 
-    <form id="auditForm">
+    <form id="auditForm" enctype="multipart/form-data">
       <label for="live_url">Live site URL</label>
       <input type="url" id="live_url" name="live_url" placeholder="https://www.invisionaz.com/" required />
 
       <label for="mockup_url">Gushwork mockup URL</label>
       <p class="hint">The site Gushwork has prepared for the client</p>
       <input type="url" id="mockup_url" name="mockup_url" placeholder="https://invisionaz-6glk.gush.site/" />
+
+      <div id="csvSection" style="display:none">
+        <label>Screaming Frog — Internal All CSV</label>
+        <p class="hint">Crawl the site in SF, then Bulk Export → Internal → All</p>
+        <div class="upload-zone">
+          <div class="icon">📄</div>
+          <p>Drag & drop or <strong>click to browse</strong></p>
+          <div class="file-name" id="fileName"></div>
+          <input type="file" name="csv_file" id="csvFile" accept=".csv" />
+        </div>
+      </div>
 
       <button type="submit" id="submitBtn">
         <span id="btnText">Run Audit</span>
@@ -119,12 +148,32 @@
     <div class="steps">
       <h3>How it works</h3>
       <div class="step"><div class="step-num">1</div><p>Enter the client's live URL and the Gushwork mockup link.</p></div>
-      <div class="step"><div class="step-num">2</div><p>Screaming Frog crawls the site automatically — no CSV export needed.</p></div>
+      <div class="step" id="step2"><div class="step-num">2</div><p id="step2text">Screaming Frog crawls the site automatically — no CSV needed.</p></div>
       <div class="step"><div class="step-num">3</div><p>Download the audit XLSX — ready to share with the client.</p></div>
     </div>
   </div>
 
   <script>
+    // Check if SF is available on the server; show CSV upload if not
+    fetch("/api/capabilities")
+      .then(r => r.json())
+      .then(data => {
+        if (!data.sf_available) {
+          document.getElementById("csvSection").style.display = "block";
+          document.getElementById("csvFile").required = true;
+          document.getElementById("step2text").textContent =
+            "Export Internal All CSV from Screaming Frog and upload it above.";
+        }
+      })
+      .catch(() => {
+        // If capabilities endpoint fails, show CSV upload as safe fallback
+        document.getElementById("csvSection").style.display = "block";
+      });
+
+    document.getElementById("csvFile").addEventListener("change", function () {
+      document.getElementById("fileName").textContent = this.files[0]?.name || "";
+    });
+
     document.getElementById("auditForm").addEventListener("submit", async function (e) {
       e.preventDefault();
       const btn = document.getElementById("submitBtn");

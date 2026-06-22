@@ -15,10 +15,10 @@ app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 
 SF_CLI = "/Applications/Screaming Frog SEO Spider.app/Contents/MacOS/ScreamingFrogSEOSpiderLauncher"
+SF_AVAILABLE = os.path.isfile(SF_CLI)
 
 
 def _crawl_with_sf(url, output_dir):
-    """Run a headless Screaming Frog crawl and return path to internal_all.csv."""
     cmd = [
         SF_CLI,
         "--headless",
@@ -36,7 +36,12 @@ def _crawl_with_sf(url, output_dir):
 
 @app.route("/")
 def index():
-    return render_template("index.html")
+    return render_template("index.html", sf_available=SF_AVAILABLE)
+
+
+@app.route("/api/capabilities")
+def capabilities():
+    return jsonify({"sf_available": SF_AVAILABLE})
 
 
 @app.route("/run", methods=["POST"])
@@ -66,9 +71,20 @@ def run_audit():
             if not mockup_url:
                 mockup_url = stored.get("mockup_url", "")
 
-        # Crawl via Screaming Frog — no manual CSV needed
-        tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
-        csv_path = _crawl_with_sf(live_url, tmp_dir)
+        # Resolve crawl data: auto-crawl (SF) or uploaded CSV
+        csv_file = request.files.get("csv_file")
+        if SF_AVAILABLE:
+            tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
+            csv_path = _crawl_with_sf(live_url, tmp_dir)
+        elif csv_file and csv_file.filename:
+            tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
+            csv_path = os.path.join(tmp_dir, "internal_all.csv")
+            csv_file.save(csv_path)
+        else:
+            return jsonify({"error": (
+                "Screaming Frog is not installed on this server.\n"
+                "Please upload the Internal All CSV exported from Screaming Frog."
+            )}), 400
 
         import pandas as pd
         df_raw = pd.read_csv(csv_path, dtype=str, keep_default_na=False, low_memory=False)
