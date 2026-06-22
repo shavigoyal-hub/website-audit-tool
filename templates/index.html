@@ -1,0 +1,226 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gushwork SEO Audit Tool</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+      background: #f7f8fa;
+      color: #1a1a2e;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 16px;
+    }
+
+    .logo { font-size: 13px; font-weight: 700; letter-spacing: 0.12em; color: #6b7280; text-transform: uppercase; margin-bottom: 32px; }
+
+    .card {
+      background: #fff;
+      border: 1px solid #e5e7eb;
+      border-radius: 16px;
+      padding: 40px 48px;
+      width: 100%;
+      max-width: 560px;
+      box-shadow: 0 4px 24px rgba(0,0,0,0.06);
+    }
+
+    h1 { font-size: 24px; font-weight: 700; margin-bottom: 6px; }
+    .subtitle { font-size: 14px; color: #6b7280; margin-bottom: 32px; line-height: 1.5; }
+
+    label { display: block; font-size: 13px; font-weight: 600; color: #374151; margin-bottom: 6px; }
+    .hint  { font-size: 12px; color: #9ca3af; margin-top: -2px; margin-bottom: 10px; }
+
+    input[type="text"], input[type="url"], input[type="password"], input[type="file"] {
+      width: 100%;
+      padding: 10px 14px;
+      border: 1px solid #d1d5db;
+      border-radius: 8px;
+      font-size: 14px;
+      background: #fafafa;
+      transition: border 0.15s;
+      margin-bottom: 20px;
+    }
+    input:focus { outline: none; border-color: #6366f1; background: #fff; }
+
+    input[type="file"] { padding: 8px 12px; cursor: pointer; }
+
+    .upload-zone {
+      border: 2px dashed #d1d5db;
+      border-radius: 10px;
+      padding: 28px;
+      text-align: center;
+      cursor: pointer;
+      transition: border-color 0.15s, background 0.15s;
+      margin-bottom: 20px;
+      position: relative;
+    }
+    .upload-zone:hover { border-color: #6366f1; background: #f5f3ff; }
+    .upload-zone input[type="file"] {
+      position: absolute; inset: 0; opacity: 0; cursor: pointer; margin: 0; padding: 0;
+    }
+    .upload-zone .icon { font-size: 28px; margin-bottom: 8px; }
+    .upload-zone p { font-size: 13px; color: #6b7280; }
+    .upload-zone .file-name { font-size: 13px; font-weight: 600; color: #6366f1; margin-top: 6px; }
+
+    .optional-toggle {
+      font-size: 13px; color: #6366f1; font-weight: 600; cursor: pointer;
+      margin-bottom: 16px; display: inline-block; user-select: none;
+    }
+    .optional-section { display: none; }
+    .optional-section.open { display: block; }
+
+    button[type="submit"] {
+      width: 100%;
+      padding: 13px;
+      background: #6366f1;
+      color: #fff;
+      border: none;
+      border-radius: 10px;
+      font-size: 15px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: background 0.15s, transform 0.1s;
+      margin-top: 8px;
+    }
+    button[type="submit"]:hover { background: #4f46e5; }
+    button[type="submit"]:active { transform: scale(0.99); }
+    button[type="submit"]:disabled { background: #a5b4fc; cursor: not-allowed; }
+
+    #result {
+      margin-top: 24px;
+      padding: 16px 20px;
+      border-radius: 10px;
+      font-size: 14px;
+      display: none;
+    }
+    #result.success { background: #f0fdf4; border: 1px solid #86efac; color: #166534; }
+    #result.error   { background: #fef2f2; border: 1px solid #fca5a5; color: #991b1b; }
+
+    .spinner {
+      display: none;
+      width: 18px; height: 18px;
+      border: 3px solid rgba(255,255,255,0.4);
+      border-top-color: #fff;
+      border-radius: 50%;
+      animation: spin 0.7s linear infinite;
+      margin: 0 auto;
+    }
+    @keyframes spin { to { transform: rotate(360deg); } }
+
+    .steps { margin-top: 36px; padding-top: 28px; border-top: 1px solid #f3f4f6; }
+    .steps h3 { font-size: 13px; font-weight: 700; color: #9ca3af; text-transform: uppercase; letter-spacing: 0.08em; margin-bottom: 14px; }
+    .step { display: flex; gap: 12px; margin-bottom: 12px; }
+    .step-num { width: 22px; height: 22px; border-radius: 50%; background: #ede9fe; color: #6366f1; font-size: 11px; font-weight: 700; display: flex; align-items: center; justify-content: center; flex-shrink: 0; margin-top: 1px; }
+    .step p { font-size: 13px; color: #4b5563; line-height: 1.5; }
+    .step code { background: #f3f4f6; border-radius: 4px; padding: 1px 5px; font-size: 12px; }
+  </style>
+</head>
+<body>
+  <div class="logo">Gushwork</div>
+
+  <div class="card">
+    <h1>SEO Audit Tool</h1>
+    <p class="subtitle">Upload a Screaming Frog <em>Internal All</em> export and get a full technical SEO report in seconds.</p>
+
+    <form id="auditForm" enctype="multipart/form-data">
+      <label for="client_name">Client name</label>
+      <input type="text" id="client_name" name="client_name" placeholder="invisionaz" required />
+
+      <label for="live_url">Live site URL</label>
+      <input type="url" id="live_url" name="live_url" placeholder="https://www.invisionaz.com/" required />
+
+      <label>Screaming Frog Internal All CSV</label>
+      <div class="upload-zone" id="uploadZone">
+        <div class="icon">📄</div>
+        <p>Drag & drop or <strong>click to browse</strong></p>
+        <p>Export from SF → Bulk Export → All Inlinks (Internal)</p>
+        <div class="file-name" id="fileName"></div>
+        <input type="file" name="csv_file" id="csvFile" accept=".csv" required />
+      </div>
+
+      <span class="optional-toggle" id="optToggle">⚙️ Advanced options ▾</span>
+      <div class="optional-section" id="optSection">
+        <label for="exclude_patterns">Exclude URL patterns <span style="font-weight:400;color:#9ca3af">(comma-separated)</span></label>
+        <p class="hint">e.g. /feeds, /category, ?page=</p>
+        <input type="text" id="exclude_patterns" name="exclude_patterns" placeholder="/feeds, /category, ?page=" />
+
+        <label for="psi_key">PageSpeed API key <span style="font-weight:400;color:#9ca3af">(optional)</span></label>
+        <p class="hint">Leave blank to skip live PageSpeed checks</p>
+        <input type="password" id="psi_key" name="psi_key" placeholder="AIzaSy…" />
+      </div>
+
+      <button type="submit" id="submitBtn">
+        <span id="btnText">Run Audit</span>
+        <div class="spinner" id="spinner"></div>
+      </button>
+    </form>
+
+    <div id="result"></div>
+
+    <div class="steps">
+      <h3>How it works</h3>
+      <div class="step"><div class="step-num">1</div><p>Export <code>Internal All</code> from Screaming Frog (Bulk Export menu).</p></div>
+      <div class="step"><div class="step-num">2</div><p>Fill in the form above and click <strong>Run Audit</strong>.</p></div>
+      <div class="step"><div class="step-num">3</div><p>Download your audit XLSX — ready to upload to Google Sheets or share with the client.</p></div>
+    </div>
+  </div>
+
+  <script>
+    // File name preview
+    document.getElementById("csvFile").addEventListener("change", function () {
+      document.getElementById("fileName").textContent = this.files[0]?.name || "";
+    });
+
+    // Optional section toggle
+    document.getElementById("optToggle").addEventListener("click", function () {
+      const sec = document.getElementById("optSection");
+      sec.classList.toggle("open");
+      this.textContent = sec.classList.contains("open") ? "⚙️ Advanced options ▴" : "⚙️ Advanced options ▾";
+    });
+
+    // Form submit
+    document.getElementById("auditForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const btn = document.getElementById("submitBtn");
+      const spinner = document.getElementById("spinner");
+      const btnText = document.getElementById("btnText");
+      const result = document.getElementById("result");
+
+      btn.disabled = true;
+      btnText.style.display = "none";
+      spinner.style.display = "block";
+      result.style.display = "none";
+
+      try {
+        const fd = new FormData(this);
+        const res = await fetch("/run", { method: "POST", body: fd });
+        const data = await res.json();
+
+        result.style.display = "block";
+        if (data.ok) {
+          result.className = "success";
+          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>
+            <a href="/download/${encodeURIComponent(data.xlsx)}" style="color:#166534;font-weight:700">⬇ Download XLSX</a>`;
+        } else {
+          result.className = "error";
+          result.innerHTML = `❌ <strong>Error:</strong><br><pre style="white-space:pre-wrap;font-size:12px;margin-top:8px">${data.error}</pre>`;
+        }
+      } catch (err) {
+        result.style.display = "block";
+        result.className = "error";
+        result.innerHTML = `❌ Network error: ${err.message}`;
+      } finally {
+        btn.disabled = false;
+        btnText.style.display = "block";
+        spinner.style.display = "none";
+      }
+    });
+  </script>
+</body>
+</html>
