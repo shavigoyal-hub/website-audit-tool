@@ -2,11 +2,12 @@
 import json
 import os
 import re
+import tempfile
 import traceback
 
 from flask import Flask, jsonify, render_template, request, send_file
 
-from audit import config as cfg_mod, observations, pagespeed, parameters, report_xlsx, sf_csv
+from audit import observations, pagespeed, parameters, report_xlsx, sf_csv
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024  # 20 MB upload limit
@@ -19,46 +20,43 @@ def index():
 
 @app.route("/run", methods=["POST"])
 def run_audit():
+    tmp_csv = None
     try:
         live_url = request.form.get("live_url", "").strip()
         mockup_url = request.form.get("mockup_url", "").strip()
+
+        if not live_url:
+            return jsonify({"error": "Live URL is required."}), 400
 
         # Derive client name from domain: https://www.invisionaz.com/ → invisionaz
         m = re.match(r"https?://(?:www\.)?([^/]+)", live_url)
         domain = m.group(1) if m else live_url
         client_name = re.sub(r"\.[^.]+$", "", domain).replace(".", "_").lower()
+
         psi_key = os.environ.get("PAGESPEED_API_KEY")
 
-        if not client_name or not live_url:
-            return jsonify({"error": "Client name and live URL are required."}), 400
-
-        # Look for a pre-placed CSV at the conventional path, or fall back to a
-        # client-specific JSON config (which points to the CSV inside it).
-        csv_path = os.path.join("inputs", f"{client_name}_internal_all.csv")
+        # Load client config if it exists (exclude patterns, page types, manual PSI)
+        exclude_patterns, page_type_patterns, manual_psi = [], None, None
         client_json = os.path.join("clients", f"{client_name}.json")
-
         if os.path.exists(client_json):
             with open(client_json) as f:
                 stored = json.load(f)
-            csv_path = stored.get("sf_internal_all_csv", csv_path)
             exclude_patterns = stored.get("exclude_url_patterns", [])
             page_type_patterns = stored.get("page_type_patterns")
             manual_psi = stored.get("manual_psi")
             if not mockup_url:
                 mockup_url = stored.get("mockup_url", "")
-        else:
-            exclude_patterns = []
-            page_type_patterns = None
-            manual_psi = None
 
-        if not os.path.exists(csv_path):
-            return jsonify({
-                "error": (
-                    f"No crawl data found for '{client_name}'. "
-                    f"Expected at: {csv_path}\n"
-                    "Run a Screaming Frog crawl first and place the Internal All CSV there."
-                )
-            }), 400
+        # CSV: uploaded file takes priority; fall back to pre-placed file on disk
+        csv_file = request.files.get("csv_file")
+        if csv_file and csv_file.filename:
+            tmp_csv = tempfile.NamedTemporaryFile(suffix=".csv", delete=False)
+            csv_file.save(tmp_csv.name)
+            csv_path = tmp_csv.name
+        else:
+            csv_path = os.path.join("inputs", f"{client_name}_internal_all.csv")
+            if not os.path.exists(csv_path):
+                return jsonify({"error": f"No CSV uploaded and no pre-placed file found at {csv_path}."}), 400
 
         import pandas as pd
         df_raw = pd.read_csv(csv_path, dtype=str, keep_default_na=False, low_memory=False)
@@ -106,6 +104,10 @@ def run_audit():
 
     except Exception:
         return jsonify({"error": traceback.format_exc()}), 500
+
+    finally:
+        if tmp_csv:
+            os.unlink(tmp_csv.name)
 
 
 @app.route("/download/<path:filepath>")

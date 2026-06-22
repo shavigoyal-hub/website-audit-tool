@@ -11,3 +11,4 @@ clients/*.csv
 # API keys / secrets
 *.key
 
+.vercel
