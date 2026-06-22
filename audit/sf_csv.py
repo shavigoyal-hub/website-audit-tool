@@ -53,9 +53,12 @@ def _matches_any(addr_series, patterns):
 def load(csv_path, exclude_patterns):
     df = pd.read_csv(csv_path, dtype=str, keep_default_na=False, low_memory=False)
     df.columns = [c.strip() for c in df.columns]
+    return load_from_df(df, exclude_patterns)
+
+
+def load_from_df(df, exclude_patterns):
+    df = df.copy()
     addr = _col(df, "Address")
-    # Always drop crawler/system URLs (e.g. Cloudflare /cdn-cgi/), then drop
-    # client-specific feeds paths from the *observation* scope.
     drop = (exclude_patterns or []) + SYSTEM_EXCLUDE
     if drop:
         df = df[~_matches_any(addr, drop)].reset_index(drop=True)

@@ -1,4 +1,4 @@
-"""Flask web app — wraps the CLI audit tool for Vercel hosting."""
+"""Flask web app — wraps the CLI audit tool."""
 import glob
 import json
 import os
@@ -7,9 +7,10 @@ import subprocess
 import tempfile
 import traceback
 
+import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file
 
-from audit import observations, pagespeed, parameters, report_xlsx, sf_csv
+from audit import crawler, observations, pagespeed, parameters, report_xlsx, sf_csv
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
@@ -30,23 +31,35 @@ def _crawl_with_sf(url, output_dir):
     subprocess.run(cmd, check=True, timeout=600)
     matches = glob.glob(os.path.join(output_dir, "internal_all.csv"))
     if not matches:
-        raise FileNotFoundError("Crawl finished but internal_all.csv not found in output folder.")
+        raise FileNotFoundError("Crawl finished but internal_all.csv not found.")
     return matches[0]
+
+
+def _get_dataframes(live_url):
+    """Return (df_raw, df) — crawl via SF if available, else Python crawler."""
+    if SF_AVAILABLE:
+        tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
+        try:
+            csv_path = _crawl_with_sf(live_url, tmp_dir)
+            df_raw = pd.read_csv(csv_path, dtype=str, keep_default_na=False, low_memory=False)
+            df_raw.columns = [c.strip() for c in df_raw.columns]
+        finally:
+            import shutil
+            shutil.rmtree(tmp_dir, ignore_errors=True)
+    else:
+        rows = crawler.crawl(live_url)
+        df_raw = pd.DataFrame(rows)
+
+    return df_raw
 
 
 @app.route("/")
 def index():
-    return render_template("index.html", sf_available=SF_AVAILABLE)
-
-
-@app.route("/api/capabilities")
-def capabilities():
-    return jsonify({"sf_available": SF_AVAILABLE})
+    return render_template("index.html")
 
 
 @app.route("/run", methods=["POST"])
 def run_audit():
-    tmp_dir = None
     try:
         live_url = request.form.get("live_url", "").strip()
         mockup_url = request.form.get("mockup_url", "").strip()
@@ -71,25 +84,8 @@ def run_audit():
             if not mockup_url:
                 mockup_url = stored.get("mockup_url", "")
 
-        # Resolve crawl data: auto-crawl (SF) or uploaded CSV
-        csv_file = request.files.get("csv_file")
-        if SF_AVAILABLE:
-            tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
-            csv_path = _crawl_with_sf(live_url, tmp_dir)
-        elif csv_file and csv_file.filename:
-            tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
-            csv_path = os.path.join(tmp_dir, "internal_all.csv")
-            csv_file.save(csv_path)
-        else:
-            return jsonify({"error": (
-                "Screaming Frog is not installed on this server.\n"
-                "Please upload the Internal All CSV exported from Screaming Frog."
-            )}), 400
-
-        import pandas as pd
-        df_raw = pd.read_csv(csv_path, dtype=str, keep_default_na=False, low_memory=False)
-        df_raw.columns = [c.strip() for c in df_raw.columns]
-        df = sf_csv.load(csv_path, exclude_patterns=exclude_patterns)
+        df_raw = _get_dataframes(live_url)
+        df = sf_csv.load_from_df(df_raw, exclude_patterns=exclude_patterns)
 
         findings = sf_csv.run_checks(df, df, has_images_csv=False)
         reps = sf_csv.representative_pages(df, custom_patterns=page_type_patterns)
@@ -132,11 +128,6 @@ def run_audit():
 
     except Exception:
         return jsonify({"error": traceback.format_exc()}), 500
-
-    finally:
-        if tmp_dir:
-            import shutil
-            shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 @app.route("/download/<path:filepath>")
