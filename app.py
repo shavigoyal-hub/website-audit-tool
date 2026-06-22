@@ -1,6 +1,7 @@
 """Flask web app — wraps the CLI audit tool for Vercel hosting."""
 import json
 import os
+import re
 import traceback
 
 from flask import Flask, jsonify, render_template, request, send_file
@@ -19,9 +20,13 @@ def index():
 @app.route("/run", methods=["POST"])
 def run_audit():
     try:
-        client_name = request.form.get("client_name", "").strip().lower().replace(" ", "_")
         live_url = request.form.get("live_url", "").strip()
         mockup_url = request.form.get("mockup_url", "").strip()
+
+        # Derive client name from domain: https://www.invisionaz.com/ → invisionaz
+        m = re.match(r"https?://(?:www\.)?([^/]+)", live_url)
+        domain = m.group(1) if m else live_url
+        client_name = re.sub(r"\.[^.]+$", "", domain).replace(".", "_").lower()
         psi_key = os.environ.get("PAGESPEED_API_KEY")
 
         if not client_name or not live_url:
