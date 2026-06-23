@@ -145,8 +145,11 @@
         result.style.display = "block";
         if (data.ok) {
           result.className = "success";
-          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>
-            <a href="/download/${encodeURIComponent(data.xlsx)}" style="color:#166534;font-weight:700">⬇ Download XLSX</a>`;
+          let links = `<a href="/download/${encodeURIComponent(data.xlsx)}" style="color:#166534;font-weight:700">⬇ Download XLSX</a>`;
+          if (data.sheet_url) {
+            links += `&nbsp;&nbsp;|&nbsp;&nbsp;<a href="${data.sheet_url}" target="_blank" style="color:#166534;font-weight:700">📊 Open Google Sheet</a>`;
+          }
+          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}`;
         } else {
           result.className = "error";
           result.innerHTML = `❌ <strong>Error:</strong><br><pre style="white-space:pre-wrap;font-size:12px;margin-top:8px">${data.error}</pre>`;
