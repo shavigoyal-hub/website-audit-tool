@@ -143,6 +143,17 @@ def representative_pages(df_scoped, custom_patterns=None):
 # ---------------------------------------------------------------------------
 # Checks
 # ---------------------------------------------------------------------------
+def _safe_loc(df, mask, cols):
+    """df.loc[mask, cols] but silently drops any cols not in the DataFrame."""
+    existing = [c for c in cols if c in df.columns]
+    rows = df.loc[mask, existing].values.tolist()
+    if len(existing) == len(cols):
+        return rows
+    # Pad missing columns with empty strings so callers get consistent width
+    idx_map = {c: i for i, c in enumerate(existing)}
+    return [[r[idx_map[c]] if c in idx_map else "" for c in cols] for r in rows]
+
+
 def _finding(key, urls, evidence=None, detail=None):
     urls = list(dict.fromkeys(urls))  # dedupe, keep order
     if not urls:
@@ -163,19 +174,25 @@ def run_checks(df, df_full, has_images_csv):
     m = html_mask & (js_err > 0)
     findings.append(_finding("render_error", addr[m].tolist()))
 
-    # 4xx / 5xx
-    findings.append(_finding("error_404", addr[status.between(400, 499)].tolist(),
+    # 4xx / 5xx — skip asset URLs (images, JS, CSS, fonts, PDFs).
+    # SF records the 404 error page's content-type (text/html) for any broken URL,
+    # so html_mask alone doesn't filter assets — use the URL extension instead.
+    _ASSET_EXT = re.compile(
+        r"\.(jpe?g|png|gif|webp|svg|ico|mp4|mp3|pdf|zip|css|js|woff2?|ttf|eot|otf)(\?|$)",
+        re.IGNORECASE,
+    )
+    is_asset = addr.str.contains(_ASSET_EXT)
+    broken_html = ~is_asset & status.between(400, 499)
+    findings.append(_finding("error_404", addr[broken_html].tolist(),
                              evidence=("404 Pages", ["Address", "Status Code"],
-                                       df.loc[status.between(400, 499), ["Address", "Status Code"]].values.tolist())))
+                                       _safe_loc(df, broken_html, ["Address", "Status Code"]))))
     findings.append(_finding("error_5xx", addr[status.between(500, 599)].tolist()))
 
     # Redirects — captured in evidence tab only, not raised as an observation
     redir = status.between(300, 399)
     _redir_finding = _finding("redirects", addr[redir].tolist(),
                               evidence=("Redirects", ["Address", "Status Code", "Redirect URL"],
-                                        df.loc[redir, ["Address", "Status Code", "Redirect URL"]].values.tolist()
-                                        if "Redirect URL" in df.columns else
-                                        df.loc[redir, ["Address", "Status Code"]].values.tolist()))
+                                        _safe_loc(df, redir, ["Address", "Status Code", "Redirect URL"])))
     if _redir_finding:
         _redir_finding["suppress"] = True  # evidence-only, not an observation
         findings.append(_redir_finding)
@@ -191,9 +208,7 @@ def run_checks(df, df_full, has_images_csv):
     )
     findings.append(_finding("non_indexable", addr[noindexed].tolist(),
                              evidence=("Non-Indexable", ["Address", "Meta Robots 1", "Indexability Status"],
-                                       df.loc[noindexed, ["Address", "Meta Robots 1", "Indexability Status"]].values.tolist()
-                                       if "Indexability Status" in df.columns else
-                                       [[u, "", ""] for u in addr[noindexed]])))
+                                       _safe_loc(df, noindexed, ["Address", "Meta Robots 1", "Indexability Status"]))))
 
     # Indexable HTML 200s : the scope for content/meta checks
     ok = html_mask & (status == 200) & (indexable != "non-indexable")
@@ -209,7 +224,7 @@ def run_checks(df, df_full, has_images_csv):
     findings.append(_finding("title_long",
                              [f"{u}: {t}" for u, t in zip(addr[long_title], title[long_title])],
                              evidence=("Long Titles", ["Address", "Title 1", "Title 1 Length"],
-                                       df.loc[long_title, ["Address", "Title 1", "Title 1 Length"]].values.tolist())))
+                                       _safe_loc(df, long_title, ["Address", "Title 1", "Title 1 Length"]))))
     findings.append(_finding("title_missing", addr[ok & (title.str.strip() == "")].tolist()))
     # short title (<30 chars, excluding empty) on SEO pages
     findings.append(_finding("title_short", addr[seo & (tlen > 0) & (tlen < 30)].tolist()))
@@ -222,14 +237,32 @@ def run_checks(df, df_full, has_images_csv):
     ks = ok & title.map(stuffed)
     findings.append(_finding("title_stuffed",
                              [f"{u}: {t}" for u, t in zip(addr[ks], title[ks])]))
-    # duplicate titles : two+ distinct URLs sharing the exact same <title>
-    tnorm = title.where(ok, "")
+    # duplicate titles: pages sharing the same <title> excluding paginated URLs
+    # (/page/N/, ?page=N, ?paged=N) — those legitimately share titles and should
+    # use rel="prev/next" instead (checked separately below).
+    rel_next = _col(df, 'rel="next" 1')
+    rel_prev = _col(df, 'rel="prev" 1')
+    is_paginated = (
+        addr.str.contains(r"/page/\d+/", regex=True)
+        | addr.str.contains(r"[?&]page(?:d)?=\d+", regex=True)
+        | (rel_next.str.strip() != "")
+        | (rel_prev.str.strip() != "")
+    )
+    tnorm = title.where(ok & ~is_paginated, "")
     counts = Counter(t for t in tnorm if t.strip())
     dupset = {t for t, c in counts.items() if c > 1}
     dup_mask = tnorm.isin(dupset) if dupset else pd.Series([False] * len(df), index=df.index)
     findings.append(_finding("title_duplicate", addr[dup_mask].tolist(),
                              evidence=("Duplicate Titles", ["Address", "Title 1"],
-                                       df.loc[dup_mask, ["Address", "Title 1"]].sort_values("Title 1").values.tolist())))
+                                       _safe_loc(df, dup_mask, ["Address", "Title 1"]))))
+
+    # Pagination rel prev/next: flag paginated pages that are missing BOTH signals
+    paginated_pages = ok & is_paginated & ~addr.str.endswith("/page/1/")
+    missing_pagination_signals = paginated_pages & (rel_next.str.strip() == "") & (rel_prev.str.strip() == "")
+    findings.append(_finding("pagination_no_rel",
+                             addr[missing_pagination_signals].tolist(),
+                             evidence=("Pagination Issues", ["Address"],
+                                       [[u] for u in addr[missing_pagination_signals]])))
 
     # Meta description
     md = _col(df, "Meta Description 1")
@@ -272,7 +305,7 @@ def run_checks(df, df_full, has_images_csv):
     thin = seo & (wc < 300)
     findings.append(_finding("thin_content", addr[thin].tolist(),
                              evidence=("Thin Content", ["Address", "Word Count"],
-                                       df.loc[thin, ["Address", "Word Count"]].values.tolist())))
+                                       _safe_loc(df, thin, ["Address", "Word Count"]))))
 
     # Near duplicates
     nd = _num(df, "No. Near Duplicates").fillna(0)
@@ -358,7 +391,8 @@ CSV_CHECK_LABELS = {
     "title_short": "Title tags not too short (≥30 chars)",
     "title_missing": "All pages have a title tag",
     "title_stuffed": "No keyword-stuffed titles",
-    "title_duplicate": "No duplicate title tags",
+    "title_duplicate": "No duplicate title tags (non-paginated pages)",
+    "pagination_no_rel": "Paginated pages use rel=prev/next signals",
     "meta_long": "Meta description lengths within limit (≤200 chars)",
     "meta_short": "Meta descriptions not too short (≥70 chars)",
     "meta_missing": "All pages have a meta description",

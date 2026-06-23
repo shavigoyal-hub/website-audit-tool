@@ -46,6 +46,7 @@ CATEGORY = {
     "render_js_dependent": "Rendering",
     "title_multiple_tags": "Multiple Titles",
     "meta_multiple_tags": "Multiple Meta",
+    "pagination_no_rel": "Pagination",
 }
 
 # key -> (priority, observation_template, impact)
@@ -182,6 +183,9 @@ CATALOG = {
     "meta_multiple_tags": ("Low",
         "Multiple pages found with more than one meta description tag",
         "Duplicate meta tags send mixed signals about the snippet."),
+    "pagination_no_rel": ("Medium",
+        "Multiple paginated pages found missing rel=prev/next signals",
+        "Without rel pagination signals, search engines may not correctly consolidate paginated series."),
     # CRO (qualitative, benchmarked against the Gushwork build)
     "cro": ("High",
         None,  # observation text supplied per-item
