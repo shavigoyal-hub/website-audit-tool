@@ -47,6 +47,11 @@ CATEGORY = {
     "title_multiple_tags": "Multiple Titles",
     "meta_multiple_tags": "Multiple Meta",
     "pagination_no_rel": "Pagination",
+    "low_inlinks": "Internal Linking",
+    "og_missing": "Social / OG Tags",
+    "hreflang_missing": "Hreflang",
+    "faq_missing": "FAQ / Schema",
+    "cta_missing": "CRO / CTA",
 }
 
 # key -> (priority, observation_template, impact)
@@ -106,9 +111,9 @@ CATALOG = {
     "meta_missing": ("High",
         "Multiple pages found with missing meta descriptions",
         "Missing descriptions let search engines pick weak snippets, lowering CTR."),
-    "h1_missing": ("High",
+    "h1_missing": ("Critical",
         "Multiple pages found with missing H1 tags",
-        "Missing H1s make it harder for search engines to read page topics."),
+        "Missing H1s remove the primary on-page relevance signal — search engines cannot identify what the page is about, directly hurting rankings and leads."),
     "h1_multiple": ("Low",
         "Multiple pages found with more than one H1 tag",
         "Multiple H1s dilute the page's primary topic signal."),
@@ -186,6 +191,21 @@ CATALOG = {
     "pagination_no_rel": ("Medium",
         "Multiple paginated pages found missing rel=prev/next signals",
         "Without rel pagination signals, search engines may not correctly consolidate paginated series."),
+    "low_inlinks": ("Medium",
+        "Multiple pages found with very few internal links pointing to them",
+        "Pages with 0-1 inlinks are effectively orphaned — search engines rarely discover or prioritise them."),
+    "og_missing": ("Medium",
+        "Multiple pages found missing Open Graph tags (og:image, og:title, og:description)",
+        "Missing OG tags cause social shares to appear with no image or preview, reducing click-through from social media."),
+    "hreflang_missing": ("High",
+        "Multiple language variants found without hreflang tags",
+        "Without hreflang, Google cannot serve the correct language version to users, diluting rankings across locales."),
+    "faq_missing": ("Medium",
+        "Multiple service / product pages found without an FAQ section or FAQPage schema",
+        "FAQ sections with schema markup unlock FAQ rich results in search, increasing click-through and answering buyer objections."),
+    "cta_missing": ("High",
+        "Multiple pages found with no CTA above the fold on mobile",
+        "No visible call-to-action in the mobile hero means visitors leaving without enquiring — the single biggest CRO loss for a lead-gen site."),
     # CRO (qualitative, benchmarked against the Gushwork build)
     "cro": ("High",
         None,  # observation text supplied per-item
@@ -307,7 +327,8 @@ def _row(obs, priority, impact, f):
         ref = f["evidence"][0]  # evidence tab name
     elif f.get("examples"):
         ref = "\n".join(f["examples"])
-    return {"category": CATEGORY.get(f["key"], "General"), "observation": text,
+    return {"key": f["key"], "count": f.get("count", 0),
+            "category": CATEGORY.get(f["key"], "General"), "observation": text,
             "priority": priority, "impact": impact, "reference": ref}
 
 

@@ -26,21 +26,39 @@ def _autosize(ws, widths):
         ws.column_dimensions[get_column_letter(i)].width = w
 
 
-def build(path, client, rows, notes, df_raw, evidence_tabs):
+_IMAGE_KEYS = {"image_large"}
+
+
+def build(path, client, rows, notes, df_raw, evidence_tabs,
+          total_pages=None, total_images=None):
     wb = Workbook()
 
     # --- Observation tab ---
     ws = wb.active
     ws.title = "Observation"
-    ws.append(["Category", "Observation", "Priority", "Impact", "Reference"])
-    _style_header(ws, 5)
+    COUNT_HDR = "Count ⚠ DELETE BEFORE SHARING"
+    ws.append(["Category", "Observation", "Priority", "Impact", "Reference", COUNT_HDR])
+    _style_header(ws, 6)
+    # Style count header in red so it's obvious
+    ws.cell(row=1, column=6).font = Font(bold=True, color="FF0000")
     for r in rows:
-        ws.append([r.get("category", ""), r["observation"], r["priority"], r["impact"], r["reference"]])
+        count = r.get("count")
+        key = r.get("key", "")
+        if count and key in _IMAGE_KEYS and total_images:
+            count_label = f"{count} / {total_images} images"
+        elif count and total_pages:
+            count_label = f"{count} / {total_pages} pages"
+        elif count:
+            count_label = str(count)
+        else:
+            count_label = ""
+        ws.append([r.get("category", ""), r["observation"], r["priority"],
+                   r["impact"], r["reference"], count_label])
         row_i = ws.max_row
         fill = PRIORITY_FILL.get(r["priority"])
         if fill:
             ws.cell(row=row_i, column=3).fill = fill
-        for c in range(1, 6):
+        for c in range(1, 7):
             ws.cell(row=row_i, column=c).alignment = WRAP
     if notes:
         ws.append([])
@@ -49,7 +67,7 @@ def build(path, client, rows, notes, df_raw, evidence_tabs):
         for n in notes:
             ws.append([n])
             ws.cell(row=ws.max_row, column=1).alignment = WRAP
-    _autosize(ws, [20, 66, 12, 55, 40])
+    _autosize(ws, [20, 66, 12, 55, 40, 22])
     ws.freeze_panes = "A2"
 
     # --- Evidence tabs ---

@@ -178,10 +178,10 @@ def run_checks(df, df_full, has_images_csv):
     # SF records the 404 error page's content-type (text/html) for any broken URL,
     # so html_mask alone doesn't filter assets — use the URL extension instead.
     _ASSET_EXT = re.compile(
-        r"\.(jpe?g|png|gif|webp|svg|ico|mp4|mp3|pdf|zip|css|js|woff2?|ttf|eot|otf)(\?|$)",
+        r"\.(jpe?g|png|gif|webp|svg|ico|mp4|mp3|pdf|zip|css|js|woff2?|ttf|eot|otf)(?:\?|$)",
         re.IGNORECASE,
     )
-    is_asset = addr.str.contains(_ASSET_EXT)
+    is_asset = addr.str.contains(_ASSET_EXT, regex=True)
     broken_html = ~is_asset & status.between(400, 499)
     findings.append(_finding("error_404", addr[broken_html].tolist(),
                              evidence=("404 Pages", ["Address", "Status Code"],
@@ -375,6 +375,14 @@ def run_checks(df, df_full, has_images_csv):
         md2 = _col(df, "Meta Description 2")
         findings.append(_finding("meta_multiple_tags", addr[ok & (md2.str.strip() != "")].tolist()))
 
+    # Low inlinks (orphan-like pages): SEO pages with 0 or 1 inlink
+    inlinks = _num(df, "Inlinks").fillna(-1)
+    if inlinks.ge(0).any():  # column present
+        low_inlink = seo & (inlinks >= 0) & (inlinks <= 1)
+        findings.append(_finding("low_inlinks", addr[low_inlink].tolist(),
+                                 evidence=("Low Inlinks", ["Address", "Inlinks"],
+                                           _safe_loc(df, low_inlink, ["Address", "Inlinks"]))))
+
     # Return all findings with count > 0. Suppressed findings are kept for their
     # evidence tab but excluded from the observation list in build_rows().
     return [f for f in findings if f and f["count"] > 0]
@@ -413,4 +421,5 @@ CSV_CHECK_LABELS = {
     "render_js_dependent": "No pages with JS-only content (Screaming Frog JS rendering)",
     "title_multiple_tags": "Single <title> element per page",
     "meta_multiple_tags": "Single meta description element per page",
+    "low_inlinks": "No orphaned pages (all SEO pages have ≥2 internal links)",
 }

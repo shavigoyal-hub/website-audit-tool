@@ -144,11 +144,83 @@ def evaluate(df, live_url):
     else:
         na.append("HTTP→HTTPS redirect : http:// URLs not in SF crawl scope — verify manually: curl -sI http://" + host + "/")
 
+    # --- Open Graph tags (fetch homepage) ---
+    og_req = _get(origin + "/")
+    if og_req is not None and og_req.status_code == 200:
+        html = og_req.text
+        has_og_title = bool(re.search(r'property=["\']og:title["\']', html, re.I))
+        has_og_desc  = bool(re.search(r'property=["\']og:description["\']', html, re.I))
+        has_og_image = bool(re.search(r'property=["\']og:image["\']', html, re.I))
+        if has_og_title and has_og_desc and has_og_image:
+            passed.append("Open Graph tags present (og:title, og:description, og:image)")
+        else:
+            missing = [t for t, ok in [("og:title", has_og_title), ("og:description", has_og_desc), ("og:image", has_og_image)] if not ok]
+            issues.append(_issue("og_missing", "Social / OG Tags", "Medium",
+                                 f"Homepage is missing Open Graph tags: {', '.join(missing)}",
+                                 "Missing OG tags produce blank link previews when the page is shared on LinkedIn, WhatsApp, or social media.",
+                                 reference=origin + "/"))
+    else:
+        na.append("Open Graph tags : could not fetch homepage")
+
+    # --- Hreflang: detect language subdirectories (e.g. /fr/, /de/, /es/) ---
+    lang_dirs = addr_l.str.extract(r"/(fr|de|es|pt|it|nl|ar|zh|ja|ko|pl|ru|tr|sv|da|fi|no|cs|hu|ro|th|vi|id)(/|$)")[0].dropna().unique().tolist()
+    if lang_dirs:
+        # Check if any crawled page has hreflang — SF would include it as a column if present
+        hreflang_col = next((c for c in df.columns if "hreflang" in c.lower()), None)
+        has_hreflang = bool(hreflang_col and _col(df, hreflang_col).str.strip().ne("").any())
+        if has_hreflang:
+            passed.append(f"Hreflang tags present for language variants ({', '.join(lang_dirs)})")
+        else:
+            issues.append(_issue("hreflang_missing", "Hreflang", "High",
+                                 f"Site has language subdirectories ({', '.join('/' + l + '/' for l in lang_dirs)}) but no hreflang tags detected",
+                                 "Without hreflang, Google cannot serve the correct language version to users, diluting rankings across locales."))
+    else:
+        passed.append("No multi-language subdirectories detected (hreflang not required)")
+
+    # --- FAQ check on service / product pages ---
+    service_urls = [u for u in addr.tolist() if any(k in u.lower() for k in ("service", "product", "solutions", "capabilities"))]
+    if service_urls:
+        faq_page = service_urls[0]
+        faq_req = _get(faq_page)
+        if faq_req is not None and faq_req.status_code == 200:
+            html = faq_req.text
+            has_faq_schema = bool(re.search(r'"@type"\s*:\s*"FAQPage"', html))
+            has_faq_section = bool(re.search(r'(?i)(?:frequently asked questions|<h[2-4][^>]*>\s*faq)', html))
+            if has_faq_schema:
+                passed.append(f"FAQPage schema present on service pages ({faq_page})")
+            elif has_faq_section:
+                issues.append(_issue("faq_missing", "FAQ / Schema", "Medium",
+                                     f"FAQ section found but no FAQPage schema markup on service pages",
+                                     "Adding FAQPage JSON-LD unlocks FAQ rich results in search, increasing visibility without ranking changes.",
+                                     reference=faq_page))
+            else:
+                issues.append(_issue("faq_missing", "FAQ / Schema", "Medium",
+                                     f"Service pages found with no FAQ section",
+                                     "FAQ sections address buyer objections on the page and can unlock FAQ rich results in search.",
+                                     reference=faq_page))
+        else:
+            na.append(f"FAQ check : could not fetch {faq_page}")
+    else:
+        na.append("FAQ check : no service/product pages found in crawl")
+
+    # --- CTA above the fold (basic DOM check — mobile requires visual review) ---
+    if og_req is not None and og_req.status_code == 200:
+        html_home = og_req.text
+        cta_pattern = re.compile(r'(?:get.?a?.?quote|contact|free.?quote|call.?us|get.?started|book|schedule|enquir|request)', re.I)
+        top_html = html_home[:6000]
+        links = re.findall(r'<a[^>]*>(.*?)</a>', top_html, re.DOTALL)
+        buttons = re.findall(r'<button[^>]*>(.*?)</button>', top_html, re.DOTALL)
+        cta_texts = [re.sub('<[^>]+>', '', t).strip() for t in links + buttons]
+        visible_ctas = [t for t in cta_texts if cta_pattern.search(t) and len(t) < 60]
+        if visible_ctas:
+            passed.append(f"CTA found in early page HTML: {visible_ctas[0]}")
+        else:
+            na.append("CTA above the fold : no CTA button detected in homepage HTML — verify mobile hero manually (mobile viewport may hide desktop CTAs)")
+
     # --- Not derivable without extra inputs ---
     na.append("Keywords in Title Tags : needs a target-keyword list per page")
     na.append("Keywords in Meta Description : needs a target-keyword list per page")
     na.append("Full image alt-text audit : needs Screaming Frog 'Images' export")
-    na.append("CTA above the fold : assessed qualitatively under the CRO findings (see Call-to-Action)")
 
     return {"issues": issues, "passed": passed, "na": na}
 

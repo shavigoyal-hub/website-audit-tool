@@ -87,6 +87,10 @@ def run_audit():
         df_raw = _get_dataframes(live_url)
         df = sf_csv.load_from_df(df_raw, exclude_patterns=exclude_patterns)
 
+        status_num = pd.to_numeric(df.get("Status Code", pd.Series([], dtype=str)), errors="coerce").fillna(0).astype(int)
+        total_pages = int((sf_csv.is_html(df) & (status_num == 200)).sum())
+        total_images = int(sf_csv.is_image(df_raw).sum())
+
         findings = sf_csv.run_checks(df, df, has_images_csv=False)
         reps = sf_csv.representative_pages(df, custom_patterns=page_type_patterns)
 
@@ -117,7 +121,8 @@ def run_audit():
 
         os.makedirs("output", exist_ok=True)
         out_path = os.path.join("output", f"{client_name}_audit.xlsx")
-        report_xlsx.build(out_path, client_name, rows, notes, df_raw, evidence_tabs)
+        report_xlsx.build(out_path, client_name, rows, notes, df_raw, evidence_tabs,
+                          total_pages=total_pages, total_images=total_images)
 
         return jsonify({
             "ok": True,
