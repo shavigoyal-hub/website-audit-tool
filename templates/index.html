@@ -152,7 +152,11 @@
           if (data.slide_url) {
             links += `&nbsp;&nbsp;|&nbsp;&nbsp;<a href="${data.slide_url}" target="_blank" style="color:#166534;font-weight:700">📽 Open Slides Deck</a>`;
           }
-          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}`;
+          let warning = "";
+          if (data.warning) {
+            warning = `<br><br><span style="color:#92400e;font-size:13px">⚠ ${data.warning}</span>`;
+          }
+          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}${warning}`;
         } else {
           result.className = "error";
           result.innerHTML = `❌ <strong>Error:</strong><br><pre style="white-space:pre-wrap;font-size:12px;margin-top:8px">${data.error}</pre>`;

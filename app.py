@@ -18,6 +18,9 @@ app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 SF_CLI = "/Applications/Screaming Frog SEO Spider.app/Contents/MacOS/ScreamingFrogSEOSpiderLauncher"
 SF_AVAILABLE = os.path.isfile(SF_CLI)
 
+# Output directory — Vercel serverless FS is read-only except /tmp.
+OUTPUT_ROOT = "/tmp/output" if os.environ.get("VERCEL") else "output"
+
 
 def _crawl_with_sf(url, output_dir):
     cmd = [
@@ -119,10 +122,9 @@ def run_audit():
         passed.extend([p] for p in site["passed"])
         evidence_tabs.append(("Checks Passed", ["Parameter tested : no issues found"], passed))
 
-        # Vercel serverless FS is read-only except /tmp. Use /tmp when we detect it.
-        output_root = "/tmp/output" if os.environ.get("VERCEL") else "output"
-        os.makedirs(output_root, exist_ok=True)
-        out_path = os.path.join(output_root, f"{client_name}_audit.xlsx")
+        os.makedirs(OUTPUT_ROOT, exist_ok=True)
+        xlsx_name = f"{client_name}_audit.xlsx"
+        out_path = os.path.join(OUTPUT_ROOT, xlsx_name)
         report_xlsx.build(out_path, client_name, rows, notes, df_raw, evidence_tabs,
                           total_pages=total_pages, total_images=total_images)
 
@@ -140,27 +142,33 @@ def run_audit():
         resp = {
             "ok": True,
             "observations": len(rows),
-            "xlsx": out_path,
+            "xlsx": xlsx_name,
             "message": f"Audit complete — {len(rows)} observations found.",
         }
         if sheet_url:
             resp["sheet_url"] = sheet_url
-            resp["message"] += f" Google Sheet created."
+            resp["message"] += " Google Sheet created."
         if slide_url:
             resp["slide_url"] = slide_url
-            resp["message"] += f" Slides deck created."
+            resp["message"] += " Slides deck created."
+        if not sheet_url and not slide_url:
+            resp["warning"] = ("Sheet + Slides skipped — GOOGLE_SERVICE_ACCOUNT_JSON "
+                               "env var not set (or invalid JSON) on the server.")
         return jsonify(resp)
 
     except Exception:
         return jsonify({"error": traceback.format_exc()}), 500
 
 
-@app.route("/download/<path:filepath>")
-def download(filepath):
-    # If the client-side sent an absolute /tmp/... path (Vercel case), use it directly.
-    abs_path = filepath if os.path.isabs(filepath) else os.path.join(os.getcwd(), filepath)
+@app.route("/download/<path:filename>")
+def download(filename):
+    # Look up by basename in the known output directory.
+    # Reject anything with path separators to avoid traversal.
+    if "/" in filename or "\\" in filename or ".." in filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    abs_path = os.path.join(OUTPUT_ROOT, filename)
     if not os.path.exists(abs_path):
-        return jsonify({"error": "File not found"}), 404
+        return jsonify({"error": f"File not found at {abs_path}"}), 404
     return send_file(abs_path, as_attachment=True)
 
 
