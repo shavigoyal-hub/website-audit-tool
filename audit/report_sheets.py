@@ -29,7 +29,20 @@ _PRIORITY_BG = {
 
 
 def _credentials():
-    """Return google.oauth2.service_account.Credentials or None."""
+    """Return Google credentials or None.
+
+    Order:
+      1. Composio-connected Google account (COMPOSIO_API_KEY env var).
+      2. Service account (GOOGLE_SERVICE_ACCOUNT_JSON env var).
+    """
+    try:
+        from audit.composio_auth import get_credentials as _composio_creds
+        creds = _composio_creds()
+        if creds is not None:
+            return creds
+    except Exception as exc:
+        print(f"[sheets] composio unavailable: {exc}")
+
     raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
     if not raw:
         return None

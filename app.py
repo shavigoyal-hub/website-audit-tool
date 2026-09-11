@@ -152,8 +152,9 @@ def run_audit():
             resp["slide_url"] = slide_url
             resp["message"] += " Slides deck created."
         if not sheet_url and not slide_url:
-            resp["warning"] = ("Sheet + Slides skipped — GOOGLE_SERVICE_ACCOUNT_JSON "
-                               "env var not set (or invalid JSON) on the server.")
+            resp["warning"] = ("Sheet + Slides skipped — set COMPOSIO_API_KEY (with a "
+                               "connected Google account) or GOOGLE_SERVICE_ACCOUNT_JSON "
+                               "on Vercel.")
         return jsonify(resp)
 
     except Exception:
