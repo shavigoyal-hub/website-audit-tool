@@ -161,6 +161,32 @@ def run_audit():
         return jsonify({"error": traceback.format_exc()}), 500
 
 
+@app.route("/health")
+def health():
+    """Report which auth paths are configured so we can debug on Vercel."""
+    from audit import composio_auth
+    info = {
+        "composio_api_key_set":  bool(os.environ.get("COMPOSIO_API_KEY")),
+        "composio_entity_id":    composio_auth._entity_id(),
+        "service_account_json_set": bool(os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")),
+        "vercel": bool(os.environ.get("VERCEL")),
+        "output_root": OUTPUT_ROOT,
+    }
+    # Try each auth path (without secrets) and record which yielded credentials.
+    try:
+        info["composio_credentials"] = composio_auth.get_credentials() is not None
+    except Exception as exc:
+        info["composio_credentials"] = False
+        info["composio_error"] = str(exc)[:200]
+    try:
+        from audit.report_sheets import _credentials as _sheets_creds
+        info["sheets_credentials"] = _sheets_creds() is not None
+    except Exception as exc:
+        info["sheets_credentials"] = False
+        info["sheets_error"] = str(exc)[:200]
+    return jsonify(info)
+
+
 @app.route("/download/<path:filename>")
 def download(filename):
     # Look up by basename in the known output directory.
