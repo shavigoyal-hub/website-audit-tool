@@ -10,7 +10,7 @@ import traceback
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file
 
-from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, sf_csv
+from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_slides, sf_csv
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
@@ -131,6 +131,10 @@ def run_audit():
             total_pages=total_pages, total_images=total_images,
         )
 
+        deck_title = f"{client_name.replace('_', ' ').title()} Tech Audit — {datetime.date.today()}"
+        client_display = client_name.replace("_", " ").title()
+        slide_url = report_slides.build(deck_title, rows, client_display=client_display)
+
         resp = {
             "ok": True,
             "observations": len(rows),
@@ -140,6 +144,9 @@ def run_audit():
         if sheet_url:
             resp["sheet_url"] = sheet_url
             resp["message"] += f" Google Sheet created."
+        if slide_url:
+            resp["slide_url"] = slide_url
+            resp["message"] += f" Slides deck created."
         return jsonify(resp)
 
     except Exception:

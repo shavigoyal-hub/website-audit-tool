@@ -311,10 +311,9 @@ def run_checks(df, df_full, has_images_csv):
     nd = _num(df, "No. Near Duplicates").fillna(0)
     near = ok & (nd > 0)
     findings.append(_finding("near_duplicate", addr[near].tolist(),
-                             evidence=("Near Duplicates", ["Address", "No. Near Duplicates", "Closest Near Duplicate Match"],
-                                       df.loc[near, ["Address", "No. Near Duplicates", "Closest Near Duplicate Match"]].values.tolist()
-                                       if "Closest Near Duplicate Match" in df.columns else
-                                       df.loc[near, ["Address", "No. Near Duplicates"]].values.tolist())))
+                             evidence=("Near Duplicates",
+                                       ["Address", "No. Near Duplicates", "Closest Near Duplicate Match"],
+                                       _safe_loc(df, near, ["Address", "No. Near Duplicates", "Closest Near Duplicate Match"]))))
 
     # Images > 100 KB (from internal_all when no dedicated images export)
     img_mask = is_image(df)
@@ -323,7 +322,7 @@ def run_checks(df, df_full, has_images_csv):
     findings.append(_finding("image_large",
                              [f"{u}: {int(s/1024)} KB" for u, s in zip(addr[big], size[big])],
                              evidence=("Images > 100 Kb", ["Address", "Size (Bytes)"],
-                                       df.loc[big, ["Address", "Size (Bytes)"]].values.tolist())))
+                                       _safe_loc(df, big, ["Address", "Size (Bytes)"]))))
 
     # Carbon
     carbon = _col(df, "Carbon Rating").str.upper()
