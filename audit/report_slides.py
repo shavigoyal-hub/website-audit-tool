@@ -112,7 +112,10 @@ def _emu_in(v):
 def _banner(slide, prs, priority, category):
     """Full-width black banner header."""
     from pptx.util import Emu
-    label = f"[{priority}] {category or 'Finding'}"
+    if priority:
+        label = f"[{priority}] {category or 'Finding'}"
+    else:
+        label = category or "Finding"
     bar = slide.shapes.add_shape(1, 0, 0, prs.slide_width, Emu(700000))
     bar.line.fill.background()
     bar.fill.solid()
