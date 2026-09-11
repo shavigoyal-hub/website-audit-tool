@@ -97,19 +97,24 @@ def _extract_token(item):
     return None
 
 
-def _find_token_in_response(body, target_app_prefix):
-    """Given any Composio JSON response, walk it looking for a matching account with a token."""
+def _find_token_in_response(body, target_slug):
+    """Given any Composio JSON response, return a token from an item whose
+    toolkit slug EXACTLY matches target_slug (e.g. 'googlesheets').
+
+    Loose substring matching used to pick up Google Search Console tokens
+    which don't have Sheets/Drive scope — we now require exact match.
+    """
+    target = (target_slug or "").lower().strip()
     if not isinstance(body, dict):
         return None
     for key in ("items", "connectedAccounts", "data", "connections", "accounts"):
         items = body.get(key)
         if isinstance(items, list):
             for item in items:
-                # Filter by app name if possible
                 app = (item.get("appName") or item.get("app_name")
                        or (item.get("app") or {}).get("name")
-                       or (item.get("toolkit") or {}).get("slug") or "").lower()
-                if target_app_prefix and target_app_prefix not in app and app != "":
+                       or (item.get("toolkit") or {}).get("slug") or "").lower().strip()
+                if target and app != target:
                     continue
                 tok = _extract_token(item)
                 if tok:
@@ -118,39 +123,32 @@ def _find_token_in_response(body, target_app_prefix):
 
 
 def _fetch_access_token(app_name):
-    """Try multiple endpoint variants to fetch an OAuth token for the app."""
+    """Try multiple endpoint variants + user IDs to fetch an OAuth token."""
     entity = _entity_id()
     LAST_DEBUG["target_app"] = app_name
     LAST_DEBUG["entity_id"] = entity
 
-    attempts = [
-        # v3 - modern
-        ("GET", "/api/v3/connected_accounts",
-         {"user_ids": entity, "toolkit_slugs": app_name}, "v3 toolkit_slugs+user_ids"),
-        ("GET", "/api/v3/connected_accounts",
-         {"user_ids": entity, "auth_config_ids": app_name}, "v3 auth_config_ids"),
-        ("GET", "/api/v3/connected_accounts",
-         {"userIds": entity, "appNames": app_name}, "v3 userIds+appNames"),
-        ("GET", "/api/v3/connected_accounts",
-         {"entityId": entity, "appName": app_name}, "v3 entityId+appName"),
-        ("GET", "/api/v3/connected_accounts",
-         {"entityId": entity}, "v3 entity only"),
-        ("GET", "/api/v3/connected_accounts", None, "v3 no filter"),
+    # Try the caller-configured entity, plus 'default' (Composio's default
+    # user_id when connections aren't tied to a specific user).
+    user_ids = [entity]
+    if entity != "default":
+        user_ids.append("default")
 
-        # v1 - legacy but stable
-        ("GET", "/api/v1/connectedAccounts",
-         {"user_uuid": entity, "appNames": app_name, "showActiveOnly": "true"},
-         "v1 user_uuid+appNames"),
-        ("GET", "/api/v1/connectedAccounts",
-         {"appNames": app_name, "showActiveOnly": "true"}, "v1 appNames"),
-        ("GET", "/api/v1/connectedAccounts",
-         {"showActiveOnly": "true"}, "v1 active only"),
-    ]
+    attempts = []
+    for uid in user_ids:
+        attempts += [
+            ("GET", "/api/v3/connected_accounts",
+             {"user_ids": uid, "toolkit_slugs": app_name},
+             f"v3 toolkit_slugs+user_ids({uid})"),
+            ("GET", "/api/v3/connected_accounts",
+             {"toolkit_slugs": app_name},
+             f"v3 toolkit_slugs only (last for {uid})"),
+        ]
 
     for method, path, params, note in attempts:
         status, body = _try(method, path, params=params, note=note)
         if status == 200 and body:
-            tok = _find_token_in_response(body, app_name.lower().replace("google", ""))
+            tok = _find_token_in_response(body, app_name)
             if tok:
                 LAST_DEBUG["token_source"] = f"{note} ({path})"
                 return tok
