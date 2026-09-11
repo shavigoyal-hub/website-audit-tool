@@ -119,8 +119,10 @@ def run_audit():
         passed.extend([p] for p in site["passed"])
         evidence_tabs.append(("Checks Passed", ["Parameter tested : no issues found"], passed))
 
-        os.makedirs("output", exist_ok=True)
-        out_path = os.path.join("output", f"{client_name}_audit.xlsx")
+        # Vercel serverless FS is read-only except /tmp. Use /tmp when we detect it.
+        output_root = "/tmp/output" if os.environ.get("VERCEL") else "output"
+        os.makedirs(output_root, exist_ok=True)
+        out_path = os.path.join(output_root, f"{client_name}_audit.xlsx")
         report_xlsx.build(out_path, client_name, rows, notes, df_raw, evidence_tabs,
                           total_pages=total_pages, total_images=total_images)
 
@@ -155,7 +157,8 @@ def run_audit():
 
 @app.route("/download/<path:filepath>")
 def download(filepath):
-    abs_path = os.path.join(os.getcwd(), filepath)
+    # If the client-side sent an absolute /tmp/... path (Vercel case), use it directly.
+    abs_path = filepath if os.path.isabs(filepath) else os.path.join(os.getcwd(), filepath)
     if not os.path.exists(abs_path):
         return jsonify({"error": "File not found"}), 404
     return send_file(abs_path, as_attachment=True)
