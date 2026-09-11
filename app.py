@@ -175,6 +175,7 @@ def health():
     # Try each auth path (without secrets) and record which yielded credentials.
     try:
         info["composio_credentials"] = composio_auth.get_credentials() is not None
+        info["composio_debug"] = composio_auth.LAST_DEBUG
     except Exception as exc:
         info["composio_credentials"] = False
         info["composio_error"] = str(exc)[:200]
