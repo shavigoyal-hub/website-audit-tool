@@ -360,20 +360,32 @@ def build(deck_title, obs_rows, client_display="", meta=None, pdf_out_path=None)
     """
     if not _composio_available():
         return None
-    from audit.composio_exec import execute as _cx
+    from audit.composio_exec import execute as _cx, proxy as _cx_proxy
 
     try:
-        # 1) Create blank deck
-        result = _cx("GOOGLEDRIVE_CREATE_FILE_FROM_TEXT", {
-            "file_name": deck_title,
-            "text_content": " ",
-            "mime_type": "application/vnd.google-apps.presentation",
-        })
+        # 1) Create the blank presentation via Slides API (Drive's
+        #    CREATE_FILE_FROM_TEXT ignores the presentation mime_type and
+        #    creates a Google Doc, which then 404s on Slides batchUpdate).
+        try:
+            result = _cx_proxy(
+                endpoint="/v1/presentations",
+                method="POST",
+                body={"title": deck_title},
+                toolkit="googleslides",
+            )
+        except Exception:
+            # Fallback: try Drive as it used to be, in case proxy scope is missing
+            result = _cx("GOOGLEDRIVE_CREATE_FILE_FROM_TEXT", {
+                "file_name": deck_title,
+                "text_content": " ",
+                "mime_type": "application/vnd.google-apps.presentation",
+            })
         deck_id = None
         if isinstance(result, dict):
-            deck_id = result.get("id") or result.get("fileId") or result.get("presentationId")
+            deck_id = (result.get("presentationId") or result.get("id")
+                       or result.get("fileId"))
         if not deck_id:
-            raise RuntimeError(f"Drive create returned no id: {str(result)[:300]}")
+            raise RuntimeError(f"presentation create returned no id: {str(result)[:300]}")
 
         # 2) Build the batchUpdate requests from obs_rows
         requests = _build_slides_requests(obs_rows, client_display, meta)
