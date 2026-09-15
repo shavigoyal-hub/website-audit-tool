@@ -190,12 +190,19 @@ def build_deck():
         os.makedirs(OUTPUT_ROOT, exist_ok=True)
         pdf_name = re.sub(r"[^a-z0-9]+", "_", client_display.lower()) + "_audit.pdf"
         pdf_path = os.path.join(OUTPUT_ROOT, pdf_name)
+        from audit import composio_exec
+        composio_exec.reset_trace()
         result = report_slides.build(
             deck_title, obs_rows, client_display=client_display, meta=meta,
             pdf_out_path=pdf_path,
         )
         if not result or not result.get("slide_url"):
-            return jsonify({"error": "Deck creation failed — check Composio Drive auth."}), 500
+            return jsonify({
+                "error": "Deck creation failed.",
+                "composio_debug": {"trace": composio_exec.LAST_TRACE[-15:]},
+                "rows_approved": sum(1 for r in obs_rows if r.get("approved")),
+                "rows_total": len(obs_rows),
+            }), 500
 
         resp = {
             "ok": True,

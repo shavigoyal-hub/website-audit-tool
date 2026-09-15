@@ -234,8 +234,14 @@
           result.style.background = "#fef2f2";
           result.style.border = "1px solid #fca5a5";
           result.style.color = "#991b1b";
-          const status = res.status === 409 ? "Not reviewed yet" : "Error";
-          result.innerHTML = `❌ <strong>${status}:</strong><br><pre style="white-space:pre-wrap;font-size:12px;margin-top:8px">${data.error}</pre>`;
+          let inner = `❌ <strong>Error:</strong><br><pre style="white-space:pre-wrap;font-size:12px;margin-top:8px">${data.error}</pre>`;
+          if (data.rows_approved !== undefined) {
+            inner += `<div style="font-size:12px;margin-top:6px">rows_approved: ${data.rows_approved} / ${data.rows_total}</div>`;
+          }
+          if (data.composio_debug) {
+            inner += `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px">composio debug</summary><pre style="background:#fee2e2;font-size:11px;padding:8px;border-radius:6px;white-space:pre-wrap;max-height:300px;overflow:auto;margin-top:6px">${JSON.stringify(data.composio_debug, null, 2)}</pre></details>`;
+          }
+          result.innerHTML = inner;
         }
       } catch (err) {
         result.style.display = "block";
