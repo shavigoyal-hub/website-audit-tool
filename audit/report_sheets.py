@@ -127,10 +127,14 @@ _BLACK      = {"red": 0.0, "green": 0.0, "blue": 0.0}
 _SPECIAL_BG = {"red": 0.949, "green": 0.949, "blue": 0.968}
 _DECK_BG    = {"red": 0.90, "green": 0.90, "blue": 0.92}  # grey for deck columns
 
-# Column layout constants — keep in sync with build()
-_COL_APPROVED       = 2
-_COL_PRIORITY       = 5
-_COL_DECK_START     = 8   # first deck-specific column (Hook Stat)
+# 10-col schema (0-indexed):
+#   0 Category   1 Observation   2 Priority   3 Impact   4 Reference
+#   5 Hook Stat  6 Hook Context  7 What We Found
+#   8 What It Costs You   9 Supporting Stats
+_COL_PRIORITY     = 2
+_COL_DECK_START   = 5
+# Per-column pixel widths applied after HTML import (order matches header)
+_COL_WIDTHS_PX    = [160, 380, 110, 320, 240, 120, 320, 320, 320, 240]
 
 
 def _format_cell(sid, worksheet_id, r0, r1, c0, c1, rgb, bold=False):
@@ -240,12 +244,21 @@ def _td(value, *, bg=None, color="#111", bold=False, font_size=10):
 
 
 def _build_observations_html(obs_data):
-    """Build the styled HTML that Drive will convert into the Sheet."""
+    """Build the styled HTML that Drive will convert into the Sheet.
+
+    Intro / ending are the first and last data rows (index 1 and last).
+    """
     header = obs_data[0]
     ncols = len(header)
+    last_i = len(obs_data) - 1
     parts = ['<html><head><meta charset="utf-8"></head><body><table>']
+    # colgroup with widths — Sheets HTML import respects these on first render.
+    parts.append("<colgroup>")
+    for w in _COL_WIDTHS_PX[:ncols]:
+        parts.append(f'<col style="width:{w}px">')
+    parts.append("</colgroup>")
 
-    # Header row — dark background, white bold text
+    # Header row
     parts.append("<tr>")
     for cell in header:
         parts.append(_td(cell, bg=_HEADER_HEX, color=_HEADER_TEXT,
@@ -253,30 +266,19 @@ def _build_observations_html(obs_data):
     parts.append("</tr>")
 
     # Body rows
-    for row in obs_data[1:]:
-        stype = row[1] if len(row) > 1 else ""
-        is_special = stype in ("intro", "ending")
+    for ri, row in enumerate(obs_data[1:], start=1):
+        is_special = ri == 1 or ri == last_i
         priority = row[_COL_PRIORITY] if len(row) > _COL_PRIORITY else ""
-
         parts.append("<tr>")
         for ci, val in enumerate(row):
-            # Deck-preview columns always grey with black font
             if ci >= _COL_DECK_START:
-                bg = _DECK_HEX
-                color = "#111"
-                bold = False
+                bg, color, bold = _DECK_HEX, "#111", False
             elif is_special:
-                bg = _SPECIAL_HEX
-                color = "#111"
-                bold = True
+                bg, color, bold = _SPECIAL_HEX, "#111", True
             elif ci == _COL_PRIORITY and priority in _PRIORITY_HEX:
-                bg = _PRIORITY_HEX[priority]
-                color = "#111"
-                bold = True
+                bg, color, bold = _PRIORITY_HEX[priority], "#111", True
             else:
-                bg = None
-                color = "#111"
-                bold = False
+                bg, color, bold = None, "#111", False
             parts.append(_td(val, bg=bg, color=color, bold=bold))
         parts.append("</tr>")
     parts.append("</table></body></html>")
@@ -299,75 +301,59 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         # 1) Create blank spreadsheet via Drive → gives us a fileId
         sid = _create_spreadsheet(spreadsheet_title)
 
-        # 3) Observations tab schema (13 cols):
-        # Original audit columns (0-7)  |  Deck-specific columns (8-12, grey fill)
-        #   0 Slide #        3 Category       8  Hook Stat
-        #   1 Slide Type     4 Observation    9  Hook Context
-        #   2 Approved       5 Priority       10 What We Found
-        #                    6 Impact         11 What It Costs You
-        #                    7 Reference      12 Supporting Stats
+        # 3) Observations tab — 10 cols. Row order in the sheet decides the
+        # deck order. First data row → intro slide, last → ending. Everything
+        # in between is a finding. CS can drag rows / delete rows.
+        # Hook Context is a formula that references its own row's Hook Stat
+        # cell (column F), so editing the stat updates the context.
         header = [
-            "Slide #", "Slide Type", "Approved",
             "Category", "Observation", "Priority", "Impact", "Reference",
             "Hook Stat", "Hook Context", "What We Found",
             "What It Costs You", "Supporting Stats",
         ]
         obs_data = [header]
 
-        # Intro row — Hook Context is a formula referencing Hook Stat (col I, row 2)
+        # Intro row (Sheets row 2 → Hook Stat cell = F2)
         obs_data.append([
-            1, "intro", "FALSE",
-            "Intro",
+            "Intro — cover slide",
             "Cover / hook slide — CS edits messaging",
-            "", "",
-            "",
+            "", "", "",
             "+33%",
-            '=I2&" "&"Increase your leads. Same pages. Same website."',
+            '=F2&" "&"Increase your leads. Same pages. Same website."',
             "e.g. Meta descriptions +5.8% + Structured data +25% = +33%",
             "If you get 10 leads today → 14 leads. Before any ranking gains.",
             "",
         ])
 
-        # Finding rows — original audit copy + PDF-matched deck copy via hook_copy.
-        # Hook Context is a FORMULA that concatenates the Hook Stat cell with a
-        # descriptive body, so if CS edits the stat (e.g. "+32.3%" → "+40%"),
-        # the context updates automatically. To edit the body text, edit the
-        # formula's string literal.
-        # obs_data currently holds [header, intro] → next finding starts at
-        # Sheets row = current_len + 1 (Sheets is 1-indexed, we're about to
-        # append). Column I (index 8) is Hook Stat.
-        for i, r in enumerate(obs_rows, start=2):
+        # Finding rows — Hook Context references Hook Stat in column F
+        for r in obs_rows:
             key = r.get("key", "")
             copy = _hook_for(key, r.get("observation", ""), r.get("impact", ""))
             ref  = r.get("reference", "") or ""
             sheet_row = len(obs_data) + 1
             ctx_body = copy["hook_ctx"].replace('"', '""')
-            hook_ctx_formula = f'=I{sheet_row}&" "&"{ctx_body}"'
+            hook_ctx_formula = f'=F{sheet_row}&" "&"{ctx_body}"'
             obs_data.append([
-                i, "finding", "FALSE",
                 r.get("category", ""),
                 r.get("observation", ""),
                 r.get("priority", ""),
                 r.get("impact", ""),
                 ref,
                 copy["hook_stat"],
-                hook_ctx_formula,       # ← auto-updates when Hook Stat changes
+                hook_ctx_formula,
                 ref,                    # 'What we found' seeded with page list
                 copy["costs"],
                 copy["support"],
             ])
 
-        # Ending row — Hook Context is a formula referencing Hook Stat
-        end_slide = len(obs_data)
-        end_sheet_row = len(obs_data) + 1
+        # Ending row
+        end_row = len(obs_data) + 1
         obs_data.append([
-            end_slide, "ending", "FALSE",
-            "Ending",
+            "Ending — CTA slide",
             "CTA / closing slide — CS edits messaging",
-            "", "",
-            "",
+            "", "", "",
             "4 extra leads / month",
-            f'=I{end_sheet_row}&" "&"— every month you wait, you lose out from the same pages."',
+            f'=F{end_row}&" "&"— every month you wait, you lose out from the same pages."',
             "",
             "Approve the audit fixes.",
             "",
@@ -396,7 +382,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                     "properties": {"sheetId": imported_id,
                                    "title": "Observations",
                                    "gridProperties": {"frozenRowCount": 1,
-                                                      "frozenColumnCount": 3}},
+                                                      "frozenColumnCount": 1}},
                     "fields": "title,gridProperties.frozenRowCount,gridProperties.frozenColumnCount",
                 },
             })
@@ -427,49 +413,50 @@ def _extract_sheet_id(url_or_id):
 def read_for_deck(sheet_url_or_id):
     """Fetch Observations tab via Composio's Sheets read action.
 
-    13-col schema:
-      0 Slide # | 1 Slide Type | 2 Approved |
-      3 Category | 4 Observation | 5 Priority | 6 Impact | 7 Reference |
-      8 Hook Stat | 9 Hook Context | 10 What We Found |
-      11 What It Costs You | 12 Supporting Stats
+    10-col schema (row order = deck order):
+      0 Category | 1 Observation | 2 Priority | 3 Impact | 4 Reference |
+      5 Hook Stat | 6 Hook Context | 7 What We Found |
+      8 What It Costs You | 9 Supporting Stats
+    First data row → intro; last data row → ending; middle → findings.
     """
     sid = _extract_sheet_id(sheet_url_or_id)
     if not sid or not _sheets_available():
         return None
     try:
         obs_resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": ["Observations!A1:M"],
+            "spreadsheet_id": sid, "ranges": ["Observations!A1:J"],
         })
     except Exception as exc:
         print(f"[sheets] read Observations failed: {exc}")
         return None
     obs_values = _extract_first_range(obs_resp) or []
+    data_rows = [r for r in obs_values[1:] if r and any(str(c).strip() for c in r)]
     obs_rows = []
     def _g(row, i):
         return row[i].strip() if i < len(row) and row[i] is not None else ""
-    for row in obs_values[1:]:
-        if not row or not any(row): continue
-        try:
-            slide_no = int(float(_g(row, 0))) if _g(row, 0) else 999
-        except ValueError:
-            slide_no = 999
-        approved_raw = _g(row, 2).lower()
+    last_idx = len(data_rows) - 1
+    for i, row in enumerate(data_rows):
+        if i == 0:
+            stype = "intro"
+        elif i == last_idx:
+            stype = "ending"
+        else:
+            stype = "finding"
         obs_rows.append({
-            "slide_no":    slide_no,
-            "slide_type":  _g(row, 1).lower() or "finding",
-            "approved":    approved_raw in ("true", "yes", "checked", "1"),
-            "category":    _g(row, 3),
-            "observation": _g(row, 4),
-            "priority":    _g(row, 5),
-            "impact":      _g(row, 6),
-            "reference":   _g(row, 7),
-            "hook_stat":   _g(row, 8),
-            "hook_ctx":    _g(row, 9),
-            "found":       _g(row, 10),
-            "costs":       _g(row, 11),
-            "support":     _g(row, 12),
+            "slide_no":    i + 1,          # legacy field — order = row order
+            "slide_type":  stype,
+            "approved":    True,            # no gate anymore — CS deletes rows they don't want
+            "category":    _g(row, 0),
+            "observation": _g(row, 1),
+            "priority":    _g(row, 2),
+            "impact":      _g(row, 3),
+            "reference":   _g(row, 4),
+            "hook_stat":   _g(row, 5),
+            "hook_ctx":    _g(row, 6),
+            "found":       _g(row, 7),
+            "costs":       _g(row, 8),
+            "support":     _g(row, 9),
         })
-    obs_rows.sort(key=lambda r: r["slide_no"])
     return {"meta": {}, "obs_rows": obs_rows}
 
 
