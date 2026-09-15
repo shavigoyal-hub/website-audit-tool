@@ -1,21 +1,13 @@
-"""Write a complete audit to a new Google Sheet via Composio's tools-execute API.
+"""Write a complete audit to a new Google Sheet via Composio.
 
-Composio doesn't hand out raw OAuth tokens — you call their proxy actions
-instead (POST /api/v3/tools/execute/{slug}). This module builds the audit
-sheet using only Composio-native actions:
-
-  GOOGLEDRIVE_CREATE_FILE_FROM_TEXT — create a blank Sheet via Drive
-  GOOGLESHEETS_ADD_SHEET             — add extra tabs
-  GOOGLESHEETS_BATCH_UPDATE          — write cell values
-  GOOGLESHEETS_GET_SPREADSHEET_INFO  — read tab structure back
-  GOOGLESHEETS_DELETE_SHEET          — remove the placeholder tab
-  GOOGLEDRIVE_ADD_FILE_SHARING_PREFERENCE — share with @gushwork.ai
-
-Fancy formatting (checkbox data validation, colour-per-priority,
-conditional formats) needs the raw Sheets API and can't be applied through
-Composio's named actions alone — CS still gets the columns and values,
-just plain-text 'TRUE'/'FALSE' instead of native checkboxes.
+Formatting approach: Composio's GOOGLESHEETS_FORMAT_CELL only handles
+background + bold, unreliably. The proven way (borrowed from seo-reporting's
+styled-sheet.ts) is to build an HTML table with inline CSS and upload it
+via GOOGLEDRIVE_EDIT_FILE with mime_type=text/html — Drive converts the
+HTML into a Sheet, preserving colour, font, weight, AND formulas (a cell
+whose value starts with '=' becomes a real formula).
 """
+import html as _html
 import os
 
 from audit.composio_exec import execute as _composio_execute
@@ -212,6 +204,85 @@ def _share(spreadsheet_id):
         print(f"[sheets] share failed (non-fatal): {exc}")
 
 
+_HEADER_HEX     = "#1a1a1a"
+_HEADER_TEXT    = "#ffffff"
+_SPECIAL_HEX    = "#f2f2f7"
+_DECK_HEX       = "#e6e6ee"
+_PRIORITY_HEX   = {
+    "Critical": "#f4cccc",
+    "High":     "#fce5cd",
+    "Medium":   "#fff2cc",
+    "Low":      "#d9ead3",
+}
+
+
+def _td(value, *, bg=None, color="#111", bold=False, font_size=10):
+    """Escape and wrap a single cell as an HTML <td> with inline styles.
+    Values starting with '=' become real formulas when Drive imports the HTML.
+    """
+    if value is None:
+        value = ""
+    # For formulas we don't want the '=' to be HTML-escaped, but the rest of
+    # the string must still be safe. Drive treats the imported cell text as a
+    # formula whenever it starts with '='.
+    text = _html.escape(str(value), quote=False)
+    style_parts = [
+        "font-family:Proxima Nova,Arial,sans-serif",
+        f"font-size:{font_size}pt",
+        f"color:{color}",
+        "vertical-align:top",
+    ]
+    if bg:
+        style_parts.append(f"background-color:{bg}")
+    if bold:
+        style_parts.append("font-weight:bold")
+    return f'<td style="{";".join(style_parts)}">{text}</td>'
+
+
+def _build_observations_html(obs_data):
+    """Build the styled HTML that Drive will convert into the Sheet."""
+    header = obs_data[0]
+    ncols = len(header)
+    parts = ['<html><head><meta charset="utf-8"></head><body><table>']
+
+    # Header row — dark background, white bold text
+    parts.append("<tr>")
+    for cell in header:
+        parts.append(_td(cell, bg=_HEADER_HEX, color=_HEADER_TEXT,
+                          bold=True, font_size=11))
+    parts.append("</tr>")
+
+    # Body rows
+    for row in obs_data[1:]:
+        stype = row[1] if len(row) > 1 else ""
+        is_special = stype in ("intro", "ending")
+        priority = row[_COL_PRIORITY] if len(row) > _COL_PRIORITY else ""
+
+        parts.append("<tr>")
+        for ci, val in enumerate(row):
+            # Deck-preview columns always grey with black font
+            if ci >= _COL_DECK_START:
+                bg = _DECK_HEX
+                color = "#111"
+                bold = False
+            elif is_special:
+                bg = _SPECIAL_HEX
+                color = "#111"
+                bold = True
+            elif ci == _COL_PRIORITY and priority in _PRIORITY_HEX:
+                bg = _PRIORITY_HEX[priority]
+                color = "#111"
+                bold = True
+            else:
+                bg = None
+                color = "#111"
+                bold = False
+            parts.append(_td(val, bg=bg, color=color, bold=bold))
+        parts.append("</tr>")
+    parts.append("</table></body></html>")
+    return "".join(parts)
+
+
 def build(spreadsheet_title, obs_rows, evidence_tabs,
           page_type_rows=None, total_pages=None, total_images=None,
           meta=None):
@@ -227,11 +298,6 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
     try:
         # 1) Create blank spreadsheet via Drive → gives us a fileId
         sid = _create_spreadsheet(spreadsheet_title)
-
-        # 2) Rename the default first tab to "Observations"
-        first_id, first_title = _get_placeholder_sheet_id(sid)
-        if first_id is not None:
-            _rename_sheet(sid, first_id, "Observations")
 
         # 3) Observations tab schema (13 cols):
         # Original audit columns (0-7)  |  Deck-specific columns (8-12, grey fill)
@@ -306,12 +372,38 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             "Approve the audit fixes.",
             "",
         ])
-        _write_rows_to_tab(sid, "Observations", obs_data)
+        # 4) Import the styled HTML into the sheet — Drive converts HTML with
+        #    inline CSS into a Sheet with colours, weights, and preserves
+        #    =formulas. This is the only reliable Composio-native path for
+        #    coloured cells (FORMAT_CELL silently drops most styling).
+        html_body = _build_observations_html(obs_data)
+        _composio_execute("GOOGLEDRIVE_EDIT_FILE", {
+            "file_id": sid,
+            "content": html_body,
+            "mime_type": "text/html",
+        })
 
-        # 4) Formatting — header + priority tint + intro/ending highlight + freeze
-        _format_observations(sid, first_id if first_id is not None else 0, obs_data)
+        # 5) Freeze first row + first 3 cols (HTML import doesn't set this).
+        try:
+            info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                                     {"spreadsheet_id": sid}) or {}
+            sheets = info.get("sheets") or []
+            imported_id = ((sheets[0].get("properties") or {}).get("sheetId")
+                           if sheets else 0)
+            _composio_execute("GOOGLESHEETS_UPDATE_SHEET_PROPERTIES", {
+                "spreadsheetId": sid,
+                "updateSheetProperties": {
+                    "properties": {"sheetId": imported_id,
+                                   "title": "Observations",
+                                   "gridProperties": {"frozenRowCount": 1,
+                                                      "frozenColumnCount": 3}},
+                    "fields": "title,gridProperties.frozenRowCount,gridProperties.frozenColumnCount",
+                },
+            })
+        except Exception as exc:
+            print(f"[sheets] freeze/rename (non-fatal): {exc}")
 
-        # 5) Share with the org (non-fatal if it fails)
+        # 6) Share with the org (non-fatal if it fails)
         _share(sid)
 
         return f"https://docs.google.com/spreadsheets/d/{sid}"
