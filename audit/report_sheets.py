@@ -134,7 +134,7 @@ _DECK_BG    = {"red": 0.90, "green": 0.90, "blue": 0.92}  # grey for deck column
 _COL_PRIORITY     = 2
 _COL_DECK_START   = 4
 # Per-column pixel widths applied after HTML import (order matches header)
-_COL_WIDTHS_PX    = [160, 400, 110, 320, 120, 340, 320, 320, 240]
+_COL_WIDTHS_PX    = [180, 380, 100, 320, 110, 320, 320, 320, 240]
 
 
 def _format_cell(sid, worksheet_id, r0, r1, c0, c1, rgb, bold=False):
@@ -292,6 +292,44 @@ def _build_observations_html(obs_data):
     return "".join(parts)
 
 
+def _apply_dimensions(sid, sheet_id, obs_data):
+    """Column widths + row heights via the Sheets API `batchUpdate` endpoint.
+
+    Composio has no named action for `updateDimensionProperties`, so we go
+    through `tools/proxy`. If the caller's API key lacks proxy scope this
+    call fails cleanly and the sheet keeps auto-sized defaults.
+    """
+    from audit.composio_exec import proxy as _composio_proxy
+    ncols = len(obs_data[0])
+    requests_ = []
+    # Column widths
+    for i, px in enumerate(_COL_WIDTHS_PX[:ncols]):
+        requests_.append({"updateDimensionProperties": {
+            "range": {"sheetId": sheet_id, "dimension": "COLUMNS",
+                      "startIndex": i, "endIndex": i + 1},
+            "properties": {"pixelSize": int(px)}, "fields": "pixelSize"}})
+    # Header row height
+    requests_.append({"updateDimensionProperties": {
+        "range": {"sheetId": sheet_id, "dimension": "ROWS",
+                  "startIndex": 0, "endIndex": 1},
+        "properties": {"pixelSize": 40}, "fields": "pixelSize"}})
+    # Body row height — a comfortable minimum; long-wrapped text can still
+    # grow past this when Sheets recomputes on-view.
+    if len(obs_data) > 1:
+        requests_.append({"updateDimensionProperties": {
+            "range": {"sheetId": sheet_id, "dimension": "ROWS",
+                      "startIndex": 1, "endIndex": len(obs_data)},
+            "properties": {"pixelSize": 90}, "fields": "pixelSize"}})
+    try:
+        _composio_proxy(
+            endpoint=f"/v4/spreadsheets/{sid}:batchUpdate",
+            method="POST",
+            body={"requests": requests_},
+        )
+    except Exception as exc:
+        print(f"[sheets] dimension proxy (non-fatal): {exc}")
+
+
 def build(spreadsheet_title, obs_rows, evidence_tabs,
           page_type_rows=None, total_pages=None, total_images=None,
           meta=None):
@@ -375,7 +413,8 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             "mime_type": "text/html",
         })
 
-        # 5) Freeze first row + first 3 cols (HTML import doesn't set this).
+        # 5) Set title, freeze, then column widths + row heights via
+        #    tools/proxy since Composio has no named action for dimensions.
         try:
             info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
                                      {"spreadsheet_id": sid}) or {}
@@ -392,8 +431,9 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                     "fields": "title,gridProperties.frozenRowCount,gridProperties.frozenColumnCount",
                 },
             })
+            _apply_dimensions(sid, imported_id, obs_data)
         except Exception as exc:
-            print(f"[sheets] freeze/rename (non-fatal): {exc}")
+            print(f"[sheets] freeze/dimensions (non-fatal): {exc}")
 
         # 6) Share with the org (non-fatal if it fails)
         _share(sid)

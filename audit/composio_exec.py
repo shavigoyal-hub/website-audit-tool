@@ -103,3 +103,56 @@ def execute(slug, arguments, retry=3):
 
 def reset_trace():
     LAST_TRACE.clear()
+
+
+def proxy(endpoint, method, body=None, toolkit="googlesheets"):
+    """POST /api/v3/tools/proxy — raw HTTP proxy to a connected account's API.
+
+    Lets us call parts of the Google Sheets API that Composio doesn't expose
+    as named actions (updateDimensionProperties for column widths, etc.).
+    Falls back cleanly if the caller's Composio key lacks proxy scope.
+    """
+    key = _api_key()
+    if not key:
+        raise RuntimeError("COMPOSIO_API_KEY not set")
+
+    cached = _WORKING_UID.get(toolkit)
+    candidate_uids = []
+    if cached: candidate_uids.append(cached)
+    if "default" not in candidate_uids: candidate_uids.append("default")
+    entity_uid = _entity_user_id()
+    if entity_uid and entity_uid not in candidate_uids:
+        candidate_uids.append(entity_uid)
+
+    last_err = None
+    for uid in candidate_uids:
+        payload = {
+            "endpoint": endpoint,
+            "method": method,
+            "toolkit_slug": toolkit,
+            "user_id": uid,
+        }
+        if body is not None:
+            payload["body"] = body
+        try:
+            resp = requests.post(
+                f"{_BASE}/tools/proxy",
+                headers={"x-api-key": key, "Content-Type": "application/json"},
+                data=json.dumps(payload),
+                timeout=_TIMEOUT,
+            )
+            LAST_TRACE.append({
+                "slug": f"PROXY {method} {endpoint}",
+                "user_id": uid, "status": resp.status_code,
+                "body_preview": resp.text[:300],
+            })
+            if resp.ok:
+                _WORKING_UID[toolkit] = uid
+                try:
+                    return resp.json()
+                except Exception:
+                    return resp.text
+            last_err = f"proxy {resp.status_code}: {resp.text[:300]}"
+        except Exception as exc:
+            last_err = f"proxy exception: {exc}"
+    raise RuntimeError(last_err or "proxy failed with no error message")
