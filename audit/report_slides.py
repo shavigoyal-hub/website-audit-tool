@@ -403,78 +403,203 @@ def build(deck_title, obs_rows, client_display="", meta=None, pdf_out_path=None)
 
 
 def _build_slides_requests(obs_rows, client_display, meta):
-    """Turn our row list into Slides API batchUpdate requests.
+    """Build a Slides deck mirroring the Arizona Home Grants reference PDF.
 
-    Layout is intentionally simple — one slide per row (intro / finding /
-    ending), each carrying a title + body text. Rich per-row styling
-    (banner colours, priority chips) is skipped in the Composio path.
+    Every slide uses a BLANK layout with explicit text boxes so the PDF's
+    visual hierarchy comes through:
+      • Header line: "Finding · <Category>" + priority tag right-aligned
+      • BIG STAT (48pt bold) top-left
+      • Hook context (14pt muted) directly under the stat
+      • "What we found" (left column, 11pt with 9pt bold section label)
+      • "What it costs you" (right column) + optional supporting stat
+      • Footer: client domain and slide number
     """
     from audit.version import VERSION, PLAN_TIERS, resolve_plan
     reqs = []
 
-    def _slide_id(i):
-        return f"slide_{i}"
+    # Coordinate helpers — Slides page is 10in × 5.625in (widescreen).
+    def emu(inches): return int(inches * 914400)
 
-    def _add_slide(idx, title, body):
-        sid = _slide_id(idx)
+    slide_counter = [0]
+    def _slide_id():
+        slide_counter[0] += 1
+        return f"s{slide_counter[0]}"
+
+    def _text_box(page_id, box_id, x, y, w, h):
+        reqs.append({"createShape": {
+            "objectId": box_id, "shapeType": "TEXT_BOX",
+            "elementProperties": {
+                "pageObjectId": page_id,
+                "size":       {"width":  {"magnitude": emu(w), "unit": "EMU"},
+                               "height": {"magnitude": emu(h), "unit": "EMU"}},
+                "transform":  {"scaleX": 1, "scaleY": 1,
+                               "translateX": emu(x), "translateY": emu(y),
+                               "unit": "EMU"}}}})
+
+    def _write(box_id, text, size=12, bold=False, color=None, align=None):
+        if not text:
+            return
+        reqs.append({"insertText": {"objectId": box_id, "text": str(text)[:1600]}})
+        style = {"fontFamily": "Proxima Nova",
+                 "fontSize": {"magnitude": size, "unit": "PT"},
+                 "bold": bool(bold)}
+        fields = "fontFamily,fontSize,bold"
+        if color:
+            style["foregroundColor"] = {"opaqueColor": {"rgbColor": color}}
+            fields += ",foregroundColor"
+        reqs.append({"updateTextStyle": {
+            "objectId": box_id,
+            "textRange": {"type": "ALL"},
+            "style": style,
+            "fields": fields}})
+        if align:
+            reqs.append({"updateParagraphStyle": {
+                "objectId": box_id,
+                "textRange": {"type": "ALL"},
+                "style": {"alignment": align},
+                "fields": "alignment"}})
+
+    # ── Intro slide (client + hook stat + hook context + formula + costs) ──
+    def _intro(row):
+        sid = _slide_id()
         reqs.append({"createSlide": {"objectId": sid,
-                                     "slideLayoutReference": {"predefinedLayout": "TITLE_AND_BODY"}}})
-        # createSlide auto-creates placeholders; we use insertText.
-        # Slides places placeholders with generic ids we can't predict, so
-        # use TEXT_BOX shapes on top instead — deterministic.
-        title_id = f"{sid}_title"
-        body_id  = f"{sid}_body"
-        reqs.append({"createShape": {"objectId": title_id, "shapeType": "TEXT_BOX",
-                                      "elementProperties": {"pageObjectId": sid,
-                                          "size": {"width": {"magnitude": 8500000, "unit": "EMU"},
-                                                   "height": {"magnitude": 700000, "unit": "EMU"}},
-                                          "transform": {"scaleX": 1, "scaleY": 1,
-                                              "translateX": 500000, "translateY": 400000,
-                                              "unit": "EMU"}}}})
-        reqs.append({"insertText": {"objectId": title_id, "text": title[:400]}})
-        reqs.append({"createShape": {"objectId": body_id, "shapeType": "TEXT_BOX",
-                                      "elementProperties": {"pageObjectId": sid,
-                                          "size": {"width": {"magnitude": 8500000, "unit": "EMU"},
-                                                   "height": {"magnitude": 3500000, "unit": "EMU"}},
-                                          "transform": {"scaleX": 1, "scaleY": 1,
-                                              "translateX": 500000, "translateY": 1400000,
-                                              "unit": "EMU"}}}})
-        reqs.append({"insertText": {"objectId": body_id, "text": body[:1800]}})
+                                     "slideLayoutReference": {"predefinedLayout": "BLANK"}}})
+        # Small header line
+        hdr = f"{sid}_hdr"
+        _text_box(sid, hdr, 0.5, 0.35, 9.0, 0.4)
+        _write(hdr, f"Gushwork Website audit · {client_display}",
+               size=12, bold=True, color={"red": 0.42, "green": 0.45, "blue": 0.5})
+        # Big stat
+        stat = f"{sid}_stat"
+        _text_box(sid, stat, 0.5, 1.0, 9.0, 1.1)
+        _write(stat, row.get("hook_stat") or "+33%",
+               size=48, bold=True, color={"red": 0.1, "green": 0.1, "blue": 0.11})
+        # Hook context
+        ctx = f"{sid}_ctx"
+        _text_box(sid, ctx, 0.5, 2.2, 9.0, 0.9)
+        _write(ctx, row.get("hook_ctx") or "Increase your leads.",
+               size=22, bold=True)
+        # Formula (What We Found for intro)
+        if row.get("found"):
+            fd = f"{sid}_found"
+            _text_box(sid, fd, 0.5, 3.3, 9.0, 0.6)
+            _write(fd, row["found"], size=14,
+                   color={"red": 0.42, "green": 0.45, "blue": 0.5})
+        # Cost / example uplift
+        if row.get("costs"):
+            cs = f"{sid}_costs"
+            _text_box(sid, cs, 0.5, 4.0, 9.0, 1.0)
+            _write(cs, row["costs"], size=15, bold=True)
 
-    # Only rows CS approved
+    # ── Finding slide (matches PDF page 2/3/4/5/6 layout) ─────────────────
+    def _finding(row):
+        sid = _slide_id()
+        reqs.append({"createSlide": {"objectId": sid,
+                                     "slideLayoutReference": {"predefinedLayout": "BLANK"}}})
+        # Top: Finding · Category   [priority right-aligned]
+        hdr = f"{sid}_hdr"
+        _text_box(sid, hdr, 0.5, 0.35, 6.5, 0.45)
+        _write(hdr, f"Finding · {row.get('category','')}",
+               size=13, bold=True,
+               color={"red": 0.42, "green": 0.45, "blue": 0.5})
+        prio_box = f"{sid}_prio"
+        _text_box(sid, prio_box, 7.0, 0.35, 2.5, 0.45)
+        prio = row.get("priority", "")
+        prio_color = {
+            "Critical": {"red": 0.86, "green": 0.15, "blue": 0.15},
+            "High":     {"red": 0.9,  "green": 0.4,  "blue": 0.1},
+            "Medium":   {"red": 0.85, "green": 0.6,  "blue": 0.05},
+            "Low":      {"red": 0.2,  "green": 0.55, "blue": 0.3},
+        }.get(prio, {"red": 0.4, "green": 0.4, "blue": 0.4})
+        _write(prio_box, prio, size=12, bold=True, color=prio_color, align="END")
+
+        # Right side big stat + subtitle (matches PDF hero block)
+        stat = f"{sid}_stat"
+        _text_box(sid, stat, 4.8, 1.05, 4.7, 1.0)
+        _write(stat, row.get("hook_stat") or "",
+               size=44, bold=True, color={"red": 0.1, "green": 0.1, "blue": 0.11})
+        ctx = f"{sid}_ctx"
+        _text_box(sid, ctx, 4.8, 2.15, 4.7, 1.0)
+        _write(ctx, row.get("hook_ctx") or "", size=14,
+               color={"red": 0.42, "green": 0.45, "blue": 0.5})
+
+        # Left side "What we found" — section label + list
+        wf_lbl = f"{sid}_wflbl"
+        _text_box(sid, wf_lbl, 0.5, 1.05, 4.0, 0.35)
+        _write(wf_lbl, "What we found", size=10, bold=True,
+               color={"red": 0.42, "green": 0.45, "blue": 0.5})
+        wf_body = f"{sid}_wf"
+        _text_box(sid, wf_body, 0.5, 1.4, 4.0, 2.5)
+        _write(wf_body, row.get("found") or "—", size=11)
+
+        # Bottom "What it costs you"
+        cost_lbl = f"{sid}_costlbl"
+        _text_box(sid, cost_lbl, 0.5, 4.05, 9.0, 0.35)
+        _write(cost_lbl, "What it costs you", size=10, bold=True,
+               color={"red": 0.42, "green": 0.45, "blue": 0.5})
+        cost_body = f"{sid}_cost"
+        _text_box(sid, cost_body, 0.5, 4.4, 9.0, 0.9)
+        _write(cost_body, row.get("costs") or "", size=12, bold=True)
+        # Supporting stat (small, muted, right)
+        if row.get("support"):
+            sup = f"{sid}_sup"
+            _text_box(sid, sup, 0.5, 5.15, 9.0, 0.35)
+            _write(sup, row["support"], size=10,
+                   color={"red": 0.42, "green": 0.45, "blue": 0.5})
+
+    # ── Ending slide ───────────────────────────────────────────────────────
+    def _ending(row):
+        sid = _slide_id()
+        reqs.append({"createSlide": {"objectId": sid,
+                                     "slideLayoutReference": {"predefinedLayout": "BLANK"}}})
+        hdr = f"{sid}_hdr"
+        _text_box(sid, hdr, 0.5, 0.4, 9.0, 0.4)
+        _write(hdr, f"Gushwork · {client_display}", size=13, bold=True,
+               color={"red": 0.42, "green": 0.45, "blue": 0.5})
+        big = f"{sid}_big"
+        _text_box(sid, big, 0.5, 1.4, 9.0, 2.5)
+        _write(big, row.get("hook_ctx") or "Approve the audit fixes.",
+               size=28, bold=True)
+        cta = f"{sid}_cta"
+        _text_box(sid, cta, 0.5, 4.1, 9.0, 0.9)
+        _write(cta, row.get("costs") or "Approve the audit fixes.",
+               size=20, bold=True, color={"red": 0.42, "green": 0.45, "blue": 0.5})
+
+    # ── Projected Impact slide (from plan tier) ────────────────────────────
+    def _impact(plan_tier):
+        tier = PLAN_TIERS[plan_tier]
+        sid = _slide_id()
+        reqs.append({"createSlide": {"objectId": sid,
+                                     "slideLayoutReference": {"predefinedLayout": "BLANK"}}})
+        hdr = f"{sid}_hdr"
+        _text_box(sid, hdr, 0.5, 0.4, 9.0, 0.4)
+        _write(hdr, "Projected Impact", size=13, bold=True,
+               color={"red": 0.42, "green": 0.45, "blue": 0.5})
+        body = f"{sid}_b"
+        _text_box(sid, body, 0.5, 1.1, 9.0, 4.0)
+        _write(body,
+               f"Expected leads on the ${plan_tier} / month plan\n\n"
+               f"Month 3-4:   {tier['M3-4']} leads / month\n"
+               f"Month 6-7:   {tier['M6-7']} leads / month\n"
+               f"Month 9-10:  {tier['M9-10']} leads / month\n\n"
+               "Cost per lead expected to drop ~5% vs current spend.",
+               size=14)
+
+    # Order by Slide # from the sheet; only rows marked Approved
     approved = [r for r in obs_rows if r.get("approved")]
     if not approved:
         approved = obs_rows
 
-    idx = 0
     for r in approved:
-        idx += 1
         stype = r.get("slide_type", "finding")
         if stype == "intro":
-            title = r.get("hook_ctx") or "Cover"
-            body_parts = [r.get("found", ""), r.get("costs", "")]
+            _intro(r)
         elif stype == "ending":
-            title = r.get("hook_ctx") or "Next Steps"
-            body_parts = [r.get("costs", "")]
+            _ending(r)
         else:
-            title = f"{r.get('category','')} · {r.get('hook_stat','')}"
-            body_parts = [
-                f"Hook: {r.get('hook_ctx','')}",
-                f"What we found: {r.get('found','')}",
-                f"What it costs you: {r.get('costs','')}",
-            ]
-            if r.get("support"):
-                body_parts.append(r["support"])
-        _add_slide(idx, title, "\n\n".join(p for p in body_parts if p))
+            _finding(r)
 
-    # Projected impact — from plan tier
     plan_tier = resolve_plan((meta or {}).get("plan"))
     if plan_tier and plan_tier in PLAN_TIERS:
-        idx += 1
-        tier = PLAN_TIERS[plan_tier]
-        _add_slide(idx, f"Projected Impact — ${plan_tier}/mo plan",
-                   f"Month 3-4: {tier['M3-4']} leads/month\n"
-                   f"Month 6-7: {tier['M6-7']} leads/month\n"
-                   f"Month 9-10: {tier['M9-10']} leads/month\n\n"
-                   f"CPL expected to drop ~5% vs current spend.")
+        _impact(plan_tier)
     return reqs
