@@ -1,27 +1,12 @@
 """Composio-based Google auth for report_sheets / report_slides.
 
-When COMPOSIO_API_KEY is set, fetches the OAuth access token for a
-connected Google account (Sheets or Drive) via Composio's REST API and
-returns google.oauth2.credentials.Credentials that plug into the existing
-google-api-python-client code paths.
-
-If it doesn't work we return None and the caller falls back to
-GOOGLE_SERVICE_ACCOUNT_JSON. The last-attempt debug info is stored in
-LAST_DEBUG so /health can display it.
-
-Env vars:
-    COMPOSIO_API_KEY     — required
-    COMPOSIO_ENTITY_ID   — Composio entity/user id; defaults to
-                            AUDIT_SHARE_EMAIL or shavi.goyal@gushwork.ai
+Uses the official `composio` Python SDK so token refresh + retrieval
+follows Composio's supported path. LIST returns cached (often stale)
+tokens that Google rejects with 401; the RETRIEVE call on a specific
+connection returns the fresh token Composio has cached internally.
 """
 import os
 
-import requests
-
-_BASE = "https://backend.composio.dev"
-_TIMEOUT = 15
-
-# Last debug trace — /health reads this
 LAST_DEBUG = {}
 
 
@@ -32,193 +17,144 @@ def _api_key():
 def _entity_id():
     return (
         os.environ.get("COMPOSIO_ENTITY_ID")
+        or os.environ.get("entity_id")
         or os.environ.get("AUDIT_SHARE_EMAIL")
         or "shavi.goyal@gushwork.ai"
     )
 
 
-def _try(method, path, params=None, note=""):
-    """Hit a Composio endpoint. Return (status, json_or_text). Log to LAST_DEBUG."""
-    url = _BASE + path
+def _walk_for_token(node, depth=0):
+    """Recursively walk any nested dict/pydantic model looking for a plausible
+    OAuth access token field. Returns (token, path_str) or (None, None).
+    """
+    if depth > 6 or node is None:
+        return None, None
+    # pydantic model → dict
+    if hasattr(node, "model_dump"):
+        try:
+            node = node.model_dump()
+        except Exception:
+            pass
+    if isinstance(node, dict):
+        for k in ("access_token", "accessToken", "oauth_token", "token"):
+            v = node.get(k)
+            if isinstance(v, str) and len(v) > 20:
+                return v, k
+        for k, v in node.items():
+            tok, p = _walk_for_token(v, depth + 1)
+            if tok:
+                return tok, f"{k}.{p}"
+    elif isinstance(node, (list, tuple)):
+        for i, v in enumerate(node):
+            tok, p = _walk_for_token(v, depth + 1)
+            if tok:
+                return tok, f"[{i}].{p}"
+    return None, None
+
+
+def _fetch_token_via_sdk(app_slug):
+    """Use the Composio SDK to list connections + retrieve fresh token."""
+    try:
+        from composio import Composio
+    except Exception as exc:
+        LAST_DEBUG["sdk_import_error"] = str(exc)[:200]
+        return None
+
     key = _api_key()
     if not key:
-        LAST_DEBUG.setdefault("attempts", []).append({"note": note, "error": "no api key"})
-        return None, None
-    try:
-        resp = requests.request(
-            method, url,
-            headers={"X-API-Key": key, "Content-Type": "application/json"},
-            params=params, timeout=_TIMEOUT,
-        )
-        try:
-            body = resp.json()
-        except Exception:
-            body = resp.text[:400]
-        LAST_DEBUG.setdefault("attempts", []).append({
-            "note": note, "path": path, "params": params,
-            "status": resp.status_code,
-            "body_preview": str(body)[:400],
-        })
-        return resp.status_code, body
-    except Exception as exc:
-        LAST_DEBUG.setdefault("attempts", []).append({
-            "note": note, "path": path, "error": str(exc)[:200],
-        })
-        return None, None
-
-
-def _extract_token(item):
-    """Try to pull an access_token out of a connected-account item, whatever schema."""
-    if not isinstance(item, dict):
+        LAST_DEBUG["error"] = "COMPOSIO_API_KEY not set"
         return None
-    # Common shapes across Composio API versions
-    for path in (
-        ("connectionParams", "access_token"),
-        ("connectionParams", "accessToken"),
-        ("credentials", "access_token"),
-        ("credentials", "accessToken"),
-        ("params", "access_token"),
-        ("meta", "access_token"),
-        ("data", "access_token"),
-    ):
-        node = item
-        ok = True
-        for k in path:
-            if isinstance(node, dict) and k in node:
-                node = node[k]
-            else:
-                ok = False; break
-        if ok and isinstance(node, str) and node:
-            return node
-    # Top-level
-    for k in ("access_token", "accessToken"):
-        if isinstance(item.get(k), str) and item[k]:
-            return item[k]
-    return None
-
-
-def _find_connection_id(body, target_slug):
-    """Return the connection id (ca_...) whose toolkit slug matches target_slug."""
-    target = (target_slug or "").lower().strip()
-    if not isinstance(body, dict):
-        return None
-    for key in ("items", "connectedAccounts", "data", "connections", "accounts"):
-        items = body.get(key)
-        if isinstance(items, list):
-            for item in items:
-                app = (item.get("appName") or item.get("app_name")
-                       or (item.get("app") or {}).get("name")
-                       or (item.get("toolkit") or {}).get("slug") or "").lower().strip()
-                if target and app != target:
-                    continue
-                # Composio v3 uses `id` (ca_...) for connection id
-                cid = item.get("id") or item.get("connectionId") or item.get("connection_id")
-                if cid:
-                    return cid
-    return None
-
-
-def _find_token_in_response(body, target_slug):
-    """Fallback: find an access token directly in the response body."""
-    target = (target_slug or "").lower().strip()
-    if not isinstance(body, dict):
-        return None
-    for key in ("items", "connectedAccounts", "data", "connections", "accounts"):
-        items = body.get(key)
-        if isinstance(items, list):
-            for item in items:
-                app = (item.get("appName") or item.get("app_name")
-                       or (item.get("app") or {}).get("name")
-                       or (item.get("toolkit") or {}).get("slug") or "").lower().strip()
-                if target and app != target:
-                    continue
-                tok = _extract_token(item)
-                if tok:
-                    return tok
-    # Direct look at top-level (single-connection GET response)
-    return _extract_token(body)
-
-
-def _fetch_access_token(app_name):
-    """Fetch a fresh OAuth access token via Composio.
-
-    Composio's LIST endpoint returns cached/stale tokens that Google
-    rejects with 401. The correct pattern is:
-      1. List connections → find the connection id (ca_...)
-      2. GET /api/v3/connected_accounts/{id} → returns the fresh token
-
-    We fall back to token-in-list if the individual GET doesn't yield one.
-    """
     entity = _entity_id()
-    LAST_DEBUG["target_app"] = app_name
+    LAST_DEBUG["target_app"] = app_slug
     LAST_DEBUG["entity_id"] = entity
 
-    user_ids = [entity]
-    if entity != "default":
-        user_ids.append("default")
+    c = Composio(api_key=key)
 
-    # Step 1 — find the connection id
+    # Step 1 — list connections for this toolkit
+    user_id_variants = [entity, "default"] if entity != "default" else ["default"]
     conn_id = None
-    for uid in user_ids:
-        for params, note in [
-            ({"user_ids": uid, "toolkit_slugs": app_name},
-             f"list toolkit+user_ids({uid})"),
-            ({"toolkit_slugs": app_name},
-             f"list toolkit_slugs only (attempt for {uid})"),
-        ]:
-            status, body = _try("GET", "/api/v3/connected_accounts",
-                                params=params, note=note)
-            if status == 200 and body:
-                conn_id = _find_connection_id(body, app_name)
-                if conn_id:
-                    LAST_DEBUG["connection_id"] = conn_id
-                    break
-        if conn_id:
-            break
+    for uid in user_id_variants:
+        try:
+            resp = c.connected_accounts.list(
+                toolkit_slugs=[app_slug], user_ids=[uid],
+            )
+            items = getattr(resp, "items", None) or []
+            LAST_DEBUG.setdefault("sdk_list", []).append(
+                {"user_id": uid, "count": len(items),
+                 "ids": [getattr(x, "id", None) for x in items[:3]]}
+            )
+            for it in items:
+                slug = getattr(getattr(it, "toolkit", None), "slug", "") or ""
+                if slug.lower() == app_slug.lower():
+                    conn_id = getattr(it, "id", None)
+                    if conn_id:
+                        break
+            if conn_id:
+                break
+        except Exception as exc:
+            LAST_DEBUG.setdefault("sdk_list_errors", []).append(
+                {"user_id": uid, "error": str(exc)[:250]}
+            )
 
     if not conn_id:
+        # Also try listing without user filter
+        try:
+            resp = c.connected_accounts.list(toolkit_slugs=[app_slug])
+            items = getattr(resp, "items", None) or []
+            for it in items:
+                slug = getattr(getattr(it, "toolkit", None), "slug", "") or ""
+                if slug.lower() == app_slug.lower():
+                    conn_id = getattr(it, "id", None)
+                    if conn_id:
+                        break
+        except Exception as exc:
+            LAST_DEBUG["sdk_list_all_error"] = str(exc)[:250]
+
+    if not conn_id:
+        LAST_DEBUG["error"] = f"no connection found for {app_slug}"
+        return None
+    LAST_DEBUG["connection_id"] = conn_id
+
+    # Step 2 — retrieve fresh connection details (SDK auto-handles refresh)
+    try:
+        detail = c.connected_accounts.get(conn_id)
+    except Exception as exc:
+        LAST_DEBUG["sdk_get_error"] = str(exc)[:250]
         return None
 
-    # Step 2 — GET the individual connection to get a fresh token.
-    # Composio v3 supports a few variants; try each until one returns 200.
-    for path, note in [
-        (f"/api/v3/connected_accounts/{conn_id}",           "get connection detail"),
-        (f"/api/v3/connected_accounts/{conn_id}/token",     "get connection token"),
-        (f"/api/v3/connected_accounts/{conn_id}/refresh",   "refresh connection"),
-    ]:
-        method = "POST" if path.endswith("/refresh") else "GET"
-        status, body = _try(method, path, note=note)
-        if status == 200 and body:
-            tok = _find_token_in_response(body, app_name)
-            if tok:
-                LAST_DEBUG["token_source"] = f"{note} ({path})"
-                return tok
+    tok, path = _walk_for_token(detail)
+    if tok:
+        LAST_DEBUG["token_source"] = f"sdk.get({conn_id}) → {path}"
+        return tok
+    # dump top-level field names so we can see what came back
+    try:
+        LAST_DEBUG["detail_fields"] = list(detail.model_dump().keys())
+    except Exception:
+        pass
+    LAST_DEBUG["error"] = "connection retrieved but no access_token found in any field"
     return None
 
 
 def get_credentials():
     """Return google.oauth2.credentials.Credentials with refresh disabled.
 
-    Composio manages the token lifecycle server-side and doesn't hand out
-    a refresh_token/client_id/client_secret. If we return a stock
-    Credentials, google-auth tries to refresh on every request and blows
-    up with RefreshError. We subclass to no-op refresh and always report
-    valid, so google-auth just sends the token as-is.
+    Composio manages token lifecycle server-side and doesn't hand out
+    refresh_token/client_id/client_secret. Overriding refresh + expired
+    so google-auth never tries to refresh (which would raise RefreshError).
     """
     LAST_DEBUG.clear()
     if not _api_key():
         LAST_DEBUG["error"] = "COMPOSIO_API_KEY not set"
         return None
     try:
-        token = _fetch_access_token("googlesheets") or _fetch_access_token("googledrive")
+        token = _fetch_token_via_sdk("googlesheets") or _fetch_token_via_sdk("googledrive")
         if not token:
-            LAST_DEBUG["error"] = "no access token found in any connected-accounts response"
             return None
         from google.oauth2.credentials import Credentials
 
         class _NoRefreshCreds(Credentials):
             def refresh(self, request):
-                return  # Composio owns the token; never refresh.
+                return
             @property
             def expired(self):
                 return False
@@ -228,5 +164,6 @@ def get_credentials():
 
         return _NoRefreshCreds(token=token)
     except Exception as exc:
-        LAST_DEBUG["error"] = f"exception: {exc}"
+        import traceback as _tb
+        LAST_DEBUG["error"] = f"exception: {_tb.format_exc()[:500]}"
         return None
