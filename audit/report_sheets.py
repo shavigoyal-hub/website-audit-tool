@@ -226,15 +226,18 @@ def _td(value, *, bg=None, color="#111", bold=False, font_size=10):
     """
     if value is None:
         value = ""
-    # For formulas we don't want the '=' to be HTML-escaped, but the rest of
-    # the string must still be safe. Drive treats the imported cell text as a
-    # formula whenever it starts with '='.
     text = _html.escape(str(value), quote=False)
+    # Preserve newlines in cell content as line breaks so multi-URL "What
+    # We Found" lists render on multiple lines (also drives row height up).
+    text = text.replace("\n", "<br>")
     style_parts = [
         "font-family:Proxima Nova,Arial,sans-serif",
         f"font-size:{font_size}pt",
         f"color:{color}",
         "vertical-align:top",
+        "white-space:normal",           # force wrap on long strings
+        "padding:8px 10px",             # gives visual row height
+        "line-height:1.4",
     ]
     if bg:
         style_parts.append(f"background-color:{bg}")
@@ -259,17 +262,17 @@ def _build_observations_html(obs_data):
     parts.append("</colgroup>")
 
     # Header row
-    parts.append("<tr>")
+    parts.append('<tr style="height:44px">')
     for cell in header:
         parts.append(_td(cell, bg=_HEADER_HEX, color=_HEADER_TEXT,
                           bold=True, font_size=11))
     parts.append("</tr>")
 
-    # Body rows
+    # Body rows — height:auto lets long-wrapped content grow the row
     for ri, row in enumerate(obs_data[1:], start=1):
         is_special = ri == 1 or ri == last_i
         priority = row[_COL_PRIORITY] if len(row) > _COL_PRIORITY else ""
-        parts.append("<tr>")
+        parts.append('<tr style="height:110px">')
         for ci, val in enumerate(row):
             if ci >= _COL_DECK_START:
                 bg, color, bold = _DECK_HEX, "#111", False
