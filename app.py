@@ -120,30 +120,15 @@ def run_audit():
         rows, notes = observations.build_rows(findings, psi_rows, site_obs)
         notes.extend(f"Not evaluated : {x}" for x in site["na"])
 
-        evidence_tabs = [f["evidence"] for f in findings if f.get("evidence")]
-        fired_csv = {f["key"] for f in findings if f["count"] > 0}
-        passed = observations.build_passed_tab(fired_csv, psi_passed, [])
-        passed.extend([p] for p in site["passed"])
-        evidence_tabs.append(("Checks Passed", ["Parameter tested : no issues found"], passed))
-
-        os.makedirs(OUTPUT_ROOT, exist_ok=True)
-        xlsx_name = f"{client_name}_audit.xlsx"
-        out_path = os.path.join(OUTPUT_ROOT, xlsx_name)
-        report_xlsx.build(out_path, client_name, rows, notes, df_raw, evidence_tabs,
-                          total_pages=total_pages, total_images=total_images)
-
         import datetime
         sheet_title = f"{client_name.replace('_', ' ').title()} SEO Audit — {datetime.date.today()}"
         meta = {
             "version":       VERSION,
             "generated":     datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
             "live_url":      live_url,
-            "plan":          plan,
-            "current_spend": current_spend,
-            "sell_price":    sell_price,
         }
         sheet_url = report_sheets.build(
-            sheet_title, rows, evidence_tabs,
+            sheet_title, rows, evidence_tabs=[],
             total_pages=total_pages, total_images=total_images,
             meta=meta,
         )
@@ -152,13 +137,11 @@ def run_audit():
             "ok": True,
             "version": VERSION,
             "observations": len(rows),
-            "xlsx": xlsx_name,
             "message": f"Audit complete — {len(rows)} observations found.",
         }
         if sheet_url:
             resp["sheet_url"] = sheet_url
-            resp["message"] += (" Google Sheet created. Review it, tick "
-                                "'Reviewed' in the Meta tab, then build the deck.")
+            resp["message"] += " Google Sheet created — open, edit, then build the deck."
         else:
             from audit.composio_exec import LAST_TRACE as _trace
             resp["warning"] = "Sheet skipped — see sheet_error for the cause."
@@ -186,17 +169,11 @@ def build_deck():
 
         data = report_sheets.read_for_deck(sheet_url)
         if not data:
-            return jsonify({"error": "Could not read sheet (missing Meta tab or no auth)."}), 400
-        meta = data["meta"]
+            return jsonify({"error": "Could not read sheet (no auth or Observations tab missing)."}), 400
+        meta = data.get("meta") or {}
         obs_rows = data["obs_rows"]
 
-        if not meta.get("reviewed") and not force:
-            return jsonify({
-                "error": "Sheet is not marked Reviewed. Tick the 'Reviewed' checkbox "
-                         "in the Meta tab and try again, or resubmit with force=1."
-            }), 409
-
-        # Form overrides
+        # Form overrides (plan/current_spend/sell_price optional for the deck)
         for k in ("plan", "current_spend", "sell_price"):
             v = request.form.get(k, "").strip()
             if v:

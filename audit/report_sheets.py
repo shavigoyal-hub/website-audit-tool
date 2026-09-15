@@ -20,6 +20,7 @@ import os
 
 from audit.composio_exec import execute as _composio_execute
 from audit.composio_exec import reset_trace as _reset_trace, LAST_TRACE
+from audit.hook_copy import for_row as _hook_for
 
 _SHARE_DOMAIN = "gushwork.ai"
 
@@ -122,6 +123,99 @@ def _write_rows_to_tab(spreadsheet_id, tab_name, rows, start_cell="A1"):
     })
 
 
+_PRIORITY_BG = {
+    "Critical": {"red": 0.95, "green": 0.80, "blue": 0.80},
+    "High":     {"red": 1.00, "green": 0.88, "blue": 0.80},
+    "Medium":   {"red": 1.00, "green": 0.95, "blue": 0.80},
+    "Low":      {"red": 0.85, "green": 0.92, "blue": 0.83},
+}
+_HEADER_BG  = {"red": 0.102, "green": 0.102, "blue": 0.102}
+_WHITE      = {"red": 1.0, "green": 1.0, "blue": 1.0}
+_SPECIAL_BG = {"red": 0.949, "green": 0.949, "blue": 0.968}
+
+
+def _format_observations(sid, sheet_id, obs_data):
+    """Freeze header + colour header + priority tint + intro/ending highlight."""
+    reqs = [
+        # Freeze first row + first 3 cols
+        {"updateSheetProperties": {
+            "properties": {"sheetId": sheet_id,
+                           "gridProperties": {"frozenRowCount": 1,
+                                              "frozenColumnCount": 3}},
+            "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount"}},
+        # Header: dark bg + white bold text
+        {"repeatCell": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1,
+                      "startColumnIndex": 0, "endColumnIndex": len(obs_data[0])},
+            "cell": {"userEnteredFormat": {
+                "backgroundColor": _HEADER_BG,
+                "textFormat": {"foregroundColor": _WHITE, "bold": True,
+                               "fontSize": 11},
+                "verticalAlignment": "MIDDLE",
+                "wrapStrategy": "WRAP"}},
+            "fields": "userEnteredFormat(backgroundColor,textFormat,verticalAlignment,wrapStrategy)"}},
+        # Body: wrap all cells
+        {"repeatCell": {
+            "range": {"sheetId": sheet_id, "startRowIndex": 1,
+                      "endRowIndex": len(obs_data),
+                      "startColumnIndex": 0, "endColumnIndex": len(obs_data[0])},
+            "cell": {"userEnteredFormat": {"verticalAlignment": "TOP",
+                                             "wrapStrategy": "WRAP"}},
+            "fields": "userEnteredFormat(verticalAlignment,wrapStrategy)"}},
+    ]
+    # Column widths
+    for start, end, px in [(0, 1, 60), (1, 3, 90), (3, 4, 130),
+                            (4, 5, 90), (5, 6, 110), (6, 10, 260),
+                            (10, 11, 200)]:
+        reqs.append({"updateDimensionProperties": {
+            "range": {"sheetId": sheet_id, "dimension": "COLUMNS",
+                      "startIndex": start, "endIndex": end},
+            "properties": {"pixelSize": px}, "fields": "pixelSize"}})
+
+    # Priority-tinted rows (Priority col = index 4)
+    for ri, row in enumerate(obs_data[1:], start=1):
+        stype = row[1] if len(row) > 1 else ""
+        if stype in ("intro", "ending"):
+            reqs.append({"repeatCell": {
+                "range": {"sheetId": sheet_id, "startRowIndex": ri,
+                          "endRowIndex": ri + 1, "startColumnIndex": 0,
+                          "endColumnIndex": len(obs_data[0])},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": _SPECIAL_BG,
+                    "textFormat": {"bold": True}}},
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"}})
+            continue
+        prio = row[4] if len(row) > 4 else ""
+        bg = _PRIORITY_BG.get(prio)
+        if bg:
+            reqs.append({"repeatCell": {
+                "range": {"sheetId": sheet_id, "startRowIndex": ri,
+                          "endRowIndex": ri + 1,
+                          "startColumnIndex": 4, "endColumnIndex": 5},
+                "cell": {"userEnteredFormat": {"backgroundColor": bg}},
+                "fields": "userEnteredFormat.backgroundColor"}})
+
+    # Approved column = TRUE/FALSE data validation (Sheets shows a checkbox)
+    reqs.append({"setDataValidation": {
+        "range": {"sheetId": sheet_id, "startRowIndex": 1,
+                  "endRowIndex": len(obs_data),
+                  "startColumnIndex": 2, "endColumnIndex": 3},
+        "rule": {"condition": {"type": "BOOLEAN"}, "strict": True}}})
+
+    # Fire it all in one batchUpdate against the raw Sheets API. Composio's
+    # named BATCH_UPDATE action only handles cell values — for formatting we
+    # need the raw request shape, which they expose as GOOGLESHEETS_BATCH_UPDATE
+    # by-passing valueInputOption when we pass `requests` instead.
+    try:
+        _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
+            "spreadsheet_id": sid,
+            "requests": reqs,
+        })
+    except Exception as exc:
+        # Formatting is best-effort — the sheet is still usable without it.
+        print(f"[sheets] format (non-fatal): {exc}")
+
+
 def _share(spreadsheet_id):
     try:
         _composio_execute("GOOGLEDRIVE_ADD_FILE_SHARING_PREFERENCE", {
@@ -156,85 +250,65 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         if first_id is not None:
             _rename_sheet(sid, first_id, "Observations")
 
-        # 3) Observations tab: 14-column schema + intro row + finding rows + ending row
-        _IMAGE_KEYS = {"image_large"}
+        # 3) Observations tab (the ONLY tab). Schema:
+        #    Slide # | Slide Type | Approved | Category | Priority |
+        #    Hook Stat | Hook Context | What We Found | What It Costs You |
+        #    Supporting Stats | Reference (raw)
         header = [
             "Slide #", "Slide Type", "Approved",
-            "Category", "Observation", "Priority", "Impact", "Reference",
+            "Category", "Priority",
             "Hook Stat", "Hook Context", "What We Found",
             "What It Costs You", "Supporting Stats",
-            "Count ⚠ DELETE BEFORE SHARING",
+            "Reference",
         ]
         obs_data = [header]
-        # Intro
-        intro_hook = "Increase your leads by 33%"
-        intro_ctx  = "Same pages. Same website."
+
+        # Intro row
         obs_data.append([
             1, "intro", "FALSE",
-            "Intro", "Cover / hook slide — CS edits messaging", "", "", "",
-            "+33%", f"{intro_hook}. {intro_ctx}",
+            "Intro", "",
+            "Increase your leads by 33%",
+            "Same pages. Same website.",
             "e.g. Meta descriptions +5.8% + Structured data +25% = +33%",
             "If you get 10 leads today → 14 leads. Before any ranking gains.",
-            "", "",
+            "",
+            "",
         ])
-        # Findings
+
+        # Finding rows — PDF-matched language via hook_copy
         for i, r in enumerate(obs_rows, start=2):
-            count = r.get("count")
-            key   = r.get("key", "")
-            if count and key in _IMAGE_KEYS and total_images:
-                cl = f"{count} / {total_images} images"
-            elif count and total_pages:
-                cl = f"{count} / {total_pages} pages"
-            elif count:
-                cl = str(count)
-            else:
-                cl = ""
-            ref = r.get("reference", "") or ""
+            key = r.get("key", "")
+            copy = _hook_for(key, r.get("observation", ""), r.get("impact", ""))
+            ref  = r.get("reference", "") or ""
             obs_data.append([
                 i, "finding", "FALSE",
-                r.get("category", ""), r["observation"], r["priority"], r["impact"], ref,
-                "", r["observation"], ref, r["impact"], "",
-                cl,
+                r.get("category", ""), r.get("priority", ""),
+                copy["hook_stat"],
+                copy["hook_ctx"],
+                ref,                    # "What we found" seeded with page list
+                copy["costs"],
+                copy["support"],
+                ref,
             ])
-        # Ending
+
+        # Ending row
         end_slide = len(obs_data)
         obs_data.append([
             end_slide, "ending", "FALSE",
-            "Ending", "CTA / closing slide — CS edits messaging", "", "", "",
+            "Ending", "",
             "4 extra leads / month",
             "Every month you wait, you lose out on extra leads from the same pages.",
-            "", "Approve the audit fixes.", "", "",
+            "",
+            "Approve the audit fixes.",
+            "",
+            "",
         ])
         _write_rows_to_tab(sid, "Observations", obs_data)
 
-        # 4) Meta tab
-        if meta:
-            _add_sheet_tab(sid, "Meta")
-            meta_rows = [
-                ["Field", "Value"],
-                ["Version", meta.get("version", "")],
-                ["Generated", meta.get("generated", "")],
-                ["Live URL", meta.get("live_url", "")],
-                ["Plan ($ / month)", meta.get("plan", "")],
-                ["Currently paying ($ / month)", meta.get("current_spend", "")],
-                ["Sell price ($)", meta.get("sell_price", "")],
-                ["Reviewed", "FALSE"],
-            ]
-            _write_rows_to_tab(sid, "Meta", meta_rows)
+        # 4) Formatting — header + priority tint + intro/ending highlight + freeze
+        _format_observations(sid, first_id if first_id is not None else 0, obs_data)
 
-        # 5) Evidence tabs
-        for tab_name, headers, data_rows in evidence_tabs:
-            name = tab_name[:31]
-            _add_sheet_tab(sid, name)
-            all_rows = [list(headers)] + [list(r) for r in data_rows]
-            _write_rows_to_tab(sid, name, all_rows)
-
-        # 6) Page Type (optional)
-        if page_type_rows:
-            _add_sheet_tab(sid, "Page Type")
-            _write_rows_to_tab(sid, "Page Type", page_type_rows)
-
-        # 7) Share with the org (non-fatal if it fails)
+        # 5) Share with the org (non-fatal if it fails)
         _share(sid)
 
         return f"https://docs.google.com/spreadsheets/d/{sid}"
@@ -256,37 +330,19 @@ def _extract_sheet_id(url_or_id):
 
 
 def read_for_deck(sheet_url_or_id):
-    """Fetch Meta + Observations via Composio's Sheets read action."""
+    """Fetch Observations tab via Composio's Sheets read action.
+
+    New 11-col schema (no Meta tab):
+      0 Slide # | 1 Slide Type | 2 Approved | 3 Category | 4 Priority |
+      5 Hook Stat | 6 Hook Context | 7 What We Found |
+      8 What It Costs You | 9 Supporting Stats | 10 Reference
+    """
     sid = _extract_sheet_id(sheet_url_or_id)
     if not sid or not _sheets_available():
         return None
     try:
-        meta_resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": ["Meta!A1:B20"],
-        })
-    except Exception as exc:
-        print(f"[sheets] read Meta failed: {exc}")
-        return None
-    parsed_meta = {}
-    values = _extract_first_range(meta_resp)
-    for row in values[1:] if values else []:
-        if not row: continue
-        k = (row[0] if len(row) > 0 else "").strip()
-        v = (row[1] if len(row) > 1 else "").strip()
-        parsed_meta[k] = v
-    reviewed_raw = str(parsed_meta.get("Reviewed", "")).strip().lower()
-    meta = {
-        "version":       parsed_meta.get("Version", ""),
-        "generated":     parsed_meta.get("Generated", ""),
-        "live_url":      parsed_meta.get("Live URL", ""),
-        "plan":          parsed_meta.get("Plan ($ / month)", ""),
-        "current_spend": parsed_meta.get("Currently paying ($ / month)", ""),
-        "sell_price":    parsed_meta.get("Sell price ($)", ""),
-        "reviewed":      reviewed_raw in ("true", "yes", "checked", "1"),
-    }
-    try:
         obs_resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": ["Observations!A1:N"],
+            "spreadsheet_id": sid, "ranges": ["Observations!A1:K"],
         })
     except Exception as exc:
         print(f"[sheets] read Observations failed: {exc}")
@@ -307,18 +363,19 @@ def read_for_deck(sheet_url_or_id):
             "slide_type":  _g(row, 1).lower() or "finding",
             "approved":    approved_raw in ("true", "yes", "checked", "1"),
             "category":    _g(row, 3),
-            "observation": _g(row, 4),
-            "priority":    _g(row, 5),
-            "impact":      _g(row, 6),
-            "reference":   _g(row, 7),
-            "hook_stat":   _g(row, 8),
-            "hook_ctx":    _g(row, 9),
-            "found":       _g(row, 10),
-            "costs":       _g(row, 11),
-            "support":     _g(row, 12),
+            "priority":    _g(row, 4),
+            "hook_stat":   _g(row, 5),
+            "hook_ctx":    _g(row, 6),
+            "found":       _g(row, 7),
+            "costs":       _g(row, 8),
+            "support":     _g(row, 9),
+            "reference":   _g(row, 10),
+            # Keep old fields present for downstream code
+            "observation": _g(row, 6),
+            "impact":      _g(row, 8),
         })
     obs_rows.sort(key=lambda r: r["slide_no"])
-    return {"meta": meta, "obs_rows": obs_rows}
+    return {"meta": {}, "obs_rows": obs_rows}
 
 
 def _extract_first_range(resp):

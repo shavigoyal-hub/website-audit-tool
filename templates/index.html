@@ -123,13 +123,9 @@
 
     <form id="deckForm" style="display:none; margin-top:24px; padding-top:20px; border-top:1px dashed #e5e7eb;">
       <label for="sheet_url">Sheet URL</label>
-      <p class="hint">In the sheet: edit Hook Stat / Hook Context / What we found / What it costs you per row, set <strong>Slide #</strong> for ordering, tick <strong>Approved</strong> on each row you want in the deck, then tick <strong>Reviewed</strong> in the Meta tab.</p>
+      <p class="hint">In the sheet: edit Hook Stat / Hook Context / What we found / What it costs you per row, set <strong>Slide #</strong> for ordering, tick <strong>Approved</strong> on the rows you want in the deck.</p>
       <input type="url" id="sheet_url" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/d/..." required />
-
-      <label style="display:flex;align-items:center;gap:8px;font-weight:500;margin-bottom:14px;">
-        <input type="checkbox" id="force" name="force" value="1" style="width:auto;margin:0"/>
-        Skip review check (force build)
-      </label>
+      <input type="hidden" name="force" value="1" />
 
       <button type="submit" id="deckBtn" style="background:#0f172a">
         <span id="deckBtnText">Done reviewing → Build Deck + PDF</span>
@@ -168,9 +164,9 @@
         result.style.display = "block";
         if (data.ok) {
           result.className = "success";
-          let links = `<a href="/download/${encodeURIComponent(data.xlsx)}" style="color:#166534;font-weight:700">⬇ Download XLSX</a>`;
+          let links = "";
           if (data.sheet_url) {
-            links += `&nbsp;&nbsp;|&nbsp;&nbsp;<a href="${data.sheet_url}" target="_blank" style="color:#166534;font-weight:700">📊 Open Google Sheet</a>`;
+            links = `<a href="${data.sheet_url}" target="_blank" style="color:#166534;font-weight:700">📊 Open Google Sheet</a>`;
             document.getElementById("sheet_url").value = data.sheet_url;
             document.getElementById("deckForm").style.display = "block";
           }
