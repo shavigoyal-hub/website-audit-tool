@@ -155,8 +155,40 @@ def _fetch_access_token(app_name):
     return None
 
 
+class _NoRefreshCreds:
+    """A minimal google-auth credentials wrapper that hands out the token as-is.
+
+    Composio manages token lifecycle server-side, and doesn't return a
+    refresh_token/client_id/client_secret, so google.oauth2.credentials.
+    Credentials raises RefreshError when google-auth tries to refresh.
+    We override refresh + expired so google-auth never attempts one.
+    """
+    def __init__(self, token):
+        self.token = token
+        self.expiry = None
+        self.quota_project_id = None
+
+    @property
+    def valid(self):
+        return bool(self.token)
+
+    @property
+    def expired(self):
+        return False
+
+    def refresh(self, request):
+        # No-op — Composio manages the token, and we can't refresh anyway.
+        return
+
+    def apply(self, headers, token=None):
+        headers["authorization"] = f"Bearer {token or self.token}"
+
+    def before_request(self, request, method, url, headers):
+        self.apply(headers)
+
+
 def get_credentials():
-    """Return google.oauth2.credentials.Credentials or None."""
+    """Return credentials or None. Wrapped so google-auth never tries to refresh."""
     LAST_DEBUG.clear()
     if not _api_key():
         LAST_DEBUG["error"] = "COMPOSIO_API_KEY not set"
@@ -166,8 +198,7 @@ def get_credentials():
         if not token:
             LAST_DEBUG["error"] = "no access token found in any connected-accounts response"
             return None
-        from google.oauth2.credentials import Credentials
-        return Credentials(token=token)
+        return _NoRefreshCreds(token)
     except Exception as exc:
         LAST_DEBUG["error"] = f"exception: {exc}"
         return None
