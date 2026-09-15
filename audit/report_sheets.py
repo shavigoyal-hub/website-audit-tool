@@ -127,14 +127,14 @@ _BLACK      = {"red": 0.0, "green": 0.0, "blue": 0.0}
 _SPECIAL_BG = {"red": 0.949, "green": 0.949, "blue": 0.968}
 _DECK_BG    = {"red": 0.90, "green": 0.90, "blue": 0.92}  # grey for deck columns
 
-# 10-col schema (0-indexed):
-#   0 Category   1 Observation   2 Priority   3 Impact   4 Reference
-#   5 Hook Stat  6 Hook Context  7 What We Found
-#   8 What It Costs You   9 Supporting Stats
+# 9-col schema (0-indexed):
+#   0 Category   1 Observation   2 Priority   3 Impact
+#   4 Hook Stat  5 Hook Context  6 What We Found
+#   7 What It Costs You   8 Supporting Stats
 _COL_PRIORITY     = 2
-_COL_DECK_START   = 5
+_COL_DECK_START   = 4
 # Per-column pixel widths applied after HTML import (order matches header)
-_COL_WIDTHS_PX    = [160, 380, 110, 320, 240, 120, 320, 320, 320, 240]
+_COL_WIDTHS_PX    = [160, 400, 110, 320, 120, 340, 320, 320, 240]
 
 
 def _format_cell(sid, worksheet_id, r0, r1, c0, c1, rgb, bold=False):
@@ -307,38 +307,37 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         # Hook Context is a formula that references its own row's Hook Stat
         # cell (column F), so editing the stat updates the context.
         header = [
-            "Category", "Observation", "Priority", "Impact", "Reference",
+            "Category", "Observation", "Priority", "Impact",
             "Hook Stat", "Hook Context", "What We Found",
             "What It Costs You", "Supporting Stats",
         ]
         obs_data = [header]
 
-        # Intro row (Sheets row 2 → Hook Stat cell = F2)
+        # Intro row (Sheets row 2 → Hook Stat cell = E2)
         obs_data.append([
             "Intro — cover slide",
             "Cover / hook slide — CS edits messaging",
-            "", "", "",
+            "", "",
             "+33%",
-            '=F2&" "&"Increase your leads. Same pages. Same website."',
+            '=E2&" "&"Increase your leads. Same pages. Same website."',
             "e.g. Meta descriptions +5.8% + Structured data +25% = +33%",
             "If you get 10 leads today → 14 leads. Before any ranking gains.",
             "",
         ])
 
-        # Finding rows — Hook Context references Hook Stat in column F
+        # Finding rows — Hook Context references Hook Stat in column E
         for r in obs_rows:
             key = r.get("key", "")
             copy = _hook_for(key, r.get("observation", ""), r.get("impact", ""))
             ref  = r.get("reference", "") or ""
             sheet_row = len(obs_data) + 1
             ctx_body = copy["hook_ctx"].replace('"', '""')
-            hook_ctx_formula = f'=F{sheet_row}&" "&"{ctx_body}"'
+            hook_ctx_formula = f'=E{sheet_row}&" "&"{ctx_body}"'
             obs_data.append([
                 r.get("category", ""),
                 r.get("observation", ""),
                 r.get("priority", ""),
                 r.get("impact", ""),
-                ref,
                 copy["hook_stat"],
                 hook_ctx_formula,
                 ref,                    # 'What we found' seeded with page list
@@ -351,9 +350,9 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         obs_data.append([
             "Ending — CTA slide",
             "CTA / closing slide — CS edits messaging",
-            "", "", "",
+            "", "",
             "4 extra leads / month",
-            f'=F{end_row}&" "&"— every month you wait, you lose out from the same pages."',
+            f'=E{end_row}&" "&"— every month you wait, you lose out from the same pages."',
             "",
             "Approve the audit fixes.",
             "",
@@ -413,10 +412,10 @@ def _extract_sheet_id(url_or_id):
 def read_for_deck(sheet_url_or_id):
     """Fetch Observations tab via Composio's Sheets read action.
 
-    10-col schema (row order = deck order):
-      0 Category | 1 Observation | 2 Priority | 3 Impact | 4 Reference |
-      5 Hook Stat | 6 Hook Context | 7 What We Found |
-      8 What It Costs You | 9 Supporting Stats
+    9-col schema (row order = deck order):
+      0 Category | 1 Observation | 2 Priority | 3 Impact |
+      4 Hook Stat | 5 Hook Context | 6 What We Found |
+      7 What It Costs You | 8 Supporting Stats
     First data row → intro; last data row → ending; middle → findings.
     """
     sid = _extract_sheet_id(sheet_url_or_id)
@@ -424,7 +423,7 @@ def read_for_deck(sheet_url_or_id):
         return None
     try:
         obs_resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": ["Observations!A1:J"],
+            "spreadsheet_id": sid, "ranges": ["Observations!A1:I"],
         })
     except Exception as exc:
         print(f"[sheets] read Observations failed: {exc}")
@@ -443,19 +442,19 @@ def read_for_deck(sheet_url_or_id):
         else:
             stype = "finding"
         obs_rows.append({
-            "slide_no":    i + 1,          # legacy field — order = row order
+            "slide_no":    i + 1,
             "slide_type":  stype,
-            "approved":    True,            # no gate anymore — CS deletes rows they don't want
+            "approved":    True,
             "category":    _g(row, 0),
             "observation": _g(row, 1),
             "priority":    _g(row, 2),
             "impact":      _g(row, 3),
-            "reference":   _g(row, 4),
-            "hook_stat":   _g(row, 5),
-            "hook_ctx":    _g(row, 6),
-            "found":       _g(row, 7),
-            "costs":       _g(row, 8),
-            "support":     _g(row, 9),
+            "hook_stat":   _g(row, 4),
+            "hook_ctx":    _g(row, 5),
+            "found":       _g(row, 6),
+            "costs":       _g(row, 7),
+            "support":     _g(row, 8),
+            "reference":   "",
         })
     return {"meta": {}, "obs_rows": obs_rows}
 
