@@ -126,11 +126,29 @@ def _fetch_token_via_sdk(app_slug):
     if tok:
         LAST_DEBUG["token_source"] = f"sdk.get({conn_id}) → {path}"
         return tok
-    # dump top-level field names so we can see what came back
+
+    # Dump the response so we can see where Composio put the token
     try:
-        LAST_DEBUG["detail_fields"] = list(detail.model_dump().keys())
-    except Exception:
-        pass
+        dump = detail.model_dump()
+        LAST_DEBUG["detail_fields"] = list(dump.keys())
+        # Also dump nested containers so we can see the real field name
+        for k in ("data", "params", "state", "auth_config", "experimental"):
+            v = dump.get(k)
+            if isinstance(v, dict):
+                LAST_DEBUG[f"detail.{k}.keys"] = list(v.keys())
+                # scan every string leaf under this container
+                strings = {}
+                def _scan(node, prefix=""):
+                    if isinstance(node, dict):
+                        for kk, vv in node.items():
+                            _scan(vv, f"{prefix}.{kk}" if prefix else kk)
+                    elif isinstance(node, str) and 30 < len(node) < 3000:
+                        strings[prefix] = f"{node[:60]}…({len(node)}ch)"
+                _scan(v)
+                if strings:
+                    LAST_DEBUG[f"detail.{k}.string_leaves"] = strings
+    except Exception as exc:
+        LAST_DEBUG["dump_error"] = str(exc)[:250]
     LAST_DEBUG["error"] = "connection retrieved but no access_token found in any field"
     return None
 
