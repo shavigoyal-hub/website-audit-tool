@@ -105,54 +105,91 @@ def reset_trace():
     LAST_TRACE.clear()
 
 
-def proxy(endpoint, method, body=None, toolkit="googlesheets"):
-    """POST /api/v3/tools/proxy — raw HTTP proxy to a connected account's API.
+# Cache connection ids per toolkit within a warm lambda
+_CONN_ID_CACHE = {}
 
-    Lets us call parts of the Google Sheets API that Composio doesn't expose
-    as named actions (updateDimensionProperties for column widths, etc.).
-    Falls back cleanly if the caller's Composio key lacks proxy scope.
+
+def _find_connection_id(toolkit):
+    """Return an ACTIVE connected_account_id for `toolkit` or None."""
+    cached = _CONN_ID_CACHE.get(toolkit)
+    if cached:
+        return cached
+    key = _api_key()
+    if not key:
+        return None
+    entity_uid = _entity_user_id()
+    user_ids = [_WORKING_UID.get(toolkit) or "default"]
+    if entity_uid and entity_uid not in user_ids:
+        user_ids.append(entity_uid)
+    for uid in user_ids:
+        try:
+            resp = requests.get(
+                f"{_BASE}/connected_accounts",
+                headers={"x-api-key": key},
+                params={"toolkit_slugs": toolkit, "user_ids": uid,
+                        "statuses": "ACTIVE"},
+                timeout=_TIMEOUT,
+            )
+            if not resp.ok:
+                continue
+            items = (resp.json() or {}).get("items") or []
+            for it in items:
+                slug = ((it.get("toolkit") or {}).get("slug") or "").lower()
+                if slug != toolkit.lower():
+                    continue
+                cid = it.get("id")
+                if cid:
+                    _CONN_ID_CACHE[toolkit] = cid
+                    return cid
+        except Exception:
+            continue
+    return None
+
+
+def proxy(endpoint, method, body=None, toolkit="googlesheets"):
+    """POST /api/v3.1/tools/execute/proxy — raw HTTP proxy to a connected
+    account's API. Lets us call Google APIs directly for capabilities not
+    covered by named actions (updateDimensionProperties, presentations.create).
     """
     key = _api_key()
     if not key:
         raise RuntimeError("COMPOSIO_API_KEY not set")
 
-    cached = _WORKING_UID.get(toolkit)
-    candidate_uids = []
-    if cached: candidate_uids.append(cached)
-    if "default" not in candidate_uids: candidate_uids.append("default")
-    entity_uid = _entity_user_id()
-    if entity_uid and entity_uid not in candidate_uids:
-        candidate_uids.append(entity_uid)
+    conn_id = _find_connection_id(toolkit)
+    if not conn_id:
+        raise RuntimeError(f"no ACTIVE {toolkit} connection to proxy through")
 
-    last_err = None
-    for uid in candidate_uids:
-        payload = {
-            "endpoint": endpoint,
-            "method": method,
-            "toolkit_slug": toolkit,
-            "user_id": uid,
-        }
-        if body is not None:
-            payload["body"] = body
+    payload = {
+        "endpoint": endpoint,
+        "method": method,
+        "connected_account_id": conn_id,
+    }
+    if body is not None:
+        payload["body"] = body
+
+    try:
+        resp = requests.post(
+            "https://backend.composio.dev/api/v3.1/tools/execute/proxy",
+            headers={"x-api-key": key, "Content-Type": "application/json"},
+            data=json.dumps(payload),
+            timeout=_TIMEOUT,
+        )
+        LAST_TRACE.append({
+            "slug": f"PROXY {method} {endpoint}",
+            "connected_account_id": conn_id,
+            "status": resp.status_code,
+            "body_preview": resp.text[:300],
+        })
+        parsed = None
         try:
-            resp = requests.post(
-                f"{_BASE}/tools/proxy",
-                headers={"x-api-key": key, "Content-Type": "application/json"},
-                data=json.dumps(payload),
-                timeout=_TIMEOUT,
-            )
-            LAST_TRACE.append({
-                "slug": f"PROXY {method} {endpoint}",
-                "user_id": uid, "status": resp.status_code,
-                "body_preview": resp.text[:300],
-            })
-            if resp.ok:
-                _WORKING_UID[toolkit] = uid
-                try:
-                    return resp.json()
-                except Exception:
-                    return resp.text
-            last_err = f"proxy {resp.status_code}: {resp.text[:300]}"
-        except Exception as exc:
-            last_err = f"proxy exception: {exc}"
-    raise RuntimeError(last_err or "proxy failed with no error message")
+            parsed = resp.json()
+        except Exception:
+            pass
+        if resp.ok:
+            data = (parsed or {}).get("data") or parsed or {}
+            if isinstance(data, dict) and "response_data" in data:
+                return data["response_data"]
+            return data
+        raise RuntimeError(f"proxy {resp.status_code}: {resp.text[:300]}")
+    except requests.RequestException as exc:
+        raise RuntimeError(f"proxy exception: {exc}")

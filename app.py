@@ -10,7 +10,7 @@ import traceback
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file
 
-from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_slides, sf_csv
+from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_slides, sf_csv, history
 from audit.version import VERSION
 
 app = Flask(__name__)
@@ -142,6 +142,10 @@ def run_audit():
         if sheet_url:
             resp["sheet_url"] = sheet_url
             resp["message"] += " Google Sheet created — open, edit, then build the deck."
+            try:
+                history.append_run(client_name, live_url, sheet_url)
+            except Exception as exc:
+                print(f"[history] append_run failed: {exc}")
         else:
             from audit.composio_exec import LAST_TRACE as _trace
             resp["warning"] = "Sheet skipped — see sheet_error for the cause."
@@ -213,9 +217,27 @@ def build_deck():
         if result.get("pdf_path"):
             resp["pdf"] = pdf_name
             resp["message"] += " PDF export ready."
+        try:
+            history.update_deck(sheet_url, result["slide_url"],
+                                request.host_url.rstrip("/") + f"/download/{pdf_name}" if result.get("pdf_path") else "")
+        except Exception as exc:
+            print(f"[history] update_deck failed: {exc}")
         return jsonify(resp)
     except Exception:
         return jsonify({"error": traceback.format_exc()}), 500
+
+
+@app.route("/history")
+def history_route():
+    """Return recent audit runs + the history sheet URL."""
+    try:
+        n = int(request.args.get("n", 25))
+    except ValueError:
+        n = 25
+    return jsonify({
+        "sheet_url": history.get_url(),
+        "runs": history.list_recent(n),
+    })
 
 
 @app.route("/health")
