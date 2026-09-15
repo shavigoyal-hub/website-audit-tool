@@ -66,9 +66,12 @@ def _create_spreadsheet(title):
 
 
 def _add_sheet_tab(spreadsheet_id, tab_name):
+    """Composio's GOOGLESHEETS_ADD_SHEET wants `title` not `sheet_name` — the
+    latter is silently ignored and you get 'Sheet1', 'Sheet2', ...
+    """
     _composio_execute("GOOGLESHEETS_ADD_SHEET", {
         "spreadsheet_id": spreadsheet_id,
-        "sheet_name": tab_name[:100],
+        "title": tab_name[:100],
     })
 
 

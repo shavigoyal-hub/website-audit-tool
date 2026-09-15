@@ -18,17 +18,27 @@ _TIMEOUT = 60
 # Diagnostic trace of the last execute (surfaced via /run response).
 LAST_TRACE = []
 
+# Once we learn which user_id has the ACTIVE connection for a toolkit, stick
+# with it for the rest of the process — otherwise every call pays a wasted
+# 404 round-trip on the "expected" (env-based) user_id first.
+_WORKING_UID = {}  # toolkit_prefix -> user_id
+
 
 def _api_key():
     return os.environ.get("COMPOSIO_API_KEY", "").strip() or None
 
 
-def _user_id():
+def _entity_user_id():
     return (
         os.environ.get("COMPOSIO_ENTITY_ID")
         or os.environ.get("entity_id")
-        or "default"
-    )
+        or ""
+    ).strip() or None
+
+
+def _toolkit(slug):
+    """GOOGLESHEETS_XX -> googlesheets, GOOGLEDRIVE_XX -> googledrive, etc."""
+    return slug.split("_", 1)[0].lower()
 
 
 def execute(slug, arguments, retry=3):
@@ -37,12 +47,20 @@ def execute(slug, arguments, retry=3):
     if not key:
         raise RuntimeError("COMPOSIO_API_KEY not set")
 
-    # Pick a user_id — Composio auto-resolves the ACTIVE connection under it.
-    # Try our env user first, then 'default' (that's where the Sheets/Drive
-    # connections actually live per the earlier debug).
-    candidate_uids = [_user_id()]
+    toolkit = _toolkit(slug)
+    entity_uid = _entity_user_id()
+
+    # Prefer a user_id that already worked for this toolkit in-process. Then
+    # 'default' (that's where our Google connections live per the debug),
+    # then the env entity as a fallback.
+    candidate_uids = []
+    cached = _WORKING_UID.get(toolkit)
+    if cached:
+        candidate_uids.append(cached)
     if "default" not in candidate_uids:
         candidate_uids.append("default")
+    if entity_uid and entity_uid not in candidate_uids:
+        candidate_uids.append(entity_uid)
 
     last_err = None
     for uid in candidate_uids:
@@ -64,6 +82,7 @@ def execute(slug, arguments, retry=3):
                     continue
                 parsed = resp.json()
                 if resp.ok and parsed.get("successful", True) and not parsed.get("error"):
+                    _WORKING_UID[toolkit] = uid
                     data = parsed.get("data") or {}
                     if isinstance(data, dict) and "response_data" in data:
                         return data["response_data"]
