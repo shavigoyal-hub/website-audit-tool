@@ -66,13 +66,35 @@ def _create_spreadsheet(title):
 
 
 def _add_sheet_tab(spreadsheet_id, tab_name):
-    """Composio's GOOGLESHEETS_ADD_SHEET wants `title` not `sheet_name` — the
-    latter is silently ignored and you get 'Sheet1', 'Sheet2', ...
+    """Composio's GOOGLESHEETS_ADD_SHEET ignores any title/sheet_name arg we
+    pass and returns 'Sheet1', 'Sheet2', ... Read the new sheetId from the
+    reply and rename it in a second call.
     """
-    _composio_execute("GOOGLESHEETS_ADD_SHEET", {
+    resp = _composio_execute("GOOGLESHEETS_ADD_SHEET", {
         "spreadsheet_id": spreadsheet_id,
         "title": tab_name[:100],
-    })
+        "sheet_name": tab_name[:100],  # cover both spellings
+    }) or {}
+    # Extract the sheetId of the newly-created tab
+    new_sheet_id = None
+    replies = resp.get("replies") if isinstance(resp, dict) else None
+    if isinstance(replies, list):
+        for r in replies:
+            add = r.get("addSheet") if isinstance(r, dict) else None
+            if isinstance(add, dict):
+                new_sheet_id = add.get("sheetId") or (add.get("properties") or {}).get("sheetId")
+                if new_sheet_id is not None:
+                    break
+    if new_sheet_id is None:
+        # Fallback: get spreadsheet info and pick the last sheet
+        info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                                 {"spreadsheet_id": spreadsheet_id}) or {}
+        sheets = (info.get("sheets") or []) if isinstance(info, dict) else []
+        if sheets:
+            new_sheet_id = (sheets[-1].get("properties") or {}).get("sheetId")
+    if new_sheet_id is None:
+        raise RuntimeError(f"ADD_SHEET returned no sheetId: {str(resp)[:300]}")
+    _rename_sheet(spreadsheet_id, new_sheet_id, tab_name)
 
 
 def _rename_sheet(spreadsheet_id, sheet_id, new_title):
