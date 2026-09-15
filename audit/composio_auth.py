@@ -55,9 +55,9 @@ def _walk_for_token(node, depth=0):
 def _fetch_token_via_sdk(app_slug):
     """Use the Composio SDK to list connections + retrieve fresh token."""
     try:
-        from composio import Composio
+        from composio_client import Composio
     except Exception as exc:
-        LAST_DEBUG["sdk_import_error"] = str(exc)[:200]
+        LAST_DEBUG["sdk_import_error"] = str(exc)[:300]
         return None
 
     key = _api_key()
@@ -117,7 +117,7 @@ def _fetch_token_via_sdk(app_slug):
 
     # Step 2 — retrieve fresh connection details (SDK auto-handles refresh)
     try:
-        detail = c.connected_accounts.get(conn_id)
+        detail = c.connected_accounts.retrieve(conn_id)
     except Exception as exc:
         LAST_DEBUG["sdk_get_error"] = str(exc)[:250]
         return None

@@ -38,12 +38,18 @@ def _credentials():
       1. Composio-connected Google account (COMPOSIO_API_KEY env var).
       2. Service account (GOOGLE_SERVICE_ACCOUNT_JSON env var).
     """
+    global LAST_ERROR
     try:
-        from audit.composio_auth import get_credentials as _composio_creds
+        from audit.composio_auth import get_credentials as _composio_creds, LAST_DEBUG as _composio_debug
         creds = _composio_creds()
         if creds is not None:
             return creds
+        # No creds, no exception — record why so /run can surface it
+        if _composio_debug:
+            LAST_ERROR = f"composio: {_composio_debug}"
     except Exception as exc:
+        import traceback as _tb
+        LAST_ERROR = f"composio import/call failed:\n{_tb.format_exc()[:1500]}"
         print(f"[sheets] composio unavailable: {exc}")
 
     raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
