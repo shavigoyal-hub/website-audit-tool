@@ -253,8 +253,10 @@ def health():
         info["composio_credentials"] = False
         info["composio_error"] = str(exc)[:200]
     try:
-        from audit.report_sheets import _credentials as _sheets_creds
+        from audit.report_sheets import _credentials as _sheets_creds, LAST_ERROR as _sheets_last
         info["sheets_credentials"] = _sheets_creds() is not None
+        if _sheets_last:
+            info["sheets_last_error"] = _sheets_last
     except Exception as exc:
         info["sheets_credentials"] = False
         info["sheets_error"] = str(exc)[:200]

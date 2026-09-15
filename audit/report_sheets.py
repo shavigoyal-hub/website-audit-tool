@@ -27,6 +27,9 @@ _PRIORITY_BG = {
     "Low":      _LOW,
 }
 
+# Last error from a build() attempt, surfaced via /health.
+LAST_ERROR = ""
+
 
 def _credentials():
     """Return Google credentials or None.
@@ -355,17 +358,24 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 _body_fmt(len(page_type_rows), len(page_type_rows[0]), pt_id),
             ]}).execute()
 
-        # ── Share ─────────────────────────────────────────────────────────────
+        # ── Share (non-fatal — token may lack Drive scope) ────────────────────
         if _SHARE_EMAIL:
-            drive_svc.permissions().create(
-                fileId=sid, sendNotificationEmail=False,
-                body={"type": "user", "role": "writer", "emailAddress": _SHARE_EMAIL}
-            ).execute()
+            try:
+                drive_svc.permissions().create(
+                    fileId=sid, sendNotificationEmail=False,
+                    body={"type": "user", "role": "writer", "emailAddress": _SHARE_EMAIL}
+                ).execute()
+            except Exception as exc:
+                print(f"[sheets] share failed (non-fatal): {exc}")
 
         return f"https://docs.google.com/spreadsheets/d/{sid}"
 
     except Exception as exc:
-        print(f"[sheets] error: {exc}")
+        import traceback as _tb
+        err = _tb.format_exc()
+        print(f"[sheets] error: {err}")
+        global LAST_ERROR
+        LAST_ERROR = err[:2000]
         return None
 
 
