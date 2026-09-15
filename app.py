@@ -11,6 +11,7 @@ import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file
 
 from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_slides, sf_csv
+from audit.version import VERSION
 
 app = Flask(__name__)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
@@ -66,6 +67,9 @@ def run_audit():
     try:
         live_url = request.form.get("live_url", "").strip()
         mockup_url = request.form.get("mockup_url", "").strip()
+        plan          = request.form.get("plan", "").strip()
+        current_spend = request.form.get("current_spend", "").strip()
+        sell_price    = request.form.get("sell_price", "").strip()
 
         if not live_url:
             return jsonify({"error": "Live URL is required."}), 400
@@ -130,33 +134,101 @@ def run_audit():
 
         import datetime
         sheet_title = f"{client_name.replace('_', ' ').title()} SEO Audit — {datetime.date.today()}"
+        meta = {
+            "version":       VERSION,
+            "generated":     datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            "live_url":      live_url,
+            "plan":          plan,
+            "current_spend": current_spend,
+            "sell_price":    sell_price,
+        }
         sheet_url = report_sheets.build(
             sheet_title, rows, evidence_tabs,
             total_pages=total_pages, total_images=total_images,
+            meta=meta,
         )
-
-        deck_title = f"{client_name.replace('_', ' ').title()} Tech Audit — {datetime.date.today()}"
-        client_display = client_name.replace("_", " ").title()
-        slide_url = report_slides.build(deck_title, rows, client_display=client_display)
 
         resp = {
             "ok": True,
+            "version": VERSION,
             "observations": len(rows),
             "xlsx": xlsx_name,
             "message": f"Audit complete — {len(rows)} observations found.",
         }
         if sheet_url:
             resp["sheet_url"] = sheet_url
-            resp["message"] += " Google Sheet created."
-        if slide_url:
-            resp["slide_url"] = slide_url
-            resp["message"] += " Slides deck created."
-        if not sheet_url and not slide_url:
-            resp["warning"] = ("Sheet + Slides skipped — set COMPOSIO_API_KEY (with a "
+            resp["message"] += (" Google Sheet created. Review it, tick "
+                                "'Reviewed' in the Meta tab, then build the deck.")
+        else:
+            resp["warning"] = ("Sheet skipped — set COMPOSIO_API_KEY (with a "
                                "connected Google account) or GOOGLE_SERVICE_ACCOUNT_JSON "
                                "on Vercel.")
         return jsonify(resp)
 
+    except Exception:
+        return jsonify({"error": traceback.format_exc()}), 500
+
+
+@app.route("/build-deck", methods=["POST"])
+def build_deck():
+    """Build the Slides deck from an existing, reviewed audit sheet.
+
+    Requires the Meta tab's Reviewed checkbox to be ticked, unless
+    `force=1` is passed. Reads plan / current_spend / sell_price from
+    the Meta tab; the caller can override any of them via form fields.
+    """
+    try:
+        sheet_url = request.form.get("sheet_url", "").strip()
+        force = request.form.get("force", "").strip() in ("1", "true", "yes", "on")
+        if not sheet_url:
+            return jsonify({"error": "sheet_url is required"}), 400
+
+        data = report_sheets.read_for_deck(sheet_url)
+        if not data:
+            return jsonify({"error": "Could not read sheet (missing Meta tab or no auth)."}), 400
+        meta = data["meta"]
+        obs_rows = data["obs_rows"]
+
+        if not meta.get("reviewed") and not force:
+            return jsonify({
+                "error": "Sheet is not marked Reviewed. Tick the 'Reviewed' checkbox "
+                         "in the Meta tab and try again, or resubmit with force=1."
+            }), 409
+
+        # Form overrides
+        for k in ("plan", "current_spend", "sell_price"):
+            v = request.form.get(k, "").strip()
+            if v:
+                meta[k] = v
+
+        # Derive client display from live URL
+        import datetime, re
+        live = meta.get("live_url") or ""
+        m = re.match(r"https?://(?:www\.)?([^/]+)", live)
+        domain = m.group(1) if m else "audit"
+        client_display = re.sub(r"\.[^.]+$", "", domain).replace(".", " ").title()
+
+        deck_title = f"{client_display} Tech Audit — {datetime.date.today()}"
+        os.makedirs(OUTPUT_ROOT, exist_ok=True)
+        pdf_name = re.sub(r"[^a-z0-9]+", "_", client_display.lower()) + "_audit.pdf"
+        pdf_path = os.path.join(OUTPUT_ROOT, pdf_name)
+        result = report_slides.build(
+            deck_title, obs_rows, client_display=client_display, meta=meta,
+            pdf_out_path=pdf_path,
+        )
+        if not result or not result.get("slide_url"):
+            return jsonify({"error": "Deck creation failed — check Composio Drive auth."}), 500
+
+        resp = {
+            "ok": True,
+            "version": VERSION,
+            "slide_url": result["slide_url"],
+            "message": "Deck built from reviewed sheet.",
+        }
+        if result.get("pdf_path"):
+            resp["pdf"] = pdf_name
+            resp["message"] += " PDF export ready."
+        return jsonify(resp)
     except Exception:
         return jsonify({"error": traceback.format_exc()}), 500
 
@@ -166,6 +238,7 @@ def health():
     """Report which auth paths are configured so we can debug on Vercel."""
     from audit import composio_auth
     info = {
+        "version": VERSION,
         "composio_api_key_set":  bool(os.environ.get("COMPOSIO_API_KEY")),
         "composio_entity_id":    composio_auth._entity_id(),
         "service_account_json_set": bool(os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")),

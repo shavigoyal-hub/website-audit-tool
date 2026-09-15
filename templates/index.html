@@ -94,19 +94,30 @@
   </style>
 </head>
 <body>
-  <div class="logo">Gushwork</div>
+  <div class="logo">Gushwork <span id="versionBadge" style="font-size:11px;color:#6366f1;background:#ede9fe;padding:2px 8px;border-radius:10px;font-weight:600;letter-spacing:0.02em;margin-left:6px"></span></div>
+  <script>
+    fetch("/health").then(r=>r.json()).then(d=>{
+      if (d.version) document.getElementById("versionBadge").textContent = "v" + d.version;
+    }).catch(()=>{});
+  </script>
 
   <div class="card">
     <h1>SEO Audit Tool</h1>
-    <p class="subtitle">Enter the client's live site and the Gushwork mockup to generate a full technical SEO report.</p>
+    <p class="subtitle">Enter the client's live site and pricing to generate the technical SEO report. CS reviews the sheet, then the deck is built from the reviewed sheet.</p>
 
     <form id="auditForm">
       <label for="live_url">Live site URL</label>
       <input type="url" id="live_url" name="live_url" placeholder="https://www.invisionaz.com/" required />
 
-      <label for="mockup_url">Gushwork mockup URL</label>
-      <p class="hint">The site Gushwork has prepared for the client</p>
-      <input type="url" id="mockup_url" name="mockup_url" placeholder="https://invisionaz-6glk.gush.site/" />
+      <label for="plan">Gushwork plan ($ / month)</label>
+      <p class="hint">100 / 200 / 400 — snaps to the nearest tier</p>
+      <input type="number" id="plan" name="plan" placeholder="100" min="1" />
+
+      <label for="current_spend">Currently paying ($ / month)</label>
+      <input type="number" id="current_spend" name="current_spend" placeholder="500" min="0" />
+
+      <label for="sell_price">Website build sell price ($)</label>
+      <input type="number" id="sell_price" name="sell_price" placeholder="5000" min="0" />
 
       <button type="submit" id="submitBtn">
         <span id="btnText">Run Audit</span>
@@ -116,9 +127,27 @@
 
     <div id="result"></div>
 
+    <form id="deckForm" style="display:none; margin-top:24px; padding-top:20px; border-top:1px dashed #e5e7eb;">
+      <label for="sheet_url">Sheet URL</label>
+      <p class="hint">In the sheet: edit Hook Stat / Hook Context / What we found / What it costs you per row, set <strong>Slide #</strong> for ordering, tick <strong>Approved</strong> on each row you want in the deck, then tick <strong>Reviewed</strong> in the Meta tab.</p>
+      <input type="url" id="sheet_url" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/d/..." required />
+
+      <label style="display:flex;align-items:center;gap:8px;font-weight:500;margin-bottom:14px;">
+        <input type="checkbox" id="force" name="force" value="1" style="width:auto;margin:0"/>
+        Skip review check (force build)
+      </label>
+
+      <button type="submit" id="deckBtn" style="background:#0f172a">
+        <span id="deckBtnText">Done reviewing → Build Deck + PDF</span>
+        <div class="spinner" id="deckSpinner"></div>
+      </button>
+    </form>
+
+    <div id="deckResult"></div>
+
     <div class="steps">
       <h3>How it works</h3>
-      <div class="step"><div class="step-num">1</div><p>Enter the client's live URL and the Gushwork mockup link.</p></div>
+      <div class="step"><div class="step-num">1</div><p>Enter the client's live URL.</p></div>
       <div class="step"><div class="step-num">2</div><p>The tool crawls the site and runs all SEO checks automatically.</p></div>
       <div class="step"><div class="step-num">3</div><p>Download the audit XLSX — ready to share with the client.</p></div>
     </div>
@@ -148,18 +177,69 @@
           let links = `<a href="/download/${encodeURIComponent(data.xlsx)}" style="color:#166534;font-weight:700">⬇ Download XLSX</a>`;
           if (data.sheet_url) {
             links += `&nbsp;&nbsp;|&nbsp;&nbsp;<a href="${data.sheet_url}" target="_blank" style="color:#166534;font-weight:700">📊 Open Google Sheet</a>`;
-          }
-          if (data.slide_url) {
-            links += `&nbsp;&nbsp;|&nbsp;&nbsp;<a href="${data.slide_url}" target="_blank" style="color:#166534;font-weight:700">📽 Open Slides Deck</a>`;
+            document.getElementById("sheet_url").value = data.sheet_url;
+            document.getElementById("deckForm").style.display = "block";
           }
           let warning = "";
           if (data.warning) {
             warning = `<br><br><span style="color:#92400e;font-size:13px">⚠ ${data.warning}</span>`;
           }
-          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}${warning}`;
+          const v = data.version ? `<br><span style="color:#6b7280;font-size:11px">v${data.version}</span>` : "";
+          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}${warning}${v}`;
         } else {
           result.className = "error";
           result.innerHTML = `❌ <strong>Error:</strong><br><pre style="white-space:pre-wrap;font-size:12px;margin-top:8px">${data.error}</pre>`;
+        }
+      } catch (err) {
+        result.style.display = "block";
+        result.className = "error";
+        result.innerHTML = `❌ Network error: ${err.message}`;
+      } finally {
+        btn.disabled = false;
+        btnText.style.display = "block";
+        spinner.style.display = "none";
+      }
+    });
+
+    document.getElementById("deckForm").addEventListener("submit", async function (e) {
+      e.preventDefault();
+      const btn = document.getElementById("deckBtn");
+      const spinner = document.getElementById("deckSpinner");
+      const btnText = document.getElementById("deckBtnText");
+      const result = document.getElementById("deckResult");
+
+      btn.disabled = true;
+      btnText.style.display = "none";
+      spinner.style.display = "block";
+      result.style.display = "none";
+      result.className = "";
+
+      try {
+        const fd = new FormData(this);
+        const res = await fetch("/build-deck", { method: "POST", body: fd });
+        const data = await res.json();
+        result.style.display = "block";
+        result.style.marginTop = "16px";
+        result.style.padding = "16px 20px";
+        result.style.borderRadius = "10px";
+        result.style.fontSize = "14px";
+        if (data.ok) {
+          result.className = "success";
+          result.style.background = "#f0fdf4";
+          result.style.border = "1px solid #86efac";
+          result.style.color = "#166534";
+          let links = `<a href="${data.slide_url}" target="_blank" style="color:#166534;font-weight:700">📽 Open Slides Deck</a>`;
+          if (data.pdf) {
+            links += `&nbsp;&nbsp;|&nbsp;&nbsp;<a href="/download/${encodeURIComponent(data.pdf)}" style="color:#166534;font-weight:700">⬇ Download PDF</a>`;
+          }
+          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}`;
+        } else {
+          result.className = "error";
+          result.style.background = "#fef2f2";
+          result.style.border = "1px solid #fca5a5";
+          result.style.color = "#991b1b";
+          const status = res.status === 409 ? "Not reviewed yet" : "Error";
+          result.innerHTML = `❌ <strong>${status}:</strong><br><pre style="white-space:pre-wrap;font-size:12px;margin-top:8px">${data.error}</pre>`;
         }
       } catch (err) {
         result.style.display = "block";
