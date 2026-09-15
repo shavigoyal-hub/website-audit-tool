@@ -1,10 +1,8 @@
 """Build a technical-audit deck via python-pptx and upload as Google Slides.
 
-Auth: reuses GOOGLE_SERVICE_ACCOUNT_JSON. The .pptx is generated locally
-with python-pptx, then uploaded to Drive with mimeType conversion to
-application/vnd.google-apps.presentation — Drive auto-converts it into a
-native Google Slides deck. Drive-only scope (drive.file) is enough, so
-the Google Slides API does NOT need to be enabled in the GCP project.
+Auth: uses Composio's tools-execute proxy (POST /api/v3/tools/execute/{slug}).
+Composio doesn't hand out raw OAuth tokens; we go through
+GOOGLEDRIVE_CREATE_FILE_FROM_TEXT-style actions.
 
 Deck structure (kept intentionally lean — one slide per Critical + High
 finding):
@@ -27,37 +25,8 @@ import os
 _SHARE_EMAIL = os.environ.get("AUDIT_SHARE_EMAIL", "shavi.goyal@gushwork.ai")
 
 
-def _credentials():
-    """Return Google credentials or None.
-
-    Order:
-      1. Composio-connected Google account (COMPOSIO_API_KEY env var).
-      2. Service account (GOOGLE_SERVICE_ACCOUNT_JSON env var).
-    """
-    try:
-        from audit.composio_auth import get_credentials as _composio_creds
-        creds = _composio_creds()
-        if creds is not None:
-            return creds
-    except Exception as exc:
-        print(f"[slides] composio unavailable: {exc}")
-
-    raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
-    if not raw:
-        return None
-    try:
-        from google.oauth2.service_account import Credentials
-        info = json.loads(raw)
-        scopes = ["https://www.googleapis.com/auth/drive.file"]
-        return Credentials.from_service_account_info(info, scopes=scopes)
-    except Exception as exc:
-        print(f"[slides] credential error: {exc}")
-        return None
-
-
-def _drive(creds):
-    from googleapiclient.discovery import build
-    return build("drive", "v3", credentials=creds, cache_discovery=False)
+def _composio_available():
+    return bool(os.environ.get("COMPOSIO_API_KEY"))
 
 
 # ── Colors ────────────────────────────────────────────────────────────────
@@ -379,61 +348,133 @@ def _build_pptx(deck_title, obs_rows, client_display, meta=None):
 
 
 def build(deck_title, obs_rows, client_display="", meta=None, pdf_out_path=None):
-    """Create a Google Slides deck. Returns dict {slide_url, pdf_path} or None.
+    """Create a Google Slides deck via Composio actions.
 
-    If pdf_out_path is provided, also exports the deck to PDF via Drive
-    files.export and writes the bytes to that path — served by app.py's
-    /download endpoint.
+    Composio has no upload-binary Drive action, so we can't push a
+    python-pptx blob and let Drive convert it. Instead we:
+      1. Create a blank presentation via Drive CREATE_FILE_FROM_TEXT
+         (mime = google-apps.presentation).
+      2. Use GOOGLESLIDES_PRESENTATIONS_BATCH_UPDATE to add slides.
+
+    Returns dict {slide_url, pdf_path} or None.
     """
-    creds = _credentials()
-    if creds is None:
+    if not _composio_available():
         return None
+    from audit.composio_exec import execute as _cx
 
     try:
-        pptx_buf = _build_pptx(deck_title, obs_rows, client_display, meta=meta)
+        # 1) Create blank deck
+        result = _cx("GOOGLEDRIVE_CREATE_FILE_FROM_TEXT", {
+            "file_name": deck_title,
+            "text_content": " ",
+            "mime_type": "application/vnd.google-apps.presentation",
+        })
+        deck_id = None
+        if isinstance(result, dict):
+            deck_id = result.get("id") or result.get("fileId") or result.get("presentationId")
+        if not deck_id:
+            raise RuntimeError(f"Drive create returned no id: {str(result)[:300]}")
 
-        from googleapiclient.http import MediaIoBaseUpload
-        drive_svc = _drive(creds)
+        # 2) Build the batchUpdate requests from obs_rows
+        requests = _build_slides_requests(obs_rows, client_display, meta)
+        if requests:
+            _cx("GOOGLESLIDES_PRESENTATIONS_BATCH_UPDATE", {
+                "presentationId": deck_id,
+                "requests": requests,
+            })
 
-        media = MediaIoBaseUpload(
-            pptx_buf,
-            mimetype="application/vnd.openxmlformats-officedocument.presentationml.presentation",
-            resumable=False,
-        )
-        file_meta = {
-            "name": deck_title,
-            "mimeType": "application/vnd.google-apps.presentation",
-        }
-        f = drive_svc.files().create(
-            body=file_meta,
-            media_body=media,
-            fields="id",
-        ).execute()
-        deck_id = f["id"]
-
-        if _SHARE_EMAIL:
-            drive_svc.permissions().create(
-                fileId=deck_id,
-                sendNotificationEmail=False,
-                body={"type": "user", "role": "writer",
-                      "emailAddress": _SHARE_EMAIL},
-            ).execute()
+        # 3) Share (non-fatal)
+        try:
+            _cx("GOOGLEDRIVE_ADD_FILE_SHARING_PREFERENCE", {
+                "file_id": deck_id, "role": "writer", "type": "domain",
+                "domain": "gushwork.ai", "sendNotificationEmail": False,
+            })
+        except Exception as exc:
+            print(f"[slides] share failed (non-fatal): {exc}")
 
         slide_url = f"https://docs.google.com/presentation/d/{deck_id}"
-        pdf_saved = None
-        if pdf_out_path:
-            try:
-                pdf_bytes = drive_svc.files().export(
-                    fileId=deck_id, mimeType="application/pdf"
-                ).execute()
-                with open(pdf_out_path, "wb") as fh:
-                    fh.write(pdf_bytes)
-                pdf_saved = pdf_out_path
-            except Exception as exc:
-                print(f"[slides] pdf export failed: {exc}")
-
-        return {"slide_url": slide_url, "pdf_path": pdf_saved}
+        # PDF export via Composio isn't available as a named action; skip.
+        return {"slide_url": slide_url, "pdf_path": None}
 
     except Exception as exc:
-        print(f"[slides] error: {exc}")
+        import traceback as _tb
+        print(f"[slides] error: {_tb.format_exc()[:2000]}")
         return None
+
+
+def _build_slides_requests(obs_rows, client_display, meta):
+    """Turn our row list into Slides API batchUpdate requests.
+
+    Layout is intentionally simple — one slide per row (intro / finding /
+    ending), each carrying a title + body text. Rich per-row styling
+    (banner colours, priority chips) is skipped in the Composio path.
+    """
+    from audit.version import VERSION, PLAN_TIERS, resolve_plan
+    reqs = []
+
+    def _slide_id(i):
+        return f"slide_{i}"
+
+    def _add_slide(idx, title, body):
+        sid = _slide_id(idx)
+        reqs.append({"createSlide": {"objectId": sid,
+                                     "slideLayoutReference": {"predefinedLayout": "TITLE_AND_BODY"}}})
+        # createSlide auto-creates placeholders; we use insertText.
+        # Slides places placeholders with generic ids we can't predict, so
+        # use TEXT_BOX shapes on top instead — deterministic.
+        title_id = f"{sid}_title"
+        body_id  = f"{sid}_body"
+        reqs.append({"createShape": {"objectId": title_id, "shapeType": "TEXT_BOX",
+                                      "elementProperties": {"pageObjectId": sid,
+                                          "size": {"width": {"magnitude": 8500000, "unit": "EMU"},
+                                                   "height": {"magnitude": 700000, "unit": "EMU"}},
+                                          "transform": {"scaleX": 1, "scaleY": 1,
+                                              "translateX": 500000, "translateY": 400000,
+                                              "unit": "EMU"}}}})
+        reqs.append({"insertText": {"objectId": title_id, "text": title[:400]}})
+        reqs.append({"createShape": {"objectId": body_id, "shapeType": "TEXT_BOX",
+                                      "elementProperties": {"pageObjectId": sid,
+                                          "size": {"width": {"magnitude": 8500000, "unit": "EMU"},
+                                                   "height": {"magnitude": 3500000, "unit": "EMU"}},
+                                          "transform": {"scaleX": 1, "scaleY": 1,
+                                              "translateX": 500000, "translateY": 1400000,
+                                              "unit": "EMU"}}}})
+        reqs.append({"insertText": {"objectId": body_id, "text": body[:1800]}})
+
+    # Only rows CS approved
+    approved = [r for r in obs_rows if r.get("approved")]
+    if not approved:
+        approved = obs_rows
+
+    idx = 0
+    for r in approved:
+        idx += 1
+        stype = r.get("slide_type", "finding")
+        if stype == "intro":
+            title = r.get("hook_ctx") or "Cover"
+            body_parts = [r.get("found", ""), r.get("costs", "")]
+        elif stype == "ending":
+            title = r.get("hook_ctx") or "Next Steps"
+            body_parts = [r.get("costs", "")]
+        else:
+            title = f"{r.get('category','')} · {r.get('hook_stat','')}"
+            body_parts = [
+                f"Hook: {r.get('hook_ctx','')}",
+                f"What we found: {r.get('found','')}",
+                f"What it costs you: {r.get('costs','')}",
+            ]
+            if r.get("support"):
+                body_parts.append(r["support"])
+        _add_slide(idx, title, "\n\n".join(p for p in body_parts if p))
+
+    # Projected impact — from plan tier
+    plan_tier = resolve_plan((meta or {}).get("plan"))
+    if plan_tier and plan_tier in PLAN_TIERS:
+        idx += 1
+        tier = PLAN_TIERS[plan_tier]
+        _add_slide(idx, f"Projected Impact — ${plan_tier}/mo plan",
+                   f"Month 3-4: {tier['M3-4']} leads/month\n"
+                   f"Month 6-7: {tier['M6-7']} leads/month\n"
+                   f"Month 9-10: {tier['M9-10']} leads/month\n\n"
+                   f"CPL expected to drop ~5% vs current spend.")
+    return reqs

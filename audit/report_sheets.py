@@ -1,245 +1,158 @@
-"""Write a complete audit to a new Google Sheet and share it.
+"""Write a complete audit to a new Google Sheet via Composio's tools-execute API.
 
-Authentication: set GOOGLE_SERVICE_ACCOUNT_JSON env var to the full JSON
-of a GCP service account key that has been granted Editor access to Google
-Sheets. The Sheets will be shared with AUDIT_SHARE_EMAIL (default:
-shavi.goyal@gushwork.ai) and the sheet URL is returned.
+Composio doesn't hand out raw OAuth tokens — you call their proxy actions
+instead (POST /api/v3/tools/execute/{slug}). This module builds the audit
+sheet using only Composio-native actions:
 
-If the env var is missing the function returns None — the caller falls back
-to XLSX-only mode.
+  GOOGLEDRIVE_CREATE_FILE_FROM_TEXT — create a blank Sheet via Drive
+  GOOGLESHEETS_ADD_SHEET             — add extra tabs
+  GOOGLESHEETS_BATCH_UPDATE          — write cell values
+  GOOGLESHEETS_GET_SPREADSHEET_INFO  — read tab structure back
+  GOOGLESHEETS_DELETE_SHEET          — remove the placeholder tab
+  GOOGLEDRIVE_ADD_FILE_SHARING_PREFERENCE — share with @gushwork.ai
+
+Fancy formatting (checkbox data validation, colour-per-priority,
+conditional formats) needs the raw Sheets API and can't be applied through
+Composio's named actions alone — CS still gets the columns and values,
+just plain-text 'TRUE'/'FALSE' instead of native checkboxes.
 """
-import json
 import os
 
-_SHARE_EMAIL = os.environ.get("AUDIT_SHARE_EMAIL", "shavi.goyal@gushwork.ai")
+from audit.composio_exec import execute as _composio_execute
+from audit.composio_exec import reset_trace as _reset_trace, LAST_TRACE
 
-_DARK  = {"red": 0.102, "green": 0.102, "blue": 0.102}
-_WHITE = {"red": 1.0,   "green": 1.0,   "blue": 1.0}
-_HIGH  = {"red": 1.0,   "green": 0.878, "blue": 0.878}
-_MED   = {"red": 1.0,   "green": 0.949, "blue": 0.8}
-_LOW   = {"red": 0.851, "green": 0.918, "blue": 0.827}
-_CRIT  = {"red": 0.95,  "green": 0.8,   "blue": 0.8}
+_SHARE_DOMAIN = "gushwork.ai"
 
-_PRIORITY_BG = {
-    "Critical": _CRIT,
-    "High":     _HIGH,
-    "Medium":   _MED,
-    "Low":      _LOW,
-}
-
-# Last error from a build() attempt, surfaced via /health.
+# Last error surfaced via /run response
 LAST_ERROR = ""
 
 
+def _sheets_available():
+    """We rely on Composio; require COMPOSIO_API_KEY to be set."""
+    return bool(os.environ.get("COMPOSIO_API_KEY"))
+
+
+# For /health compatibility
 def _credentials():
-    """Return Google credentials or None.
+    if _sheets_available():
+        return "composio"  # truthy sentinel
+    return None
 
-    Order:
-      1. Composio-connected Google account (COMPOSIO_API_KEY env var).
-      2. Service account (GOOGLE_SERVICE_ACCOUNT_JSON env var).
-    """
-    global LAST_ERROR
+
+def _get_placeholder_sheet_id(spreadsheet_id):
+    info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO", {
+        "spreadsheet_id": spreadsheet_id,
+    })
+    sheets = (info or {}).get("sheets") or []
+    for s in sheets:
+        props = s.get("properties", {})
+        return props.get("sheetId"), props.get("title")
+    return None, None
+
+
+def _create_spreadsheet(title):
+    """Drive create-from-text with mime_type=spreadsheet → blank Sheet."""
+    result = _composio_execute("GOOGLEDRIVE_CREATE_FILE_FROM_TEXT", {
+        "file_name": title,
+        "text_content": " ",
+        "mime_type": "application/vnd.google-apps.spreadsheet",
+    })
+    sid = None
+    if isinstance(result, dict):
+        sid = result.get("id") or result.get("fileId") or result.get("spreadsheetId")
+    if not sid:
+        raise RuntimeError(f"Drive create returned no id: {str(result)[:300]}")
+    return sid
+
+
+def _add_sheet_tab(spreadsheet_id, tab_name):
+    _composio_execute("GOOGLESHEETS_ADD_SHEET", {
+        "spreadsheet_id": spreadsheet_id,
+        "sheet_name": tab_name[:100],
+    })
+
+
+def _rename_sheet(spreadsheet_id, sheet_id, new_title):
+    """Rename an existing tab (used to rename the placeholder tab to 'Observations')."""
+    _composio_execute("GOOGLESHEETS_UPDATE_SHEET_PROPERTIES", {
+        "spreadsheetId": spreadsheet_id,
+        "updateSheetProperties": {
+            "properties": {"sheetId": sheet_id, "title": new_title},
+            "fields": "title",
+        },
+    })
+
+
+def _write_rows_to_tab(spreadsheet_id, tab_name, rows, start_cell="A1"):
+    """Write a 2D list of values into a tab."""
+    if not rows:
+        return
+    # Composio's BATCH_UPDATE action writes values via its own shape.
+    _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
+        "spreadsheet_id": spreadsheet_id,
+        "sheet_name": tab_name,
+        "first_cell_location": start_cell,
+        "valueInputOption": "USER_ENTERED",
+        "values": rows,
+    })
+
+
+def _share(spreadsheet_id):
     try:
-        from audit.composio_auth import get_credentials as _composio_creds, LAST_DEBUG as _composio_debug
-        creds = _composio_creds()
-        if creds is not None:
-            return creds
-        # No creds, no exception — record why so /run can surface it
-        if _composio_debug:
-            LAST_ERROR = f"composio: {_composio_debug}"
+        _composio_execute("GOOGLEDRIVE_ADD_FILE_SHARING_PREFERENCE", {
+            "file_id": spreadsheet_id,
+            "role": "writer",
+            "type": "domain",
+            "domain": _SHARE_DOMAIN,
+            "sendNotificationEmail": False,
+        })
     except Exception as exc:
-        import traceback as _tb
-        LAST_ERROR = f"composio import/call failed:\n{_tb.format_exc()[:1500]}"
-        print(f"[sheets] composio unavailable: {exc}")
-
-    raw = os.environ.get("GOOGLE_SERVICE_ACCOUNT_JSON")
-    if not raw:
-        return None
-    try:
-        from google.oauth2.service_account import Credentials
-        info = json.loads(raw)
-        scopes = [
-            "https://www.googleapis.com/auth/spreadsheets",
-            "https://www.googleapis.com/auth/drive.file",
-        ]
-        return Credentials.from_service_account_info(info, scopes=scopes)
-    except Exception as exc:
-        print(f"[sheets] credential error: {exc}")
-        return None
-
-
-def _service(creds):
-    from googleapiclient.discovery import build
-    return (
-        build("sheets", "v4", credentials=creds, cache_discovery=False),
-        build("drive",  "v3", credentials=creds, cache_discovery=False),
-    )
-
-
-def _cell(v):
-    return {"userEnteredValue": {"stringValue": str(v) if v is not None else ""}}
-
-
-def _hdr_fmt(nc, sid, bg=None):
-    return {"repeatCell": {
-        "range": {"sheetId": sid, "startRowIndex": 0, "endRowIndex": 1,
-                  "startColumnIndex": 0, "endColumnIndex": nc},
-        "cell": {"userEnteredFormat": {
-            "backgroundColor": bg or _DARK,
-            "textFormat": {"foregroundColor": _WHITE, "bold": True,
-                           "fontFamily": "Proxima Nova", "fontSize": 11},
-            "verticalAlignment": "MIDDLE", "wrapStrategy": "WRAP"}},
-        "fields": "userEnteredFormat(backgroundColor,textFormat,verticalAlignment,wrapStrategy)"}}
-
-
-def _body_fmt(nr, nc, sid):
-    return {"repeatCell": {
-        "range": {"sheetId": sid, "startRowIndex": 1, "endRowIndex": nr,
-                  "startColumnIndex": 0, "endColumnIndex": nc},
-        "cell": {"userEnteredFormat": {
-            "textFormat": {"fontFamily": "Proxima Nova", "fontSize": 10},
-            "verticalAlignment": "MIDDLE", "wrapStrategy": "WRAP"}},
-        "fields": "userEnteredFormat(textFormat,verticalAlignment,wrapStrategy)"}}
-
-
-def _write_rows(sheets_svc, sid, sheet_id, rows):
-    """Write rows to a sheet, batching at 1000 rows."""
-    BATCH = 1000
-    for start in range(0, len(rows), BATCH):
-        batch = rows[start:start + BATCH]
-        cell_data = [{"values": [_cell(v) for v in row]} for row in batch]
-        sheets_svc.spreadsheets().batchUpdate(
-            spreadsheetId=sid,
-            body={"requests": [{"updateCells": {
-                "range": {"sheetId": sheet_id,
-                          "startRowIndex": start,
-                          "startColumnIndex": 0},
-                "rows": cell_data,
-                "fields": "userEnteredValue"}}]}
-        ).execute()
-
-
-def _add_sheet(sheets_svc, sid, title, idx):
-    resp = sheets_svc.spreadsheets().batchUpdate(
-        spreadsheetId=sid,
-        body={"requests": [{"addSheet": {"properties": {"title": title, "index": idx}}}]}
-    ).execute()
-    return resp["replies"][0]["addSheet"]["properties"]["sheetId"]
-
-
-def _meta_tab(sheets_svc, sid, idx, meta):
-    """Add a Meta tab with version + plan inputs + Reviewed checkbox.
-    Returns the sheetId of the new tab.
-    """
-    t_id = _add_sheet(sheets_svc, sid, "Meta", idx)
-    rows = [
-        ["Field", "Value"],
-        ["Version", meta.get("version", "")],
-        ["Generated", meta.get("generated", "")],
-        ["Live URL", meta.get("live_url", "")],
-        ["Plan ($ / month)", meta.get("plan", "")],
-        ["Currently paying ($ / month)", meta.get("current_spend", "")],
-        ["Sell price ($)", meta.get("sell_price", "")],
-        ["Reviewed", "FALSE"],
-    ]
-    _write_rows(sheets_svc, sid, t_id, rows)
-    reviewed_row = len(rows) - 1  # 0-indexed row of Reviewed
-    sheets_svc.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [
-        _hdr_fmt(2, t_id),
-        _body_fmt(len(rows), 2, t_id),
-        {"updateDimensionProperties": {
-            "range": {"sheetId": t_id, "dimension": "COLUMNS",
-                      "startIndex": 0, "endIndex": 1},
-            "properties": {"pixelSize": 240}, "fields": "pixelSize"}},
-        {"updateDimensionProperties": {
-            "range": {"sheetId": t_id, "dimension": "COLUMNS",
-                      "startIndex": 1, "endIndex": 2},
-            "properties": {"pixelSize": 320}, "fields": "pixelSize"}},
-        # Checkbox on Reviewed value cell
-        {"setDataValidation": {
-            "range": {"sheetId": t_id,
-                      "startRowIndex": reviewed_row, "endRowIndex": reviewed_row + 1,
-                      "startColumnIndex": 1, "endColumnIndex": 2},
-            "rule": {"condition": {"type": "BOOLEAN"}, "strict": True}}},
-        # Highlight the Reviewed row
-        {"repeatCell": {
-            "range": {"sheetId": t_id, "startRowIndex": reviewed_row,
-                      "endRowIndex": reviewed_row + 1,
-                      "startColumnIndex": 0, "endColumnIndex": 2},
-            "cell": {"userEnteredFormat": {
-                "backgroundColor": {"red": 1.0, "green": 0.976, "blue": 0.808},
-                "textFormat": {"bold": True, "fontFamily": "Proxima Nova", "fontSize": 11}}},
-            "fields": "userEnteredFormat(backgroundColor,textFormat)"}},
-    ]}).execute()
-    return t_id
+        print(f"[sheets] share failed (non-fatal): {exc}")
 
 
 def build(spreadsheet_title, obs_rows, evidence_tabs,
           page_type_rows=None, total_pages=None, total_images=None,
           meta=None):
-    """
-    Create a Google Sheet with all audit data.
+    """Create the audit Sheet. Returns URL or None."""
+    global LAST_ERROR
+    LAST_ERROR = ""
+    _reset_trace()
 
-    obs_rows       — list of observation dicts (same as report_xlsx)
-    evidence_tabs  — [(tab_name, [headers], [rows]), ...]
-    page_type_rows — optional list of rows for Page Type tab
-    total_pages    — int, total indexable HTML pages (for Count column)
-    total_images   — int, total images in crawl (for image Count column)
-
-    Returns the sheet URL (str) or None if credentials not available.
-    """
-    creds = _credentials()
-    if creds is None:
+    if not _sheets_available():
+        LAST_ERROR = "COMPOSIO_API_KEY not set"
         return None
 
     try:
-        sheets_svc, drive_svc = _service(creds)
+        # 1) Create blank spreadsheet via Drive → gives us a fileId
+        sid = _create_spreadsheet(spreadsheet_title)
 
-        # ── Create spreadsheet ────────────────────────────────────────────────
-        sp = sheets_svc.spreadsheets().create(body={
-            "properties": {"title": spreadsheet_title},
-            "sheets": [{"properties": {"title": "Observations", "index": 0}}]
-        }).execute()
-        sid = sp["spreadsheetId"]
-        obs_sheet_id = sp["sheets"][0]["properties"]["sheetId"]
+        # 2) Rename the default first tab to "Observations"
+        first_id, first_title = _get_placeholder_sheet_id(sid)
+        if first_id is not None:
+            _rename_sheet(sid, first_id, "Observations")
 
-        idx = 1  # next tab index
-
-        # ── Meta tab (version + plan inputs + Reviewed checkbox) ──────────
-        if meta:
-            _meta_tab(sheets_svc, sid, idx, meta)
-            idx += 1
-
-        # ── Observations tab ──────────────────────────────────────────────────
-        # Columns: 0 Slide # | 1 Slide Type | 2 Approved | 3 Category |
-        #          4 Observation | 5 Priority | 6 Impact | 7 Reference |
-        #          8 Hook Stat | 9 Hook Context | 10 What We Found |
-        #          11 What It Costs You | 12 Supporting Stats | 13 Count
+        # 3) Observations tab: 14-column schema + intro row + finding rows + ending row
         _IMAGE_KEYS = {"image_large"}
-        COUNT_HDR = "Count ⚠ DELETE BEFORE SHARING"
-        obs_header = [
+        header = [
             "Slide #", "Slide Type", "Approved",
             "Category", "Observation", "Priority", "Impact", "Reference",
             "Hook Stat", "Hook Context", "What We Found",
-            "What It Costs You", "Supporting Stats", COUNT_HDR,
+            "What It Costs You", "Supporting Stats",
+            "Count ⚠ DELETE BEFORE SHARING",
         ]
-        NCOL = len(obs_header)
-        obs_data = [obs_header]
-
-        # Intro slide row (Slide # = 1)
+        obs_data = [header]
+        # Intro
         intro_hook = "Increase your leads by 33%"
         intro_ctx  = "Same pages. Same website."
-        intro_formula = "e.g. Meta descriptions +5.8% + Structured data +25% = +33%"
-        intro_costs   = "If you get 10 leads today → 14 leads. Before any ranking gains."
         obs_data.append([
             1, "intro", "FALSE",
             "Intro", "Cover / hook slide — CS edits messaging", "", "", "",
             "+33%", f"{intro_hook}. {intro_ctx}",
-            intro_formula, intro_costs, "",
-            "",
+            "e.g. Meta descriptions +5.8% + Structured data +25% = +33%",
+            "If you get 10 leads today → 14 leads. Before any ranking gains.",
+            "", "",
         ])
-
-        # Finding rows
+        # Findings
         for i, r in enumerate(obs_rows, start=2):
             count = r.get("count")
             key   = r.get("key", "")
@@ -251,151 +164,65 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 cl = str(count)
             else:
                 cl = ""
-            # Pre-seed Hook Stat / Context / What We Found from finding data
             ref = r.get("reference", "") or ""
-            hook_stat = ""      # CS fills e.g. "+32.3%"
-            hook_ctx  = r["observation"]
-            found     = ref
-            costs     = r["impact"]
             obs_data.append([
                 i, "finding", "FALSE",
-                r.get("category",""), r["observation"], r["priority"], r["impact"], ref,
-                hook_stat, hook_ctx, found, costs, "",
+                r.get("category", ""), r["observation"], r["priority"], r["impact"], ref,
+                "", r["observation"], ref, r["impact"], "",
                 cl,
             ])
-
-        # Ending slide row
-        end_idx = len(obs_data)  # 1-based Slide # for CS reordering
+        # Ending
+        end_slide = len(obs_data)
         obs_data.append([
-            end_idx, "ending", "FALSE",
+            end_slide, "ending", "FALSE",
             "Ending", "CTA / closing slide — CS edits messaging", "", "", "",
             "4 extra leads / month",
             "Every month you wait, you lose out on extra leads from the same pages.",
-            "", "Approve the audit fixes.", "",
-            "",
+            "", "Approve the audit fixes.", "", "",
         ])
+        _write_rows_to_tab(sid, "Observations", obs_data)
 
-        _write_rows(sheets_svc, sid, obs_sheet_id, obs_data)
+        # 4) Meta tab
+        if meta:
+            _add_sheet_tab(sid, "Meta")
+            meta_rows = [
+                ["Field", "Value"],
+                ["Version", meta.get("version", "")],
+                ["Generated", meta.get("generated", "")],
+                ["Live URL", meta.get("live_url", "")],
+                ["Plan ($ / month)", meta.get("plan", "")],
+                ["Currently paying ($ / month)", meta.get("current_spend", "")],
+                ["Sell price ($)", meta.get("sell_price", "")],
+                ["Reviewed", "FALSE"],
+            ]
+            _write_rows_to_tab(sid, "Meta", meta_rows)
 
-        # Format Observations
-        count_col = NCOL - 1
-        approved_col = 2
-        fmt_reqs = [
-            _hdr_fmt(NCOL, obs_sheet_id),
-            _body_fmt(len(obs_data), NCOL, obs_sheet_id),
-            {"updateSheetProperties": {"properties": {"sheetId": obs_sheet_id,
-                "gridProperties": {"frozenRowCount": 1, "frozenColumnCount": 3}},
-                "fields": "gridProperties(frozenRowCount,frozenColumnCount)"}},
-            # Count header in red
-            {"repeatCell": {"range": {"sheetId": obs_sheet_id, "startRowIndex": 0,
-                "endRowIndex": 1, "startColumnIndex": count_col, "endColumnIndex": count_col + 1},
-                "cell": {"userEnteredFormat": {
-                    "backgroundColor": {"red": 0.9, "green": 0.2, "blue": 0.2},
-                    "textFormat": {"foregroundColor": _WHITE, "bold": True,
-                                   "fontFamily": "Proxima Nova", "fontSize": 11}}},
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"}},
-            # Approved column = checkboxes for every data row
-            {"setDataValidation": {
-                "range": {"sheetId": obs_sheet_id,
-                          "startRowIndex": 1, "endRowIndex": len(obs_data),
-                          "startColumnIndex": approved_col,
-                          "endColumnIndex": approved_col + 1},
-                "rule": {"condition": {"type": "BOOLEAN"}, "strict": True}}},
-            # Column widths
-            {"updateDimensionProperties": {"range": {"sheetId": obs_sheet_id,
-                "dimension": "COLUMNS", "startIndex": 0, "endIndex": 1},
-                "properties": {"pixelSize": 60}, "fields": "pixelSize"}},
-            {"updateDimensionProperties": {"range": {"sheetId": obs_sheet_id,
-                "dimension": "COLUMNS", "startIndex": 1, "endIndex": 3},
-                "properties": {"pixelSize": 80}, "fields": "pixelSize"}},
-            {"updateDimensionProperties": {"range": {"sheetId": obs_sheet_id,
-                "dimension": "COLUMNS", "startIndex": 4, "endIndex": 5},
-                "properties": {"pixelSize": 280}, "fields": "pixelSize"}},
-            {"updateDimensionProperties": {"range": {"sheetId": obs_sheet_id,
-                "dimension": "COLUMNS", "startIndex": 10, "endIndex": 12},
-                "properties": {"pixelSize": 300}, "fields": "pixelSize"}},
-        ]
-        # Priority row colours (Priority is now column 5)
-        # Skip intro (row 1) and ending (last row) — no priority
-        for ri, r in enumerate(obs_rows, start=2):
-            bg = _PRIORITY_BG.get(r.get("priority", ""))
-            if bg:
-                fmt_reqs.append({"repeatCell": {
-                    "range": {"sheetId": obs_sheet_id, "startRowIndex": ri,
-                              "endRowIndex": ri + 1,
-                              "startColumnIndex": 5, "endColumnIndex": 6},
-                    "cell": {"userEnteredFormat": {"backgroundColor": bg}},
-                    "fields": "userEnteredFormat.backgroundColor"}})
-        # Highlight intro + ending rows
-        for special_row in (1, len(obs_data) - 1):
-            fmt_reqs.append({"repeatCell": {
-                "range": {"sheetId": obs_sheet_id, "startRowIndex": special_row,
-                          "endRowIndex": special_row + 1,
-                          "startColumnIndex": 0, "endColumnIndex": NCOL},
-                "cell": {"userEnteredFormat": {
-                    "backgroundColor": {"red": 0.949, "green": 0.949, "blue": 0.968},
-                    "textFormat": {"bold": True, "fontFamily": "Proxima Nova", "fontSize": 10}}},
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"}})
-        sheets_svc.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": fmt_reqs}).execute()
-
-        # ── Evidence tabs ─────────────────────────────────────────────────────
+        # 5) Evidence tabs
         for tab_name, headers, data_rows in evidence_tabs:
-            t_id = _add_sheet(sheets_svc, sid, tab_name[:31], idx)
-            idx += 1
-            all_rows = [headers] + [list(r) for r in data_rows]
-            _write_rows(sheets_svc, sid, t_id, all_rows)
-            sheets_svc.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [
-                _hdr_fmt(len(headers), t_id),
-                _body_fmt(len(all_rows), len(headers), t_id),
-                {"updateSheetProperties": {"properties": {"sheetId": t_id,
-                    "gridProperties": {"frozenRowCount": 1}}, "fields": "gridProperties.frozenRowCount"}},
-                {"updateDimensionProperties": {"range": {"sheetId": t_id, "dimension": "COLUMNS",
-                    "startIndex": 0, "endIndex": 1},
-                    "properties": {"pixelSize": 460}, "fields": "pixelSize"}},
-            ]}).execute()
+            name = tab_name[:31]
+            _add_sheet_tab(sid, name)
+            all_rows = [list(headers)] + [list(r) for r in data_rows]
+            _write_rows_to_tab(sid, name, all_rows)
 
-        # ── Page Type tab (optional) ──────────────────────────────────────────
+        # 6) Page Type (optional)
         if page_type_rows:
-            pt_id = _add_sheet(sheets_svc, sid, "Page Type", idx)
-            idx += 1
-            _write_rows(sheets_svc, sid, pt_id, page_type_rows)
-            sheets_svc.spreadsheets().batchUpdate(spreadsheetId=sid, body={"requests": [
-                _hdr_fmt(len(page_type_rows[0]), pt_id),
-                _body_fmt(len(page_type_rows), len(page_type_rows[0]), pt_id),
-            ]}).execute()
+            _add_sheet_tab(sid, "Page Type")
+            _write_rows_to_tab(sid, "Page Type", page_type_rows)
 
-        # ── Share (non-fatal — token may lack Drive scope) ────────────────────
-        if _SHARE_EMAIL:
-            try:
-                drive_svc.permissions().create(
-                    fileId=sid, sendNotificationEmail=False,
-                    body={"type": "user", "role": "writer", "emailAddress": _SHARE_EMAIL}
-                ).execute()
-            except Exception as exc:
-                print(f"[sheets] share failed (non-fatal): {exc}")
+        # 7) Share with the org (non-fatal if it fails)
+        _share(sid)
 
         return f"https://docs.google.com/spreadsheets/d/{sid}"
 
     except Exception as exc:
         import traceback as _tb
-        err = _tb.format_exc()
-        # Google API HttpError has the response body on .content
-        try:
-            from googleapiclient.errors import HttpError
-            if isinstance(exc, HttpError):
-                body = exc.content.decode("utf-8", errors="replace") if exc.content else ""
-                err = f"HttpError {exc.resp.status}: {body[:1500]}\n\n{err}"
-        except Exception:
-            pass
-        print(f"[sheets] error: {err}")
-        global LAST_ERROR
-        LAST_ERROR = err[:2500]
+        LAST_ERROR = _tb.format_exc()[:3000]
+        print(f"[sheets] error: {LAST_ERROR}")
         return None
 
 
 # ── Read-back for /build-deck ──────────────────────────────────────────────
 def _extract_sheet_id(url_or_id):
-    """Accept full Sheets URL or bare ID."""
     import re
     if not url_or_id:
         return None
@@ -404,80 +231,79 @@ def _extract_sheet_id(url_or_id):
 
 
 def read_for_deck(sheet_url_or_id):
-    """Fetch Meta + Observations tabs from an existing audit sheet.
-
-    Returns dict:
-        {
-            "meta": {version, plan, current_spend, sell_price, reviewed: bool, ...},
-            "obs_rows": [{category, observation, priority, impact, reference}, ...],
-        }
-    Returns None if sheet cannot be read or Meta tab is missing.
-    """
+    """Fetch Meta + Observations via Composio's Sheets read action."""
     sid = _extract_sheet_id(sheet_url_or_id)
-    if not sid:
-        return None
-    creds = _credentials()
-    if creds is None:
+    if not sid or not _sheets_available():
         return None
     try:
-        sheets_svc, _ = _service(creds)
-        # Meta tab
-        try:
-            meta_resp = sheets_svc.spreadsheets().values().get(
-                spreadsheetId=sid, range="Meta!A1:B20"
-            ).execute()
-        except Exception as exc:
-            print(f"[sheets] read Meta failed: {exc}")
-            return None
-        meta = {}
-        for row in meta_resp.get("values", [])[1:]:
-            if not row: continue
-            k = (row[0] if len(row) > 0 else "").strip()
-            v = (row[1] if len(row) > 1 else "").strip()
-            meta[k] = v
-        reviewed_raw = str(meta.get("Reviewed", "")).strip().lower()
-        parsed_meta = {
-            "version":       meta.get("Version", ""),
-            "generated":     meta.get("Generated", ""),
-            "live_url":      meta.get("Live URL", ""),
-            "plan":          meta.get("Plan ($ / month)", ""),
-            "current_spend": meta.get("Currently paying ($ / month)", ""),
-            "sell_price":    meta.get("Sell price ($)", ""),
-            "reviewed":      reviewed_raw in ("true", "yes", "checked", "1"),
-        }
-        # Observations tab (14 cols — see report_sheets.build)
-        obs_resp = sheets_svc.spreadsheets().values().get(
-            spreadsheetId=sid, range="Observations!A1:N"
-        ).execute()
-        values = obs_resp.get("values", [])
-        obs_rows = []
-        def _g(row, i):
-            return row[i].strip() if i < len(row) and row[i] is not None else ""
-        for row in values[1:]:
-            if not row or not any(row): continue
-            approved_raw = _g(row, 2).lower()
-            try:
-                slide_no = int(float(_g(row, 0))) if _g(row, 0) else 999
-            except ValueError:
-                slide_no = 999
-            obs_rows.append({
-                "slide_no":    slide_no,
-                "slide_type":  _g(row, 1).lower() or "finding",
-                "approved":    approved_raw in ("true", "yes", "checked", "1"),
-                "category":    _g(row, 3),
-                "observation": _g(row, 4),
-                "priority":    _g(row, 5),
-                "impact":      _g(row, 6),
-                "reference":   _g(row, 7),
-                "hook_stat":   _g(row, 8),
-                "hook_ctx":    _g(row, 9),
-                "found":       _g(row, 10),
-                "costs":       _g(row, 11),
-                "support":     _g(row, 12),
-            })
-        # Sort by Slide # so CS's ordering is honoured
-        obs_rows.sort(key=lambda r: r["slide_no"])
-        return {"meta": parsed_meta, "obs_rows": obs_rows}
+        meta_resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
+            "spreadsheet_id": sid, "ranges": ["Meta!A1:B20"],
+        })
     except Exception as exc:
-        print(f"[sheets] read_for_deck error: {exc}")
+        print(f"[sheets] read Meta failed: {exc}")
         return None
+    parsed_meta = {}
+    values = _extract_first_range(meta_resp)
+    for row in values[1:] if values else []:
+        if not row: continue
+        k = (row[0] if len(row) > 0 else "").strip()
+        v = (row[1] if len(row) > 1 else "").strip()
+        parsed_meta[k] = v
+    reviewed_raw = str(parsed_meta.get("Reviewed", "")).strip().lower()
+    meta = {
+        "version":       parsed_meta.get("Version", ""),
+        "generated":     parsed_meta.get("Generated", ""),
+        "live_url":      parsed_meta.get("Live URL", ""),
+        "plan":          parsed_meta.get("Plan ($ / month)", ""),
+        "current_spend": parsed_meta.get("Currently paying ($ / month)", ""),
+        "sell_price":    parsed_meta.get("Sell price ($)", ""),
+        "reviewed":      reviewed_raw in ("true", "yes", "checked", "1"),
+    }
+    try:
+        obs_resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
+            "spreadsheet_id": sid, "ranges": ["Observations!A1:N"],
+        })
+    except Exception as exc:
+        print(f"[sheets] read Observations failed: {exc}")
+        return None
+    obs_values = _extract_first_range(obs_resp) or []
+    obs_rows = []
+    def _g(row, i):
+        return row[i].strip() if i < len(row) and row[i] is not None else ""
+    for row in obs_values[1:]:
+        if not row or not any(row): continue
+        try:
+            slide_no = int(float(_g(row, 0))) if _g(row, 0) else 999
+        except ValueError:
+            slide_no = 999
+        approved_raw = _g(row, 2).lower()
+        obs_rows.append({
+            "slide_no":    slide_no,
+            "slide_type":  _g(row, 1).lower() or "finding",
+            "approved":    approved_raw in ("true", "yes", "checked", "1"),
+            "category":    _g(row, 3),
+            "observation": _g(row, 4),
+            "priority":    _g(row, 5),
+            "impact":      _g(row, 6),
+            "reference":   _g(row, 7),
+            "hook_stat":   _g(row, 8),
+            "hook_ctx":    _g(row, 9),
+            "found":       _g(row, 10),
+            "costs":       _g(row, 11),
+            "support":     _g(row, 12),
+        })
+    obs_rows.sort(key=lambda r: r["slide_no"])
+    return {"meta": meta, "obs_rows": obs_rows}
+
+
+def _extract_first_range(resp):
+    """Compact BATCH_GET response → 2D list of the first value range."""
+    if not resp:
+        return []
+    if isinstance(resp, dict):
+        vrs = resp.get("valueRanges") or resp.get("value_ranges")
+        if isinstance(vrs, list) and vrs:
+            return vrs[0].get("values") or []
+        if "values" in resp and isinstance(resp["values"], list):
+            return resp["values"]
+    return []

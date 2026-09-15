@@ -160,10 +160,10 @@ def run_audit():
             resp["message"] += (" Google Sheet created. Review it, tick "
                                 "'Reviewed' in the Meta tab, then build the deck.")
         else:
-            from audit import composio_auth
+            from audit.composio_exec import LAST_TRACE as _trace
             resp["warning"] = "Sheet skipped — see sheet_error for the cause."
-            resp["sheet_error"] = report_sheets.LAST_ERROR or "no exception recorded (likely credentials returned None)"
-            resp["composio_debug"] = composio_auth.LAST_DEBUG
+            resp["sheet_error"] = report_sheets.LAST_ERROR or "no exception recorded"
+            resp["composio_debug"] = {"trace": _trace[-10:]}
         return jsonify(resp)
 
     except Exception:
@@ -248,18 +248,16 @@ def health():
     }
     # Try each auth path (without secrets) and record which yielded credentials.
     try:
-        info["composio_credentials"] = composio_auth.get_credentials() is not None
-        info["composio_debug"] = composio_auth.LAST_DEBUG
+        info["composio_ready"] = bool(os.environ.get("COMPOSIO_API_KEY"))
     except Exception as exc:
-        info["composio_credentials"] = False
         info["composio_error"] = str(exc)[:200]
     try:
         from audit.report_sheets import _credentials as _sheets_creds, LAST_ERROR as _sheets_last
-        info["sheets_credentials"] = _sheets_creds() is not None
+        info["sheets_ready"] = _sheets_creds() is not None
         if _sheets_last:
             info["sheets_last_error"] = _sheets_last
     except Exception as exc:
-        info["sheets_credentials"] = False
+        info["sheets_ready"] = False
         info["sheets_error"] = str(exc)[:200]
     return jsonify(info)
 
