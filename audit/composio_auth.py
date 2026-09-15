@@ -97,13 +97,29 @@ def _extract_token(item):
     return None
 
 
-def _find_token_in_response(body, target_slug):
-    """Given any Composio JSON response, return a token from an item whose
-    toolkit slug EXACTLY matches target_slug (e.g. 'googlesheets').
+def _find_connection_id(body, target_slug):
+    """Return the connection id (ca_...) whose toolkit slug matches target_slug."""
+    target = (target_slug or "").lower().strip()
+    if not isinstance(body, dict):
+        return None
+    for key in ("items", "connectedAccounts", "data", "connections", "accounts"):
+        items = body.get(key)
+        if isinstance(items, list):
+            for item in items:
+                app = (item.get("appName") or item.get("app_name")
+                       or (item.get("app") or {}).get("name")
+                       or (item.get("toolkit") or {}).get("slug") or "").lower().strip()
+                if target and app != target:
+                    continue
+                # Composio v3 uses `id` (ca_...) for connection id
+                cid = item.get("id") or item.get("connectionId") or item.get("connection_id")
+                if cid:
+                    return cid
+    return None
 
-    Loose substring matching used to pick up Google Search Console tokens
-    which don't have Sheets/Drive scope — we now require exact match.
-    """
+
+def _find_token_in_response(body, target_slug):
+    """Fallback: find an access token directly in the response body."""
     target = (target_slug or "").lower().strip()
     if not isinstance(body, dict):
         return None
@@ -119,34 +135,59 @@ def _find_token_in_response(body, target_slug):
                 tok = _extract_token(item)
                 if tok:
                     return tok
-    return None
+    # Direct look at top-level (single-connection GET response)
+    return _extract_token(body)
 
 
 def _fetch_access_token(app_name):
-    """Try multiple endpoint variants + user IDs to fetch an OAuth token."""
+    """Fetch a fresh OAuth access token via Composio.
+
+    Composio's LIST endpoint returns cached/stale tokens that Google
+    rejects with 401. The correct pattern is:
+      1. List connections → find the connection id (ca_...)
+      2. GET /api/v3/connected_accounts/{id} → returns the fresh token
+
+    We fall back to token-in-list if the individual GET doesn't yield one.
+    """
     entity = _entity_id()
     LAST_DEBUG["target_app"] = app_name
     LAST_DEBUG["entity_id"] = entity
 
-    # Try the caller-configured entity, plus 'default' (Composio's default
-    # user_id when connections aren't tied to a specific user).
     user_ids = [entity]
     if entity != "default":
         user_ids.append("default")
 
-    attempts = []
+    # Step 1 — find the connection id
+    conn_id = None
     for uid in user_ids:
-        attempts += [
-            ("GET", "/api/v3/connected_accounts",
-             {"user_ids": uid, "toolkit_slugs": app_name},
-             f"v3 toolkit_slugs+user_ids({uid})"),
-            ("GET", "/api/v3/connected_accounts",
-             {"toolkit_slugs": app_name},
-             f"v3 toolkit_slugs only (last for {uid})"),
-        ]
+        for params, note in [
+            ({"user_ids": uid, "toolkit_slugs": app_name},
+             f"list toolkit+user_ids({uid})"),
+            ({"toolkit_slugs": app_name},
+             f"list toolkit_slugs only (attempt for {uid})"),
+        ]:
+            status, body = _try("GET", "/api/v3/connected_accounts",
+                                params=params, note=note)
+            if status == 200 and body:
+                conn_id = _find_connection_id(body, app_name)
+                if conn_id:
+                    LAST_DEBUG["connection_id"] = conn_id
+                    break
+        if conn_id:
+            break
 
-    for method, path, params, note in attempts:
-        status, body = _try(method, path, params=params, note=note)
+    if not conn_id:
+        return None
+
+    # Step 2 — GET the individual connection to get a fresh token.
+    # Composio v3 supports a few variants; try each until one returns 200.
+    for path, note in [
+        (f"/api/v3/connected_accounts/{conn_id}",           "get connection detail"),
+        (f"/api/v3/connected_accounts/{conn_id}/token",     "get connection token"),
+        (f"/api/v3/connected_accounts/{conn_id}/refresh",   "refresh connection"),
+    ]:
+        method = "POST" if path.endswith("/refresh") else "GET"
+        status, body = _try(method, path, note=note)
         if status == 200 and body:
             tok = _find_token_in_response(body, app_name)
             if tok:
