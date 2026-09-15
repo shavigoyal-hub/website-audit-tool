@@ -141,105 +141,62 @@ _COL_PRIORITY       = 5
 _COL_DECK_START     = 8   # first deck-specific column (Hook Stat)
 
 
+def _format_cell(sid, worksheet_id, r0, r1, c0, c1, rgb, bold=False):
+    """Composio's GOOGLESHEETS_FORMAT_CELL: background color + bold only."""
+    try:
+        _composio_execute("GOOGLESHEETS_FORMAT_CELL", {
+            "spreadsheet_id": sid,
+            "worksheet_id": worksheet_id,
+            "start_row_index": r0, "end_row_index": r1,
+            "start_column_index": c0, "end_column_index": c1,
+            "red": rgb["red"], "green": rgb["green"], "blue": rgb["blue"],
+            "bold": bool(bold),
+        })
+    except Exception as exc:
+        print(f"[sheets] format_cell (non-fatal): {exc}")
+
+
 def _format_observations(sid, sheet_id, obs_data):
-    """Header + priority tint + intro/ending highlight + grey fill on deck cols."""
+    """Header + priority tint + intro/ending highlight + grey fill on deck cols.
+
+    Composio only supports per-range background+bold via FORMAT_CELL; freeze
+    and column widths go through UPDATE_SHEET_PROPERTIES.
+    """
     ncols = len(obs_data[0])
-    reqs = [
-        # Freeze first row + first 3 cols
-        {"updateSheetProperties": {
-            "properties": {"sheetId": sheet_id,
-                           "gridProperties": {"frozenRowCount": 1,
-                                              "frozenColumnCount": 3}},
-            "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount"}},
-        # Header: dark bg + white bold text
-        {"repeatCell": {
-            "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1,
-                      "startColumnIndex": 0, "endColumnIndex": ncols},
-            "cell": {"userEnteredFormat": {
-                "backgroundColor": _HEADER_BG,
-                "textFormat": {"foregroundColor": _WHITE, "bold": True,
-                               "fontSize": 11},
-                "verticalAlignment": "MIDDLE",
-                "wrapStrategy": "WRAP"}},
-            "fields": "userEnteredFormat(backgroundColor,textFormat,verticalAlignment,wrapStrategy)"}},
-        # Body: wrap all cells, top-align
-        {"repeatCell": {
-            "range": {"sheetId": sheet_id, "startRowIndex": 1,
-                      "endRowIndex": len(obs_data),
-                      "startColumnIndex": 0, "endColumnIndex": ncols},
-            "cell": {"userEnteredFormat": {"verticalAlignment": "TOP",
-                                             "wrapStrategy": "WRAP"}},
-            "fields": "userEnteredFormat(verticalAlignment,wrapStrategy)"}},
-    ]
 
-    # Column widths (0 Slide# / 1 SlideType / 2 Approved / 3 Cat / 4 Obs /
-    # 5 Prio / 6 Impact / 7 Ref / 8-12 deck)
-    for start, end, px in [(0, 1, 60), (1, 3, 90), (3, 4, 120), (4, 5, 260),
-                            (5, 6, 90), (6, 7, 260), (7, 8, 220),
-                            (8, 9, 100), (9, 10, 240), (10, 11, 240),
-                            (11, 12, 240), (12, 13, 220)]:
-        reqs.append({"updateDimensionProperties": {
-            "range": {"sheetId": sheet_id, "dimension": "COLUMNS",
-                      "startIndex": start, "endIndex": end},
-            "properties": {"pixelSize": px}, "fields": "pixelSize"}})
+    # Freeze first row + first 3 cols
+    try:
+        _composio_execute("GOOGLESHEETS_UPDATE_SHEET_PROPERTIES", {
+            "spreadsheetId": sid,
+            "updateSheetProperties": {
+                "properties": {"sheetId": sheet_id,
+                               "gridProperties": {"frozenRowCount": 1,
+                                                  "frozenColumnCount": 3}},
+                "fields": "gridProperties.frozenRowCount,gridProperties.frozenColumnCount",
+            },
+        })
+    except Exception as exc:
+        print(f"[sheets] freeze (non-fatal): {exc}")
 
-    # Row-level fills — intro/ending row + priority tint on Priority cell
+    # Header row — dark background + bold
+    _format_cell(sid, sheet_id, 0, 1, 0, ncols, _HEADER_BG, bold=True)
+
+    # Row-level fills
     for ri, row in enumerate(obs_data[1:], start=1):
         stype = row[1] if len(row) > 1 else ""
         if stype in ("intro", "ending"):
-            reqs.append({"repeatCell": {
-                "range": {"sheetId": sheet_id, "startRowIndex": ri,
-                          "endRowIndex": ri + 1, "startColumnIndex": 0,
-                          "endColumnIndex": ncols},
-                "cell": {"userEnteredFormat": {
-                    "backgroundColor": _SPECIAL_BG,
-                    "textFormat": {"bold": True, "foregroundColor": _BLACK}}},
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"}})
+            _format_cell(sid, sheet_id, ri, ri + 1, 0, ncols, _SPECIAL_BG, bold=True)
             continue
         prio = row[_COL_PRIORITY] if len(row) > _COL_PRIORITY else ""
         bg = _PRIORITY_BG.get(prio)
         if bg:
-            reqs.append({"repeatCell": {
-                "range": {"sheetId": sheet_id, "startRowIndex": ri,
-                          "endRowIndex": ri + 1,
-                          "startColumnIndex": _COL_PRIORITY,
-                          "endColumnIndex": _COL_PRIORITY + 1},
-                "cell": {"userEnteredFormat": {
-                    "backgroundColor": bg,
-                    "textFormat": {"foregroundColor": _BLACK, "bold": True}}},
-                "fields": "userEnteredFormat(backgroundColor,textFormat)"}})
+            _format_cell(sid, sheet_id, ri, ri + 1,
+                         _COL_PRIORITY, _COL_PRIORITY + 1, bg, bold=True)
 
-    # Deck columns (8-12) get uniform grey fill + black font — applied LAST so
-    # it overrides intro/ending row highlight on those columns.
-    reqs.append({"repeatCell": {
-        "range": {"sheetId": sheet_id, "startRowIndex": 1,
-                  "endRowIndex": len(obs_data),
-                  "startColumnIndex": _COL_DECK_START, "endColumnIndex": ncols},
-        "cell": {"userEnteredFormat": {
-            "backgroundColor": _DECK_BG,
-            "textFormat": {"foregroundColor": _BLACK}}},
-        "fields": "userEnteredFormat(backgroundColor,textFormat.foregroundColor)"}})
-
-    # Approved column = TRUE/FALSE data validation (Sheets shows a checkbox)
-    reqs.append({"setDataValidation": {
-        "range": {"sheetId": sheet_id, "startRowIndex": 1,
-                  "endRowIndex": len(obs_data),
-                  "startColumnIndex": _COL_APPROVED,
-                  "endColumnIndex": _COL_APPROVED + 1},
-        "rule": {"condition": {"type": "BOOLEAN"}, "strict": True}}})
-
-    # Fire it all in one batchUpdate against the raw Sheets API. Composio's
-    # named BATCH_UPDATE action only handles cell values — for formatting we
-    # need the raw request shape, which they expose as GOOGLESHEETS_BATCH_UPDATE
-    # by-passing valueInputOption when we pass `requests` instead.
-    try:
-        _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
-            "spreadsheet_id": sid,
-            "requests": reqs,
-        })
-    except Exception as exc:
-        # Formatting is best-effort — the sheet is still usable without it.
-        print(f"[sheets] format (non-fatal): {exc}")
+    # Deck columns get uniform grey — applied LAST so it overrides row-level
+    # highlight on intro/ending rows in the deck cols.
+    _format_cell(sid, sheet_id, 1, len(obs_data),
+                 _COL_DECK_START, ncols, _DECK_BG, bold=False)
 
 
 def _share(spreadsheet_id):
