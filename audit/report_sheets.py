@@ -248,7 +248,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         ]
         obs_data = [header]
 
-        # Intro row — audit-side cells are metadata, deck-side is the actual copy
+        # Intro row — Hook Context is a formula referencing Hook Stat (col I, row 2)
         obs_data.append([
             1, "intro", "FALSE",
             "Intro",
@@ -256,17 +256,27 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             "", "",
             "",
             "+33%",
-            "Increase your leads by 33%. Same pages. Same website.",
+            '=I2&" "&"Increase your leads. Same pages. Same website."',
             "e.g. Meta descriptions +5.8% + Structured data +25% = +33%",
             "If you get 10 leads today → 14 leads. Before any ranking gains.",
             "",
         ])
 
-        # Finding rows — original audit copy + PDF-matched deck copy via hook_copy
+        # Finding rows — original audit copy + PDF-matched deck copy via hook_copy.
+        # Hook Context is a FORMULA that concatenates the Hook Stat cell with a
+        # descriptive body, so if CS edits the stat (e.g. "+32.3%" → "+40%"),
+        # the context updates automatically. To edit the body text, edit the
+        # formula's string literal.
+        # obs_data currently holds [header, intro] → next finding starts at
+        # Sheets row = current_len + 1 (Sheets is 1-indexed, we're about to
+        # append). Column I (index 8) is Hook Stat.
         for i, r in enumerate(obs_rows, start=2):
             key = r.get("key", "")
             copy = _hook_for(key, r.get("observation", ""), r.get("impact", ""))
             ref  = r.get("reference", "") or ""
+            sheet_row = len(obs_data) + 1
+            ctx_body = copy["hook_ctx"].replace('"', '""')
+            hook_ctx_formula = f'=I{sheet_row}&" "&"{ctx_body}"'
             obs_data.append([
                 i, "finding", "FALSE",
                 r.get("category", ""),
@@ -275,14 +285,15 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 r.get("impact", ""),
                 ref,
                 copy["hook_stat"],
-                copy["hook_ctx"],
+                hook_ctx_formula,       # ← auto-updates when Hook Stat changes
                 ref,                    # 'What we found' seeded with page list
                 copy["costs"],
                 copy["support"],
             ])
 
-        # Ending row
+        # Ending row — Hook Context is a formula referencing Hook Stat
         end_slide = len(obs_data)
+        end_sheet_row = len(obs_data) + 1
         obs_data.append([
             end_slide, "ending", "FALSE",
             "Ending",
@@ -290,7 +301,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             "", "",
             "",
             "4 extra leads / month",
-            "Every month you wait, you lose out on extra leads from the same pages.",
+            f'=I{end_sheet_row}&" "&"— every month you wait, you lose out from the same pages."',
             "",
             "Approve the audit fixes.",
             "",
