@@ -177,6 +177,9 @@
           let warning = "";
           if (data.warning) {
             warning = `<br><br><span style="color:#92400e;font-size:13px">⚠ ${data.warning}</span>`;
+            if (data.sheet_error) {
+              warning += `<br><pre style="background:#fef3c7;color:#92400e;font-size:11px;padding:8px;border-radius:6px;white-space:pre-wrap;max-height:200px;overflow:auto;margin-top:6px">${data.sheet_error}</pre>`;
+            }
           }
           const v = data.version ? `<br><span style="color:#6b7280;font-size:11px">v${data.version}</span>` : "";
           result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}${warning}${v}`;

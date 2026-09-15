@@ -160,9 +160,9 @@ def run_audit():
             resp["message"] += (" Google Sheet created. Review it, tick "
                                 "'Reviewed' in the Meta tab, then build the deck.")
         else:
-            resp["warning"] = ("Sheet skipped — set COMPOSIO_API_KEY (with a "
-                               "connected Google account) or GOOGLE_SERVICE_ACCOUNT_JSON "
-                               "on Vercel.")
+            # Surface the actual build() traceback so we can see why.
+            resp["warning"] = "Sheet skipped — see sheet_error for the cause."
+            resp["sheet_error"] = report_sheets.LAST_ERROR or "unknown (creds ok, no exception recorded)"
         return jsonify(resp)
 
     except Exception:
