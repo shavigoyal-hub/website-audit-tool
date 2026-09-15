@@ -131,11 +131,19 @@ _PRIORITY_BG = {
 }
 _HEADER_BG  = {"red": 0.102, "green": 0.102, "blue": 0.102}
 _WHITE      = {"red": 1.0, "green": 1.0, "blue": 1.0}
+_BLACK      = {"red": 0.0, "green": 0.0, "blue": 0.0}
 _SPECIAL_BG = {"red": 0.949, "green": 0.949, "blue": 0.968}
+_DECK_BG    = {"red": 0.90, "green": 0.90, "blue": 0.92}  # grey for deck columns
+
+# Column layout constants — keep in sync with build()
+_COL_APPROVED       = 2
+_COL_PRIORITY       = 5
+_COL_DECK_START     = 8   # first deck-specific column (Hook Stat)
 
 
 def _format_observations(sid, sheet_id, obs_data):
-    """Freeze header + colour header + priority tint + intro/ending highlight."""
+    """Header + priority tint + intro/ending highlight + grey fill on deck cols."""
+    ncols = len(obs_data[0])
     reqs = [
         # Freeze first row + first 3 cols
         {"updateSheetProperties": {
@@ -146,7 +154,7 @@ def _format_observations(sid, sheet_id, obs_data):
         # Header: dark bg + white bold text
         {"repeatCell": {
             "range": {"sheetId": sheet_id, "startRowIndex": 0, "endRowIndex": 1,
-                      "startColumnIndex": 0, "endColumnIndex": len(obs_data[0])},
+                      "startColumnIndex": 0, "endColumnIndex": ncols},
             "cell": {"userEnteredFormat": {
                 "backgroundColor": _HEADER_BG,
                 "textFormat": {"foregroundColor": _WHITE, "bold": True,
@@ -154,52 +162,70 @@ def _format_observations(sid, sheet_id, obs_data):
                 "verticalAlignment": "MIDDLE",
                 "wrapStrategy": "WRAP"}},
             "fields": "userEnteredFormat(backgroundColor,textFormat,verticalAlignment,wrapStrategy)"}},
-        # Body: wrap all cells
+        # Body: wrap all cells, top-align
         {"repeatCell": {
             "range": {"sheetId": sheet_id, "startRowIndex": 1,
                       "endRowIndex": len(obs_data),
-                      "startColumnIndex": 0, "endColumnIndex": len(obs_data[0])},
+                      "startColumnIndex": 0, "endColumnIndex": ncols},
             "cell": {"userEnteredFormat": {"verticalAlignment": "TOP",
                                              "wrapStrategy": "WRAP"}},
             "fields": "userEnteredFormat(verticalAlignment,wrapStrategy)"}},
     ]
-    # Column widths
-    for start, end, px in [(0, 1, 60), (1, 3, 90), (3, 4, 130),
-                            (4, 5, 90), (5, 6, 110), (6, 10, 260),
-                            (10, 11, 200)]:
+
+    # Column widths (0 Slide# / 1 SlideType / 2 Approved / 3 Cat / 4 Obs /
+    # 5 Prio / 6 Impact / 7 Ref / 8-12 deck)
+    for start, end, px in [(0, 1, 60), (1, 3, 90), (3, 4, 120), (4, 5, 260),
+                            (5, 6, 90), (6, 7, 260), (7, 8, 220),
+                            (8, 9, 100), (9, 10, 240), (10, 11, 240),
+                            (11, 12, 240), (12, 13, 220)]:
         reqs.append({"updateDimensionProperties": {
             "range": {"sheetId": sheet_id, "dimension": "COLUMNS",
                       "startIndex": start, "endIndex": end},
             "properties": {"pixelSize": px}, "fields": "pixelSize"}})
 
-    # Priority-tinted rows (Priority col = index 4)
+    # Row-level fills — intro/ending row + priority tint on Priority cell
     for ri, row in enumerate(obs_data[1:], start=1):
         stype = row[1] if len(row) > 1 else ""
         if stype in ("intro", "ending"):
             reqs.append({"repeatCell": {
                 "range": {"sheetId": sheet_id, "startRowIndex": ri,
                           "endRowIndex": ri + 1, "startColumnIndex": 0,
-                          "endColumnIndex": len(obs_data[0])},
+                          "endColumnIndex": ncols},
                 "cell": {"userEnteredFormat": {
                     "backgroundColor": _SPECIAL_BG,
-                    "textFormat": {"bold": True}}},
+                    "textFormat": {"bold": True, "foregroundColor": _BLACK}}},
                 "fields": "userEnteredFormat(backgroundColor,textFormat)"}})
             continue
-        prio = row[4] if len(row) > 4 else ""
+        prio = row[_COL_PRIORITY] if len(row) > _COL_PRIORITY else ""
         bg = _PRIORITY_BG.get(prio)
         if bg:
             reqs.append({"repeatCell": {
                 "range": {"sheetId": sheet_id, "startRowIndex": ri,
                           "endRowIndex": ri + 1,
-                          "startColumnIndex": 4, "endColumnIndex": 5},
-                "cell": {"userEnteredFormat": {"backgroundColor": bg}},
-                "fields": "userEnteredFormat.backgroundColor"}})
+                          "startColumnIndex": _COL_PRIORITY,
+                          "endColumnIndex": _COL_PRIORITY + 1},
+                "cell": {"userEnteredFormat": {
+                    "backgroundColor": bg,
+                    "textFormat": {"foregroundColor": _BLACK, "bold": True}}},
+                "fields": "userEnteredFormat(backgroundColor,textFormat)"}})
+
+    # Deck columns (8-12) get uniform grey fill + black font — applied LAST so
+    # it overrides intro/ending row highlight on those columns.
+    reqs.append({"repeatCell": {
+        "range": {"sheetId": sheet_id, "startRowIndex": 1,
+                  "endRowIndex": len(obs_data),
+                  "startColumnIndex": _COL_DECK_START, "endColumnIndex": ncols},
+        "cell": {"userEnteredFormat": {
+            "backgroundColor": _DECK_BG,
+            "textFormat": {"foregroundColor": _BLACK}}},
+        "fields": "userEnteredFormat(backgroundColor,textFormat.foregroundColor)"}})
 
     # Approved column = TRUE/FALSE data validation (Sheets shows a checkbox)
     reqs.append({"setDataValidation": {
         "range": {"sheetId": sheet_id, "startRowIndex": 1,
                   "endRowIndex": len(obs_data),
-                  "startColumnIndex": 2, "endColumnIndex": 3},
+                  "startColumnIndex": _COL_APPROVED,
+                  "endColumnIndex": _COL_APPROVED + 1},
         "rule": {"condition": {"type": "BOOLEAN"}, "strict": True}}})
 
     # Fire it all in one batchUpdate against the raw Sheets API. Composio's
@@ -250,57 +276,66 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         if first_id is not None:
             _rename_sheet(sid, first_id, "Observations")
 
-        # 3) Observations tab (the ONLY tab). Schema:
-        #    Slide # | Slide Type | Approved | Category | Priority |
-        #    Hook Stat | Hook Context | What We Found | What It Costs You |
-        #    Supporting Stats | Reference (raw)
+        # 3) Observations tab schema (13 cols):
+        # Original audit columns (0-7)  |  Deck-specific columns (8-12, grey fill)
+        #   0 Slide #        3 Category       8  Hook Stat
+        #   1 Slide Type     4 Observation    9  Hook Context
+        #   2 Approved       5 Priority       10 What We Found
+        #                    6 Impact         11 What It Costs You
+        #                    7 Reference      12 Supporting Stats
         header = [
             "Slide #", "Slide Type", "Approved",
-            "Category", "Priority",
+            "Category", "Observation", "Priority", "Impact", "Reference",
             "Hook Stat", "Hook Context", "What We Found",
             "What It Costs You", "Supporting Stats",
-            "Reference",
         ]
         obs_data = [header]
 
-        # Intro row
+        # Intro row — audit-side cells are metadata, deck-side is the actual copy
         obs_data.append([
             1, "intro", "FALSE",
-            "Intro", "",
-            "Increase your leads by 33%",
-            "Same pages. Same website.",
+            "Intro",
+            "Cover / hook slide — CS edits messaging",
+            "", "",
+            "",
+            "+33%",
+            "Increase your leads by 33%. Same pages. Same website.",
             "e.g. Meta descriptions +5.8% + Structured data +25% = +33%",
             "If you get 10 leads today → 14 leads. Before any ranking gains.",
             "",
-            "",
         ])
 
-        # Finding rows — PDF-matched language via hook_copy
+        # Finding rows — original audit copy + PDF-matched deck copy via hook_copy
         for i, r in enumerate(obs_rows, start=2):
             key = r.get("key", "")
             copy = _hook_for(key, r.get("observation", ""), r.get("impact", ""))
             ref  = r.get("reference", "") or ""
             obs_data.append([
                 i, "finding", "FALSE",
-                r.get("category", ""), r.get("priority", ""),
+                r.get("category", ""),
+                r.get("observation", ""),
+                r.get("priority", ""),
+                r.get("impact", ""),
+                ref,
                 copy["hook_stat"],
                 copy["hook_ctx"],
-                ref,                    # "What we found" seeded with page list
+                ref,                    # 'What we found' seeded with page list
                 copy["costs"],
                 copy["support"],
-                ref,
             ])
 
         # Ending row
         end_slide = len(obs_data)
         obs_data.append([
             end_slide, "ending", "FALSE",
-            "Ending", "",
+            "Ending",
+            "CTA / closing slide — CS edits messaging",
+            "", "",
+            "",
             "4 extra leads / month",
             "Every month you wait, you lose out on extra leads from the same pages.",
             "",
             "Approve the audit fixes.",
-            "",
             "",
         ])
         _write_rows_to_tab(sid, "Observations", obs_data)
@@ -332,17 +367,18 @@ def _extract_sheet_id(url_or_id):
 def read_for_deck(sheet_url_or_id):
     """Fetch Observations tab via Composio's Sheets read action.
 
-    New 11-col schema (no Meta tab):
-      0 Slide # | 1 Slide Type | 2 Approved | 3 Category | 4 Priority |
-      5 Hook Stat | 6 Hook Context | 7 What We Found |
-      8 What It Costs You | 9 Supporting Stats | 10 Reference
+    13-col schema:
+      0 Slide # | 1 Slide Type | 2 Approved |
+      3 Category | 4 Observation | 5 Priority | 6 Impact | 7 Reference |
+      8 Hook Stat | 9 Hook Context | 10 What We Found |
+      11 What It Costs You | 12 Supporting Stats
     """
     sid = _extract_sheet_id(sheet_url_or_id)
     if not sid or not _sheets_available():
         return None
     try:
         obs_resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": ["Observations!A1:K"],
+            "spreadsheet_id": sid, "ranges": ["Observations!A1:M"],
         })
     except Exception as exc:
         print(f"[sheets] read Observations failed: {exc}")
@@ -363,16 +399,15 @@ def read_for_deck(sheet_url_or_id):
             "slide_type":  _g(row, 1).lower() or "finding",
             "approved":    approved_raw in ("true", "yes", "checked", "1"),
             "category":    _g(row, 3),
-            "priority":    _g(row, 4),
-            "hook_stat":   _g(row, 5),
-            "hook_ctx":    _g(row, 6),
-            "found":       _g(row, 7),
-            "costs":       _g(row, 8),
-            "support":     _g(row, 9),
-            "reference":   _g(row, 10),
-            # Keep old fields present for downstream code
-            "observation": _g(row, 6),
-            "impact":      _g(row, 8),
+            "observation": _g(row, 4),
+            "priority":    _g(row, 5),
+            "impact":      _g(row, 6),
+            "reference":   _g(row, 7),
+            "hook_stat":   _g(row, 8),
+            "hook_ctx":    _g(row, 9),
+            "found":       _g(row, 10),
+            "costs":       _g(row, 11),
+            "support":     _g(row, 12),
         })
     obs_rows.sort(key=lambda r: r["slide_no"])
     return {"meta": {}, "obs_rows": obs_rows}
