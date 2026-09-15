@@ -373,9 +373,17 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
     except Exception as exc:
         import traceback as _tb
         err = _tb.format_exc()
+        # Google API HttpError has the response body on .content
+        try:
+            from googleapiclient.errors import HttpError
+            if isinstance(exc, HttpError):
+                body = exc.content.decode("utf-8", errors="replace") if exc.content else ""
+                err = f"HttpError {exc.resp.status}: {body[:1500]}\n\n{err}"
+        except Exception:
+            pass
         print(f"[sheets] error: {err}")
         global LAST_ERROR
-        LAST_ERROR = err[:2000]
+        LAST_ERROR = err[:2500]
         return None
 
 
