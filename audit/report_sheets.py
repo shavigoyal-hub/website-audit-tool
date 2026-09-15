@@ -268,18 +268,22 @@ def _build_observations_html(obs_data):
                           bold=True, font_size=11))
     parts.append("</tr>")
 
-    # Body rows — height:auto lets long-wrapped content grow the row
+    # Body rows — height:auto lets long-wrapped content grow the row.
+    # Priority tint applies to the whole AUDIT side (cols 0..DECK_START-1).
+    # Deck-preview columns keep uniform grey fill.
     for ri, row in enumerate(obs_data[1:], start=1):
         is_special = ri == 1 or ri == last_i
         priority = row[_COL_PRIORITY] if len(row) > _COL_PRIORITY else ""
+        priority_bg = _PRIORITY_HEX.get(priority)
         parts.append('<tr style="height:110px">')
         for ci, val in enumerate(row):
             if ci >= _COL_DECK_START:
                 bg, color, bold = _DECK_HEX, "#111", False
             elif is_special:
                 bg, color, bold = _SPECIAL_HEX, "#111", True
-            elif ci == _COL_PRIORITY and priority in _PRIORITY_HEX:
-                bg, color, bold = _PRIORITY_HEX[priority], "#111", True
+            elif priority_bg:
+                # Tint entire audit-side row with the priority colour
+                bg, color, bold = priority_bg, "#111", False
             else:
                 bg, color, bold = None, "#111", False
             parts.append(_td(val, bg=bg, color=color, bold=bold))
