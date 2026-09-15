@@ -3,6 +3,7 @@ import pandas as pd
 from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
+from openpyxl.worksheet.datavalidation import DataValidation
 
 HEADER_FONT = Font(bold=True, color="0000FF")  # blue header, matches existing audits
 WRAP = Alignment(wrap_text=True, vertical="top")
@@ -12,6 +13,7 @@ PRIORITY_FILL = {
     "Medium": PatternFill("solid", fgColor="FFF2CC"),
     "Low": PatternFill("solid", fgColor="D9EAD3"),
 }
+SPECIAL_FILL = PatternFill("solid", fgColor="F2F2F7")  # intro / ending
 
 
 def _style_header(ws, ncols):
@@ -28,6 +30,18 @@ def _autosize(ws, widths):
 
 _IMAGE_KEYS = {"image_large"}
 
+# Same 14-col schema as the Google Sheet — keep them in sync.
+OBS_HEADER = [
+    "Slide #", "Slide Type", "Approved",
+    "Category", "Observation", "Priority", "Impact", "Reference",
+    "Hook Stat", "Hook Context", "What We Found",
+    "What It Costs You", "Supporting Stats",
+    "Count ⚠ DELETE BEFORE SHARING",
+]
+_COL_COUNT     = len(OBS_HEADER) - 1  # 0-indexed 13
+_COL_APPROVED  = 2                    # 0-indexed
+_COL_PRIORITY  = 5
+
 
 def build(path, client, rows, notes, df_raw, evidence_tabs,
           total_pages=None, total_images=None):
@@ -36,12 +50,29 @@ def build(path, client, rows, notes, df_raw, evidence_tabs,
     # --- Observation tab ---
     ws = wb.active
     ws.title = "Observation"
-    COUNT_HDR = "Count ⚠ DELETE BEFORE SHARING"
-    ws.append(["Category", "Observation", "Priority", "Impact", "Reference", COUNT_HDR])
-    _style_header(ws, 6)
-    # Style count header in red so it's obvious
-    ws.cell(row=1, column=6).font = Font(bold=True, color="FF0000")
-    for r in rows:
+    ws.append(OBS_HEADER)
+    _style_header(ws, len(OBS_HEADER))
+    ws.cell(row=1, column=_COL_COUNT + 1).font = Font(bold=True, color="FF0000")
+
+    # Intro row
+    intro_hook = "Increase your leads by 33%"
+    intro_ctx  = "Same pages. Same website."
+    ws.append([
+        1, "intro", "FALSE",
+        "Intro", "Cover / hook slide — CS edits messaging", "", "", "",
+        "+33%", f"{intro_hook}. {intro_ctx}",
+        "e.g. Meta descriptions +5.8% + Structured data +25% = +33%",
+        "If you get 10 leads today → 14 leads. Before any ranking gains.",
+        "", "",
+    ])
+    intro_row_i = ws.max_row
+    for c in range(1, len(OBS_HEADER) + 1):
+        ws.cell(row=intro_row_i, column=c).fill = SPECIAL_FILL
+        ws.cell(row=intro_row_i, column=c).alignment = WRAP
+        ws.cell(row=intro_row_i, column=c).font = Font(bold=True)
+
+    # Finding rows
+    for i, r in enumerate(rows, start=2):
         count = r.get("count")
         key = r.get("key", "")
         if count and key in _IMAGE_KEYS and total_images:
@@ -52,14 +83,44 @@ def build(path, client, rows, notes, df_raw, evidence_tabs,
             count_label = str(count)
         else:
             count_label = ""
-        ws.append([r.get("category", ""), r["observation"], r["priority"],
-                   r["impact"], r["reference"], count_label])
+        ref = r.get("reference", "") or ""
+        ws.append([
+            i, "finding", "FALSE",
+            r.get("category", ""), r["observation"], r["priority"],
+            r["impact"], ref,
+            "", r["observation"], ref, r["impact"], "",
+            count_label,
+        ])
         row_i = ws.max_row
         fill = PRIORITY_FILL.get(r["priority"])
         if fill:
-            ws.cell(row=row_i, column=3).fill = fill
-        for c in range(1, 7):
+            ws.cell(row=row_i, column=_COL_PRIORITY + 1).fill = fill
+        for c in range(1, len(OBS_HEADER) + 1):
             ws.cell(row=row_i, column=c).alignment = WRAP
+
+    # Ending row
+    end_slide_no = len(rows) + 2  # after all findings
+    ws.append([
+        end_slide_no, "ending", "FALSE",
+        "Ending", "CTA / closing slide — CS edits messaging", "", "", "",
+        "4 extra leads / month",
+        "Every month you wait, you lose out on extra leads from the same pages.",
+        "", "Approve the audit fixes.", "", "",
+    ])
+    end_row_i = ws.max_row
+    for c in range(1, len(OBS_HEADER) + 1):
+        ws.cell(row=end_row_i, column=c).fill = SPECIAL_FILL
+        ws.cell(row=end_row_i, column=c).alignment = WRAP
+        ws.cell(row=end_row_i, column=c).font = Font(bold=True)
+
+    # Data validation: Approved column = TRUE/FALSE dropdown (Excel's checkbox equivalent)
+    dv = DataValidation(type="list", formula1='"TRUE,FALSE"', allow_blank=True)
+    dv.add(f"C2:C{ws.max_row}")
+    ws.add_data_validation(dv)
+
+    # Freeze first 3 cols + header row
+    ws.freeze_panes = "D2"
+
     if notes:
         ws.append([])
         ws.append(["Notes:"])
@@ -76,8 +137,8 @@ def build(path, client, rows, notes, df_raw, evidence_tabs,
         ws.cell(row=ws.max_row, column=1).font = Font(italic=True, color="9CA3AF")
     except Exception:
         pass
-    _autosize(ws, [20, 66, 12, 55, 40, 22])
-    ws.freeze_panes = "A2"
+    # Widths for the 14 cols
+    _autosize(ws, [8, 12, 12, 20, 60, 12, 55, 40, 14, 40, 40, 40, 30, 22])
 
     # --- Evidence tabs ---
     for tab_name, headers, data_rows in evidence_tabs:
