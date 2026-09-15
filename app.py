@@ -160,9 +160,10 @@ def run_audit():
             resp["message"] += (" Google Sheet created. Review it, tick "
                                 "'Reviewed' in the Meta tab, then build the deck.")
         else:
-            # Surface the actual build() traceback so we can see why.
+            from audit import composio_auth
             resp["warning"] = "Sheet skipped — see sheet_error for the cause."
-            resp["sheet_error"] = report_sheets.LAST_ERROR or "unknown (creds ok, no exception recorded)"
+            resp["sheet_error"] = report_sheets.LAST_ERROR or "no exception recorded (likely credentials returned None)"
+            resp["composio_debug"] = composio_auth.LAST_DEBUG
         return jsonify(resp)
 
     except Exception:
