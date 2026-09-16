@@ -203,7 +203,8 @@
               warning += `<br><pre style="background:#fef3c7;color:#92400e;font-size:11px;padding:8px;border-radius:6px;white-space:pre-wrap;max-height:200px;overflow:auto;margin-top:6px">${data.sheet_error}</pre>`;
             }
             if (data.composio_debug) {
-              warning += `<br><details style="margin-top:6px"><summary style="cursor:pointer;color:#92400e;font-size:12px">composio debug</summary><pre style="background:#fef3c7;color:#92400e;font-size:11px;padding:8px;border-radius:6px;white-space:pre-wrap;max-height:300px;overflow:auto;margin-top:6px">${JSON.stringify(data.composio_debug, null, 2)}</pre></details>`;
+              const dbg = JSON.stringify(data.composio_debug, null, 2).replace(/</g,'&lt;');
+              warning += `<br><details open style="margin-top:6px"><summary style="cursor:pointer;color:#92400e;font-size:12px">composio debug <button onclick="event.preventDefault();navigator.clipboard.writeText(this.parentElement.nextElementSibling.textContent).then(()=>{this.textContent='copied ✓';});" style="margin-left:8px;padding:2px 8px;font-size:10px;border:1px solid #92400e;background:#fff;color:#92400e;border-radius:4px;cursor:pointer">copy full</button></summary><pre style="background:#fef3c7;color:#92400e;font-size:11px;padding:8px;border-radius:6px;white-space:pre-wrap;overflow:auto;margin-top:6px">${dbg}</pre></details>`;
             }
           }
           const v = data.version ? `<br><span style="color:#6b7280;font-size:11px">v${data.version}</span>` : "";
@@ -265,7 +266,8 @@
             inner += `<div style="font-size:12px;margin-top:6px">rows_approved: ${data.rows_approved} / ${data.rows_total}</div>`;
           }
           if (data.composio_debug) {
-            inner += `<details style="margin-top:6px"><summary style="cursor:pointer;font-size:12px">composio debug</summary><pre style="background:#fee2e2;font-size:11px;padding:8px;border-radius:6px;white-space:pre-wrap;max-height:300px;overflow:auto;margin-top:6px">${JSON.stringify(data.composio_debug, null, 2)}</pre></details>`;
+            const txt = JSON.stringify(data.composio_debug, null, 2).replace(/</g,'&lt;');
+            inner += `<details open style="margin-top:6px"><summary style="cursor:pointer;font-size:12px">composio debug <button onclick="event.preventDefault();navigator.clipboard.writeText(this.parentElement.nextElementSibling.textContent).then(()=>{this.textContent='copied ✓';});" style="margin-left:8px;padding:2px 8px;font-size:10px;border:1px solid #991b1b;background:#fff;color:#991b1b;border-radius:4px;cursor:pointer">copy full</button></summary><pre style="background:#fee2e2;font-size:11px;padding:8px;border-radius:6px;white-space:pre-wrap;overflow:auto;margin-top:6px">${txt}</pre></details>`;
           }
           result.innerHTML = inner;
         }

@@ -134,7 +134,7 @@ _DECK_BG    = {"red": 0.90, "green": 0.90, "blue": 0.92}  # grey for deck column
 _COL_PRIORITY     = 2
 _COL_DECK_START   = 4
 # Per-column pixel widths applied after HTML import (order matches header)
-_COL_WIDTHS_PX    = [180, 380, 100, 320, 110, 320, 320, 320, 240]
+_COL_WIDTHS_PX    = [180, 760, 100, 320, 110, 320, 320, 320, 240]
 
 
 def _format_cell(sid, worksheet_id, r0, r1, c0, c1, rgb, bold=False):
