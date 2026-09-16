@@ -9,6 +9,54 @@ Structure mirrors the Arizona Home Grants reference deck:
 Keyed by the observation `key` from observations.py CATALOG.
 """
 
+# One-liner per-URL status label + a color hint (used for the pill).
+# color: 'critical' | 'high' | 'medium' | 'low' | 'ok'
+STATUS_LABEL = {
+    "h1_missing":       ("No H1", "critical"),
+    "h1_multiple":      ("Competing H1s", "high"),
+    "h1_short":         ("Short H1", "low"),
+    "h1_long":          ("Long H1", "low"),
+    "h1_duplicate":     ("Duplicate H1", "medium"),
+    "meta_missing":     ("Missing", "high"),
+    "meta_long":        ("Too long", "medium"),
+    "meta_short":       ("Too short", "low"),
+    "meta_duplicate":   ("Duplicate", "medium"),
+    "title_missing":    ("Missing title", "critical"),
+    "title_long":       ("Truncated", "high"),
+    "title_short":      ("Too short", "low"),
+    "title_duplicate":  ("Duplicate title", "medium"),
+    "title_stuffed":    ("Keyword stuffed", "high"),
+    "structured_data":  ("No schema", "high"),
+    "faq_missing":      ("No FAQ", "medium"),
+    "thin_content":     ("Thin", "high"),
+    "near_duplicate":   ("Near-duplicate", "high"),
+    "non_indexable":    ("Noindex", "critical"),
+    "canonical_missing":("No canonical", "medium"),
+    "canonical_not_self":("Wrong canonical", "medium"),
+    "error_404":        ("404", "high"),
+    "error_5xx":        ("5xx", "critical"),
+    "render_error":     ("Render error", "critical"),
+    "render_blocked":   ("Blocked resource", "high"),
+    "render_js_dependent":("JS-only", "high"),
+    "lcp_high":         ("LCP > 4s", "critical"),
+    "lcp_medium":       ("LCP 2.5-4s", "medium"),
+    "cls_high":         ("CLS high", "high"),
+    "perf_low":         ("Perf < 50", "critical"),
+    "perf_moderate":    ("Perf 50-89", "medium"),
+    "unoptimized_images":("Heavy images", "medium"),
+    "image_large":      ("Oversized", "medium"),
+    "high_carbon":      ("Heavy page", "medium"),
+    "render_blocking":  ("Render blocking", "medium"),
+    "url_long":         ("Long URL", "low"),
+    "low_inlinks":      ("Few inlinks", "medium"),
+    "pagination_no_rel":("No rel pagination", "low"),
+    "og_missing":       ("No OG tags", "medium"),
+    "hreflang_missing": ("No hreflang", "high"),
+    "cta_missing":      ("No CTA", "high"),
+    "spelling_grammar": ("Errors", "low"),
+}
+
+
 HOOK_COPY = {
     # ── H1 tags ────────────────────────────────────────────────────────────
     "h1_missing": {

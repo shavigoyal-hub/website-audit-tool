@@ -461,30 +461,54 @@ def build(deck_title, obs_rows, client_display="", meta=None, pdf_out_path=None)
 def _build_slides_requests(obs_rows, client_display, meta):
     """Build a Slides deck mirroring the Arizona Home Grants reference PDF.
 
-    Every slide uses a BLANK layout with explicit text boxes so the PDF's
-    visual hierarchy comes through:
-      • Header line: "Finding · <Category>" + priority tag right-aligned
-      • BIG STAT (48pt bold) top-left
-      • Hook context (14pt muted) directly under the stat
-      • "What we found" (left column, 11pt with 9pt bold section label)
-      • "What it costs you" (right column) + optional supporting stat
-      • Footer: client domain and slide number
+    Slide layout (finding): grey background off-white; header line with
+    'Finding · Category' left and a colored priority chip right; a huge
+    blue stat with the hook context beside it in bold black; a card on
+    the left labelled 'What we found' listing URL + colored status pill
+    per line; a card on the right labelled 'What it costs you' with the
+    consequence sentence and an optional supporting stat.
     """
     from audit.version import VERSION, PLAN_TIERS, resolve_plan
+    from audit.hook_copy import STATUS_LABEL
     reqs = []
 
-    # Coordinate helpers — Slides page is 10in × 5.625in (widescreen).
     def emu(inches): return int(inches * 914400)
 
     slide_counter = [0]
     def _slide_id():
         slide_counter[0] += 1
-        # Slides API requires objectId length >= 5.
         return f"slide{slide_counter[0]:04d}"
 
-    def _text_box(page_id, box_id, x, y, w, h):
+    # ── Colors ────────────────────────────────────────────────────────────
+    BLUE     = {"red": 0.055, "green": 0.35, "blue": 0.98}   # #0e59fa
+    TEXT     = {"red": 0.06,  "green": 0.06, "blue": 0.09}
+    MUTED    = {"red": 0.44,  "green": 0.46, "blue": 0.52}
+    WHITE    = {"red": 1.0,   "green": 1.0,  "blue": 1.0}
+    PRIO_TEXT = {
+        "Critical": {"red": 0.86, "green": 0.15, "blue": 0.15},
+        "High":     {"red": 0.94, "green": 0.44, "blue": 0.10},
+        "Medium":   {"red": 0.85, "green": 0.58, "blue": 0.05},
+        "Low":      {"red": 0.20, "green": 0.55, "blue": 0.30},
+    }
+    STATUS_TEXT = {
+        "critical": {"red": 0.72, "green": 0.13, "blue": 0.13},
+        "high":     {"red": 0.85, "green": 0.44, "blue": 0.10},
+        "medium":   {"red": 0.72, "green": 0.50, "blue": 0.05},
+        "low":      {"red": 0.20, "green": 0.55, "blue": 0.30},
+        "ok":       {"red": 0.20, "green": 0.55, "blue": 0.30},
+    }
+    STATUS_BG = {
+        "critical": {"red": 1.0,  "green": 0.87, "blue": 0.87},
+        "high":     {"red": 1.0,  "green": 0.90, "blue": 0.80},
+        "medium":   {"red": 1.0,  "green": 0.95, "blue": 0.80},
+        "low":      {"red": 0.85, "green": 0.92, "blue": 1.0},
+        "ok":       {"red": 0.85, "green": 0.94, "blue": 0.86},
+    }
+    CARD_BG  = {"red": 0.96, "green": 0.96, "blue": 0.98}
+
+    def _text_box(page_id, box_id, x, y, w, h, shape="TEXT_BOX", fill=None):
         reqs.append({"createShape": {
-            "objectId": box_id, "shapeType": "TEXT_BOX",
+            "objectId": box_id, "shapeType": shape,
             "elementProperties": {
                 "pageObjectId": page_id,
                 "size":       {"width":  {"magnitude": emu(w), "unit": "EMU"},
@@ -492,12 +516,23 @@ def _build_slides_requests(obs_rows, client_display, meta):
                 "transform":  {"scaleX": 1, "scaleY": 1,
                                "translateX": emu(x), "translateY": emu(y),
                                "unit": "EMU"}}}})
+        if fill:
+            reqs.append({"updateShapeProperties": {
+                "objectId": box_id,
+                "shapeProperties": {
+                    "shapeBackgroundFill": {"solidFill": {
+                        "color": {"rgbColor": fill}}},
+                    "outline": {"outlineFill": {"solidFill": {
+                        "color": {"rgbColor": fill}}}},
+                },
+                "fields": "shapeBackgroundFill.solidFill.color,outline.outlineFill.solidFill.color",
+            }})
 
     def _write(box_id, text, size=12, bold=False, color=None, align=None):
         if not text:
             return
-        reqs.append({"insertText": {"objectId": box_id, "text": str(text)[:1600]}})
-        style = {"fontFamily": "Proxima Nova",
+        reqs.append({"insertText": {"objectId": box_id, "text": str(text)[:1800]}})
+        style = {"fontFamily": "Inter",
                  "fontSize": {"magnitude": size, "unit": "PT"},
                  "bold": bool(bold)}
         fields = "fontFamily,fontSize,bold"
@@ -505,124 +540,219 @@ def _build_slides_requests(obs_rows, client_display, meta):
             style["foregroundColor"] = {"opaqueColor": {"rgbColor": color}}
             fields += ",foregroundColor"
         reqs.append({"updateTextStyle": {
-            "objectId": box_id,
-            "textRange": {"type": "ALL"},
-            "style": style,
-            "fields": fields}})
+            "objectId": box_id, "textRange": {"type": "ALL"},
+            "style": style, "fields": fields}})
         if align:
             reqs.append({"updateParagraphStyle": {
-                "objectId": box_id,
-                "textRange": {"type": "ALL"},
-                "style": {"alignment": align},
-                "fields": "alignment"}})
+                "objectId": box_id, "textRange": {"type": "ALL"},
+                "style": {"alignment": align}, "fields": "alignment"}})
 
-    # ── Intro slide (client + hook stat + hook context + formula + costs) ──
+    def _write_runs(box_id, runs):
+        """runs: [(text, {size, bold, color?})...] concatenated in order.
+
+        Uses one insertText for the joined string, then updateTextStyle
+        per range to apply per-run styling.
+        """
+        if not runs:
+            return
+        joined = "".join(r[0] for r in runs)
+        reqs.append({"insertText": {"objectId": box_id, "text": joined[:1800]}})
+        pos = 0
+        for text, style_hint in runs:
+            end = pos + len(text)
+            style = {"fontFamily": "Inter",
+                     "fontSize": {"magnitude": style_hint.get("size", 11), "unit": "PT"},
+                     "bold": bool(style_hint.get("bold"))}
+            fields = "fontFamily,fontSize,bold"
+            color = style_hint.get("color")
+            if color:
+                style["foregroundColor"] = {"opaqueColor": {"rgbColor": color}}
+                fields += ",foregroundColor"
+            reqs.append({"updateTextStyle": {
+                "objectId": box_id,
+                "textRange": {"type": "FIXED_RANGE",
+                              "startIndex": pos, "endIndex": end},
+                "style": style, "fields": fields}})
+            pos = end
+
+    def _split_stat(hook_ctx):
+        """Split hook_ctx like '67% of pages...' into ('67%', ' of pages...').
+
+        If no %/number leads the string, returns (None, hook_ctx).
+        """
+        import re
+        m = re.match(r"^\s*([+-]?\d+(?:\.\d+)?%?)\s*(.*)$", hook_ctx or "")
+        if m and m.group(1) and ("%" in m.group(1) or m.group(2)):
+            return m.group(1), m.group(2)
+        return None, hook_ctx or ""
+
+    # ── Intro slide ──────────────────────────────────────────────────────
     def _intro(row):
         sid = _slide_id()
         reqs.append({"createSlide": {"objectId": sid,
                                      "slideLayoutReference": {"predefinedLayout": "BLANK"}}})
-        # Small header line
         hdr = f"{sid}_hdr"
         _text_box(sid, hdr, 0.5, 0.35, 9.0, 0.4)
         _write(hdr, f"Gushwork Website audit · {client_display}",
-               size=12, bold=True, color={"red": 0.42, "green": 0.45, "blue": 0.5})
-        # Big stat
+               size=12, bold=True, color=MUTED)
+
+        # Big blue stat
         stat = f"{sid}_stat"
-        _text_box(sid, stat, 0.5, 1.0, 9.0, 1.1)
+        _text_box(sid, stat, 0.5, 0.95, 9.0, 1.4)
         _write(stat, row.get("hook_stat") or "+33%",
-               size=48, bold=True, color={"red": 0.1, "green": 0.1, "blue": 0.11})
-        # Hook context
+               size=64, bold=True, color=BLUE)
+
+        # Hook context bold black
         ctx = f"{sid}_ctx"
-        _text_box(sid, ctx, 0.5, 2.2, 9.0, 0.9)
-        _write(ctx, row.get("hook_ctx") or "Increase your leads.",
-               size=22, bold=True)
-        # Formula (What We Found for intro)
+        _text_box(sid, ctx, 0.5, 2.4, 9.0, 0.8)
+        _write(ctx, row.get("hook_ctx") or "Increase your leads by 33%.",
+               size=22, bold=True, color=TEXT)
+
+        # Formula line
         if row.get("found"):
             fd = f"{sid}_found"
             _text_box(sid, fd, 0.5, 3.3, 9.0, 0.6)
-            _write(fd, row["found"], size=14,
-                   color={"red": 0.42, "green": 0.45, "blue": 0.5})
-        # Cost / example uplift
+            _write(fd, row["found"], size=14, color=MUTED)
         if row.get("costs"):
             cs = f"{sid}_costs"
             _text_box(sid, cs, 0.5, 4.0, 9.0, 1.0)
-            _write(cs, row["costs"], size=15, bold=True)
+            _write(cs, row["costs"], size=16, bold=True, color=TEXT)
 
-    # ── Finding slide (matches PDF page 2/3/4/5/6 layout) ─────────────────
+    # ── Finding slide (PDF-matched) ──────────────────────────────────────
     def _finding(row):
         sid = _slide_id()
         reqs.append({"createSlide": {"objectId": sid,
                                      "slideLayoutReference": {"predefinedLayout": "BLANK"}}})
-        # Top: Finding · Category   [priority right-aligned]
+        # Header: Finding · Category
         hdr = f"{sid}_hdr"
-        _text_box(sid, hdr, 0.5, 0.35, 6.5, 0.45)
+        _text_box(sid, hdr, 0.4, 0.3, 6.0, 0.4)
         _write(hdr, f"Finding · {row.get('category','')}",
-               size=13, bold=True,
-               color={"red": 0.42, "green": 0.45, "blue": 0.5})
-        prio_box = f"{sid}_prio"
-        _text_box(sid, prio_box, 7.0, 0.35, 2.5, 0.45)
+               size=13, bold=True, color=MUTED)
+        # Priority chip (right)
         prio = row.get("priority", "")
-        prio_color = {
-            "Critical": {"red": 0.86, "green": 0.15, "blue": 0.15},
-            "High":     {"red": 0.9,  "green": 0.4,  "blue": 0.1},
-            "Medium":   {"red": 0.85, "green": 0.6,  "blue": 0.05},
-            "Low":      {"red": 0.2,  "green": 0.55, "blue": 0.3},
-        }.get(prio, {"red": 0.4, "green": 0.4, "blue": 0.4})
-        _write(prio_box, prio, size=12, bold=True, color=prio_color, align="END")
+        if prio in PRIO_TEXT:
+            pcol = PRIO_TEXT[prio]
+            chip = f"{sid}_chip"
+            _text_box(sid, chip, 7.4, 0.3, 2.2, 0.4)
+            _write(chip, f"● {prio}", size=12, bold=True, color=pcol, align="END")
 
-        # Right side big stat + subtitle (matches PDF hero block)
+        # Big blue stat (left) + hook context wrapping to right (bold black)
         stat = f"{sid}_stat"
-        _text_box(sid, stat, 4.8, 1.05, 4.7, 1.0)
+        _text_box(sid, stat, 0.4, 0.85, 4.0, 1.6)
         _write(stat, row.get("hook_stat") or "",
-               size=44, bold=True, color={"red": 0.1, "green": 0.1, "blue": 0.11})
+               size=64, bold=True, color=BLUE)
+
+        # Hook context: bold text with the initial number highlighted in muted
         ctx = f"{sid}_ctx"
-        _text_box(sid, ctx, 4.8, 2.15, 4.7, 1.0)
-        _write(ctx, row.get("hook_ctx") or "", size=14,
-               color={"red": 0.42, "green": 0.45, "blue": 0.5})
+        _text_box(sid, ctx, 4.6, 0.9, 5.1, 1.6)
+        pct, rest = _split_stat(row.get("hook_ctx") or "")
+        if pct:
+            _write_runs(ctx, [
+                (row.get("hook_ctx",""), {"size": 18, "bold": True, "color": TEXT}),
+            ])
+        else:
+            _write(ctx, row.get("hook_ctx") or "", size=18, bold=True, color=TEXT)
 
-        # Left side "What we found" — section label + list
+        # Left card: What we found
+        wf_card = f"{sid}_wfcard"
+        _text_box(sid, wf_card, 0.4, 2.7, 5.4, 2.65,
+                  shape="RECTANGLE", fill=CARD_BG)
         wf_lbl = f"{sid}_wflbl"
-        _text_box(sid, wf_lbl, 0.5, 1.05, 4.0, 0.35)
-        _write(wf_lbl, "What we found", size=10, bold=True,
-               color={"red": 0.42, "green": 0.45, "blue": 0.5})
-        wf_body = f"{sid}_wf"
-        _text_box(sid, wf_body, 0.5, 1.4, 4.0, 2.5)
-        _write(wf_body, row.get("found") or "—", size=11)
+        _text_box(sid, wf_lbl, 0.6, 2.85, 5.0, 0.3)
+        _write(wf_lbl, "What we found", size=10, bold=True, color=MUTED)
+        # Category-right label
+        cat_lbl = f"{sid}_catlbl"
+        _text_box(sid, cat_lbl, 3.6, 2.85, 2.0, 0.3)
+        _write(cat_lbl, row.get("category",""), size=10, bold=True,
+               color=MUTED, align="END")
 
-        # Bottom "What it costs you"
-        cost_lbl = f"{sid}_costlbl"
-        _text_box(sid, cost_lbl, 0.5, 4.05, 9.0, 0.35)
-        _write(cost_lbl, "What it costs you", size=10, bold=True,
-               color={"red": 0.42, "green": 0.45, "blue": 0.5})
-        cost_body = f"{sid}_cost"
-        _text_box(sid, cost_body, 0.5, 4.4, 9.0, 0.9)
-        _write(cost_body, row.get("costs") or "", size=12, bold=True)
-        # Supporting stat (small, muted, right)
+        # URL list with status labels (right-aligned pill text)
+        urls_str = (row.get("found") or "").strip()
+        urls = [u.strip() for u in urls_str.split("\n") if u.strip()][:6]
+        # look up status label + color for this finding
+        # We only have (category, priority) in read_for_deck rows —
+        # infer key from status labels dict via category text.
+        # Since we don't preserve the finding key across the sheet round-trip,
+        # derive a status label from priority.
+        default_status = {
+            "Critical": ("Issue", "critical"),
+            "High":     ("Issue", "high"),
+            "Medium":   ("Issue", "medium"),
+            "Low":      ("Issue", "low"),
+        }.get(prio, ("Issue", "medium"))
+        status_text, status_color = default_status
+        # Try to find a better label matching the category text
+        cat_lc = (row.get("category","") or "").lower()
+        for key, (label, color) in STATUS_LABEL.items():
+            if key.replace("_", " ") in cat_lc or label.lower() in cat_lc:
+                status_text, status_color = label, color
+                break
+
+        row_y = 3.25
+        for u in urls:
+            uid = f"{sid}_u{urls.index(u)}"
+            _text_box(sid, uid, 0.7, row_y, 3.8, 0.32)
+            _write(uid, u, size=10, color=TEXT)
+            # status pill (small rounded rect look via colored text)
+            pill = f"{sid}_p{urls.index(u)}"
+            _text_box(sid, pill, 4.4, row_y - 0.02, 1.3, 0.32,
+                      shape="RECTANGLE", fill=STATUS_BG.get(status_color, CARD_BG))
+            _write(pill, status_text, size=9, bold=True,
+                   color=STATUS_TEXT.get(status_color, TEXT), align="CENTER")
+            row_y += 0.34
+
+        # Right card: What it costs you
+        cs_card = f"{sid}_cscard"
+        _text_box(sid, cs_card, 6.0, 2.7, 3.6, 1.55,
+                  shape="RECTANGLE", fill=CARD_BG)
+        cs_lbl = f"{sid}_cslbl"
+        _text_box(sid, cs_lbl, 6.2, 2.85, 3.2, 0.3)
+        _write(cs_lbl, "What it costs you", size=10, bold=True, color=MUTED)
+        cs_body = f"{sid}_csbody"
+        _text_box(sid, cs_body, 6.2, 3.2, 3.2, 1.1)
+        _write(cs_body, row.get("costs","") or "", size=12, bold=True, color=TEXT)
+
+        # Supporting stat card (below Costs card)
         if row.get("support"):
-            sup = f"{sid}_sup"
-            _text_box(sid, sup, 0.5, 5.15, 9.0, 0.35)
-            _write(sup, row["support"], size=10,
-                   color={"red": 0.42, "green": 0.45, "blue": 0.5})
+            sup_card = f"{sid}_supcard"
+            _text_box(sid, sup_card, 6.0, 4.35, 3.6, 1.0,
+                      shape="RECTANGLE", fill=CARD_BG)
+            sup_txt = f"{sid}_sup"
+            _text_box(sid, sup_txt, 6.2, 4.45, 3.2, 0.85)
+            sup_pct, sup_rest = _split_stat(row["support"])
+            if sup_pct:
+                _write_runs(sup_txt, [
+                    (sup_pct + " ", {"size": 26, "bold": True, "color": BLUE}),
+                    (sup_rest,      {"size": 11, "bold": True, "color": TEXT}),
+                ])
+            else:
+                _write(sup_txt, row["support"], size=12, bold=True, color=TEXT)
 
-    # ── Ending slide ───────────────────────────────────────────────────────
+    # ── Ending slide ─────────────────────────────────────────────────────
     def _ending(row):
         sid = _slide_id()
         reqs.append({"createSlide": {"objectId": sid,
                                      "slideLayoutReference": {"predefinedLayout": "BLANK"}}})
         hdr = f"{sid}_hdr"
         _text_box(sid, hdr, 0.5, 0.4, 9.0, 0.4)
-        _write(hdr, f"Gushwork · {client_display}", size=13, bold=True,
-               color={"red": 0.42, "green": 0.45, "blue": 0.5})
+        _write(hdr, f"Gushwork · {client_display}", size=13, bold=True, color=MUTED)
         big = f"{sid}_big"
-        _text_box(sid, big, 0.5, 1.4, 9.0, 2.5)
-        _write(big, row.get("hook_ctx") or "Approve the audit fixes.",
-               size=28, bold=True)
+        _text_box(sid, big, 0.5, 1.3, 9.0, 2.0)
+        pct, rest = _split_stat(row.get("hook_ctx") or "")
+        if pct:
+            _write_runs(big, [
+                (pct + " ", {"size": 60, "bold": True, "color": BLUE}),
+                (rest,      {"size": 22, "bold": True, "color": TEXT}),
+            ])
+        else:
+            _write(big, row.get("hook_ctx") or "Approve the audit fixes.",
+                   size=28, bold=True, color=TEXT)
         cta = f"{sid}_cta"
-        _text_box(sid, cta, 0.5, 4.1, 9.0, 0.9)
+        _text_box(sid, cta, 0.5, 4.0, 9.0, 1.0)
         _write(cta, row.get("costs") or "Approve the audit fixes.",
-               size=20, bold=True, color={"red": 0.42, "green": 0.45, "blue": 0.5})
+               size=18, bold=True, color=MUTED)
 
-    # ── Projected Impact slide (from plan tier) ────────────────────────────
+    # ── Projected Impact slide ────────────────────────────────────────────
     def _impact(plan_tier):
         tier = PLAN_TIERS[plan_tier]
         sid = _slide_id()
@@ -630,8 +760,7 @@ def _build_slides_requests(obs_rows, client_display, meta):
                                      "slideLayoutReference": {"predefinedLayout": "BLANK"}}})
         hdr = f"{sid}_hdr"
         _text_box(sid, hdr, 0.5, 0.4, 9.0, 0.4)
-        _write(hdr, "Projected Impact", size=13, bold=True,
-               color={"red": 0.42, "green": 0.45, "blue": 0.5})
+        _write(hdr, "Projected Impact", size=13, bold=True, color=MUTED)
         body = f"{sid}_b"
         _text_box(sid, body, 0.5, 1.1, 9.0, 4.0)
         _write(body,
@@ -640,7 +769,7 @@ def _build_slides_requests(obs_rows, client_display, meta):
                f"Month 6-7:   {tier['M6-7']} leads / month\n"
                f"Month 9-10:  {tier['M9-10']} leads / month\n\n"
                "Cost per lead expected to drop ~5% vs current spend.",
-               size=14)
+               size=14, color=TEXT)
 
     # Order by Slide # from the sheet; only rows marked Approved
     approved = [r for r in obs_rows if r.get("approved")]
