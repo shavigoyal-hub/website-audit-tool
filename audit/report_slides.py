@@ -368,7 +368,7 @@ def build(deck_title, obs_rows, client_display="", meta=None, pdf_out_path=None)
         #    creates a Google Doc, which then 404s on Slides batchUpdate).
         try:
             result = _cx_proxy(
-                endpoint="/v1/presentations",
+                endpoint="https://slides.googleapis.com/v1/presentations",
                 method="POST",
                 body={"title": deck_title},
                 toolkit="googleslides",

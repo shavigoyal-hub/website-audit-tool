@@ -328,7 +328,7 @@ def _apply_dimensions(sid, sheet_id, obs_data):
                       "startColumnIndex": 0, "endColumnIndex": ncols}}}})
     try:
         _composio_proxy(
-            endpoint=f"/v4/spreadsheets/{sid}:batchUpdate",
+            endpoint=f"https://sheets.googleapis.com/v4/spreadsheets/{sid}:batchUpdate",
             method="POST",
             body={"requests": requests_},
         )
