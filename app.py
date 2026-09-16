@@ -10,7 +10,7 @@ import traceback
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file
 
-from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_pdf, sf_csv, history
+from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_pdf, deck_html, sf_csv, history
 from audit.version import VERSION
 
 app = Flask(__name__)
@@ -191,26 +191,37 @@ def build_deck():
         client_display = re.sub(r"\.[^.]+$", "", domain).replace(".", " ").title()
 
         os.makedirs(OUTPUT_ROOT, exist_ok=True)
-        pdf_name = re.sub(r"[^a-z0-9]+", "_", client_display.lower()) + "_audit.pdf"
-        pdf_path = os.path.join(OUTPUT_ROOT, pdf_name)
-        result = report_pdf.build(pdf_path, obs_rows,
-                                  client_display=client_display, meta=meta)
-        if not result:
+        slug = re.sub(r"[^a-z0-9]+", "_", client_display.lower()) or "audit"
+        html_name = f"{slug}_deck.html"
+        html_path = os.path.join(OUTPUT_ROOT, html_name)
+        try:
+            html_body = deck_html.render(obs_rows, client_display, meta=meta)
+            with open(html_path, "w") as fh:
+                fh.write(html_body)
+        except Exception:
             return jsonify({
-                "error": "PDF generation failed. Check logs.",
-                "rows_approved": sum(1 for r in obs_rows if r.get("approved")),
-                "rows_total": len(obs_rows),
+                "error": "Deck HTML render failed.",
+                "traceback": traceback.format_exc()[:2000],
             }), 500
 
+        # Also build the reportlab PDF as a downloadable alternative
+        pdf_name = f"{slug}_audit.pdf"
+        pdf_path = os.path.join(OUTPUT_ROOT, pdf_name)
+        pdf_ok = report_pdf.build(pdf_path, obs_rows,
+                                  client_display=client_display, meta=meta)
+
+        deck_url = request.host_url.rstrip("/") + f"/deck/{html_name}"
         resp = {
             "ok": True,
             "version": VERSION,
-            "pdf": pdf_name,
-            "message": f"PDF built from reviewed sheet ({len(obs_rows)} slides).",
+            "deck_url": deck_url,
+            "message": f"Deck built ({len(obs_rows)} pages). Open in browser, then Print → Save as PDF for a pixel-perfect PDF.",
         }
+        if pdf_ok:
+            resp["pdf"] = pdf_name
         try:
-            pdf_url = request.host_url.rstrip("/") + f"/download/{pdf_name}"
-            history.update_deck(sheet_url, "", pdf_url)
+            history.update_deck(sheet_url, deck_url,
+                                 request.host_url.rstrip("/") + f"/download/{pdf_name}" if pdf_ok else "")
         except Exception as exc:
             print(f"[history] update_deck failed: {exc}")
         return jsonify(resp)
@@ -257,6 +268,17 @@ def health():
         info["sheets_ready"] = False
         info["sheets_error"] = str(exc)[:200]
     return jsonify(info)
+
+
+@app.route("/deck/<path:filename>")
+def deck(filename):
+    """Serve a rendered deck HTML page inline so browsers render it directly."""
+    if "/" in filename or "\\" in filename or ".." in filename:
+        return jsonify({"error": "Invalid filename"}), 400
+    abs_path = os.path.join(OUTPUT_ROOT, filename)
+    if not os.path.exists(abs_path):
+        return jsonify({"error": f"Deck not found at {abs_path}"}), 404
+    return send_file(abs_path, as_attachment=False, mimetype="text/html")
 
 
 @app.route("/download/<path:filename>")

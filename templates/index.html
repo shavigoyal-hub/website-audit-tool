@@ -252,8 +252,12 @@
           result.style.border = "1px solid #86efac";
           result.style.color = "#166534";
           let links = "";
+          if (data.deck_url) {
+            links = `<a href="${data.deck_url}" target="_blank" style="color:#166534;font-weight:700">🖼 Open Deck (styled HTML)</a>`;
+          }
           if (data.pdf) {
-            links = `<a href="/download/${encodeURIComponent(data.pdf)}" style="color:#166534;font-weight:700">⬇ Download PDF</a>`;
+            links += (links ? `&nbsp;&nbsp;|&nbsp;&nbsp;` : "") +
+              `<a href="/download/${encodeURIComponent(data.pdf)}" style="color:#166534;font-weight:700">⬇ Download PDF</a>`;
           }
           result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}`;
         } else {
