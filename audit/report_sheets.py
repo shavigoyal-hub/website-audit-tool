@@ -13,6 +13,7 @@ import os
 from audit.composio_exec import execute as _composio_execute
 from audit.composio_exec import reset_trace as _reset_trace, LAST_TRACE
 from audit.hook_copy import for_row as _hook_for
+from audit.hook_copy import STATUS_LABEL as _STATUS_LABEL
 
 _SHARE_DOMAIN = "gushwork.ai"
 
@@ -367,20 +368,25 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         # Intro row (Sheets row 2 → Hook Stat cell = E2)
         obs_data.append([
             "Intro — cover slide",
-            "Cover / hook slide — CS edits messaging",
+            "Same pages. Same website.",   # subtitle rendered under hero
             "", "",
             "+33%",
-            '=E2&" "&"Increase your leads. Same pages. Same website."',
-            "e.g. Meta descriptions +5.8% + Structured data +25% = +33%",
-            "If you get 10 leads today → 14 leads. Before any ranking gains.",
+            'Increase your leads by +33%',
+            "+5.8% Meta descriptions  ×  +25% Structured data  =  +33% More leads",
+            "10 leads → 14 leads. Same pages, same website. Before any ranking gains.",
             "",
         ])
 
-        # Finding rows — Hook Context references Hook Stat in column E
+        # Finding rows — Hook Context references Hook Stat in column E.
+        # "What We Found" is seeded as "URL | STATUS_LABEL" per line so the
+        # PDF can render a colored status pill per URL.
         for r in obs_rows:
             key = r.get("key", "")
             copy = _hook_for(key, r.get("observation", ""), r.get("impact", ""))
-            ref  = r.get("reference", "") or ""
+            status_label, _ = _STATUS_LABEL.get(key, ("Issue", "medium"))
+            ref = r.get("reference", "") or ""
+            urls = [u.strip() for u in ref.split("\n") if u.strip()]
+            found_with_labels = "\n".join(f"{u} | {status_label}" for u in urls[:6])
             sheet_row = len(obs_data) + 1
             ctx_body = copy["hook_ctx"].replace('"', '""')
             hook_ctx_formula = f'=E{sheet_row}&" "&"{ctx_body}"'
@@ -391,19 +397,18 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 r.get("impact", ""),
                 copy["hook_stat"],
                 hook_ctx_formula,
-                ref,                    # 'What we found' seeded with page list
+                found_with_labels,      # URL | STATUS per line
                 copy["costs"],
                 copy["support"],
             ])
 
         # Ending row
-        end_row = len(obs_data) + 1
         obs_data.append([
             "Ending — CTA slide",
             "CTA / closing slide — CS edits messaging",
             "", "",
-            "4 extra leads / month",
-            f'=E{end_row}&" "&"— every month you wait, you lose out from the same pages."',
+            "4 extra leads",
+            "4 extra leads / month lost from the same pages, every month you wait.",
             "",
             "Approve the audit fixes.",
             "",
