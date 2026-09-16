@@ -183,12 +183,28 @@ def build_deck():
             if v:
                 meta[k] = v
 
-        # Derive client display from live URL
+        # Derive client display — prefer sheet title ("<Client> SEO Audit — <date>"),
+        # then live URL from Meta, then fallback.
         import datetime, re
-        live = meta.get("live_url") or ""
-        m = re.match(r"https?://(?:www\.)?([^/]+)", live)
-        domain = m.group(1) if m else "audit"
-        client_display = re.sub(r"\.[^.]+$", "", domain).replace(".", " ").title()
+        client_display = None
+        try:
+            from audit.report_sheets import _extract_sheet_id
+            from audit.composio_exec import execute as _cx
+            sid = _extract_sheet_id(sheet_url)
+            if sid:
+                info = _cx("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                          {"spreadsheet_id": sid}) or {}
+                title = (info.get("properties") or {}).get("title", "")
+                m = re.match(r"^(.*?)\s+SEO Audit", title)
+                if m:
+                    client_display = m.group(1).strip()
+        except Exception as exc:
+            print(f"[deck] get sheet title failed: {exc}")
+        if not client_display:
+            live = meta.get("live_url") or ""
+            m = re.match(r"https?://(?:www\.)?([^/]+)", live)
+            domain = m.group(1) if m else "audit"
+            client_display = re.sub(r"\.[^.]+$", "", domain).replace(".", " ").title()
 
         os.makedirs(OUTPUT_ROOT, exist_ok=True)
         slug = re.sub(r"[^a-z0-9]+", "_", client_display.lower()) or "audit"
