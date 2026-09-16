@@ -251,9 +251,9 @@
           result.style.background = "#f0fdf4";
           result.style.border = "1px solid #86efac";
           result.style.color = "#166534";
-          let links = `<a href="${data.slide_url}" target="_blank" style="color:#166534;font-weight:700">📽 Open Slides Deck</a>`;
+          let links = "";
           if (data.pdf) {
-            links += `&nbsp;&nbsp;|&nbsp;&nbsp;<a href="/download/${encodeURIComponent(data.pdf)}" style="color:#166534;font-weight:700">⬇ Download PDF</a>`;
+            links = `<a href="/download/${encodeURIComponent(data.pdf)}" style="color:#166534;font-weight:700">⬇ Download PDF</a>`;
           }
           result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}`;
         } else {

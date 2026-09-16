@@ -10,7 +10,7 @@ import traceback
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file
 
-from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_slides, sf_csv, history
+from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_pdf, sf_csv, history
 from audit.version import VERSION
 
 app = Flask(__name__)
@@ -190,20 +190,14 @@ def build_deck():
         domain = m.group(1) if m else "audit"
         client_display = re.sub(r"\.[^.]+$", "", domain).replace(".", " ").title()
 
-        deck_title = f"{client_display} Tech Audit — {datetime.date.today()}"
         os.makedirs(OUTPUT_ROOT, exist_ok=True)
         pdf_name = re.sub(r"[^a-z0-9]+", "_", client_display.lower()) + "_audit.pdf"
         pdf_path = os.path.join(OUTPUT_ROOT, pdf_name)
-        from audit import composio_exec
-        composio_exec.reset_trace()
-        result = report_slides.build(
-            deck_title, obs_rows, client_display=client_display, meta=meta,
-            pdf_out_path=pdf_path,
-        )
-        if not result or not result.get("slide_url"):
+        result = report_pdf.build(pdf_path, obs_rows,
+                                  client_display=client_display, meta=meta)
+        if not result:
             return jsonify({
-                "error": "Deck creation failed.",
-                "composio_debug": {"trace": composio_exec.LAST_TRACE[-15:]},
+                "error": "PDF generation failed. Check logs.",
                 "rows_approved": sum(1 for r in obs_rows if r.get("approved")),
                 "rows_total": len(obs_rows),
             }), 500
@@ -211,15 +205,12 @@ def build_deck():
         resp = {
             "ok": True,
             "version": VERSION,
-            "slide_url": result["slide_url"],
-            "message": "Deck built from reviewed sheet.",
+            "pdf": pdf_name,
+            "message": f"PDF built from reviewed sheet ({len(obs_rows)} slides).",
         }
-        if result.get("pdf_path"):
-            resp["pdf"] = pdf_name
-            resp["message"] += " PDF export ready."
         try:
-            history.update_deck(sheet_url, result["slide_url"],
-                                request.host_url.rstrip("/") + f"/download/{pdf_name}" if result.get("pdf_path") else "")
+            pdf_url = request.host_url.rstrip("/") + f"/download/{pdf_name}"
+            history.update_deck(sheet_url, "", pdf_url)
         except Exception as exc:
             print(f"[history] update_deck failed: {exc}")
         return jsonify(resp)
