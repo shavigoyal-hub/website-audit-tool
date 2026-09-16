@@ -405,8 +405,52 @@ def build(deck_title, obs_rows, client_display="", meta=None, pdf_out_path=None)
             print(f"[slides] share failed (non-fatal): {exc}")
 
         slide_url = f"https://docs.google.com/presentation/d/{deck_id}"
-        # PDF export via Composio isn't available as a named action; skip.
-        return {"slide_url": slide_url, "pdf_path": None}
+
+        # PDF export via Drive's files.export endpoint (via proxy).
+        # Composio has no named action for binary export, so we go raw.
+        pdf_saved = None
+        if pdf_out_path:
+            try:
+                import requests as _rq
+                from audit.composio_exec import (
+                    _api_key as _get_key, _find_connection_id,
+                    LAST_TRACE as _trace,
+                )
+                key = _get_key()
+                conn = _find_connection_id("googledrive") or _find_connection_id("googleslides")
+                if key and conn:
+                    payload = {
+                        "endpoint": f"https://www.googleapis.com/drive/v3/files/{deck_id}/export?mimeType=application/pdf",
+                        "method": "GET",
+                        "connected_account_id": conn,
+                    }
+                    resp = _rq.post(
+                        "https://backend.composio.dev/api/v3.1/tools/execute/proxy",
+                        headers={"x-api-key": key, "Content-Type": "application/json"},
+                        json=payload, timeout=90,
+                    )
+                    _trace.append({"slug": "PROXY GET drive/export pdf",
+                                   "connected_account_id": conn,
+                                   "status": resp.status_code,
+                                   "body_preview": resp.text[:200]})
+                    if resp.ok:
+                        # Composio wraps the response — the raw file bytes come
+                        # back inside data.data as a base64 string (or hex).
+                        parsed = resp.json()
+                        raw = ((parsed or {}).get("data") or {}).get("data")
+                        if isinstance(raw, str):
+                            import base64
+                            try:
+                                pdf_bytes = base64.b64decode(raw)
+                            except Exception:
+                                pdf_bytes = raw.encode("latin-1", errors="ignore")
+                            with open(pdf_out_path, "wb") as fh:
+                                fh.write(pdf_bytes)
+                            pdf_saved = pdf_out_path
+            except Exception as exc:
+                print(f"[slides] pdf export (non-fatal): {exc}")
+
+        return {"slide_url": slide_url, "pdf_path": pdf_saved}
 
     except Exception as exc:
         import traceback as _tb
