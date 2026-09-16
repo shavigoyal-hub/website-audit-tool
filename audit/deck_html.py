@@ -129,8 +129,15 @@ def _parse_formula_terms(formula):
     return terms
 
 
+GUSHWORK_LOGO_SVG = (
+    '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">'
+    '<rect x="0" y="0" width="100" height="100" rx="22" fill="#1868ff"/>'
+    # Single diagonal white parallelogram — slanted from top-right to bottom-left
+    '<path d="M62 22 L78 22 L38 78 L22 78 Z" fill="#ffffff"/>'
+    '</svg>'
+)
 BRAND_MARK = ('<span class="brand-mark">'
-              '<span class="logo"></span>Gushwork</span>')
+              f'<span class="logo">{GUSHWORK_LOGO_SVG}</span>Gushwork</span>')
 
 
 def _render_intro(row, client_display):
@@ -429,15 +436,8 @@ html, body {
   font-size: 16pt; font-weight: 700; letter-spacing: -0.015em;
   color: var(--text);
 }
-.brand-mark .logo {
-  width: 26px; height: 26px; border-radius: 6px;
-  background: var(--blue); position: relative;
-}
-.brand-mark .logo::after {
-  content: ""; position: absolute; inset: 0;
-  background: linear-gradient(45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%);
-  border-radius: 6px;
-}
+.brand-mark .logo { width: 30px; height: 30px; display: block; }
+.brand-mark .logo svg { width: 100%; height: 100%; display: block; }
 .top-nav .domain {
   font-size: 12pt; color: var(--muted); font-weight: 500;
 }
@@ -445,7 +445,7 @@ html, body {
   color: var(--text); font-weight: 700;
 }
 /* Small grey line for finding pages */
-.head-line { font-size: 11pt; font-weight: 500; color: var(--muted); letter-spacing: -0.005em; }
+.head-line { font-size: 13pt; font-weight: 500; color: var(--muted); letter-spacing: -0.005em; }
 
 /* ── Intro ──────────────────────────────────────────────────────────── */
 .intro-body { display: flex; gap: 60px; align-items: flex-start; margin-top: 30px; }
@@ -503,8 +503,8 @@ html, body {
 .head-right { display: flex; gap: 8px; }
 .chip {
   display: inline-flex; align-items: center; gap: 7px;
-  padding: 4px 10px; border-radius: 5px;
-  font-size: 9.5pt; font-weight: 500; line-height: 1;
+  padding: 5px 12px; border-radius: 5px;
+  font-size: 10.5pt; font-weight: 500; line-height: 1;
   background: var(--white); border: 1px solid;
 }
 .chip .dot { width: 7px; height: 7px; border-radius: 50%; }
@@ -518,14 +518,14 @@ html, body {
   margin: 32px 0 34px;
 }
 .hero-stat {
-  font-size: 108pt; font-weight: 700; color: var(--blue);
-  line-height: 0.92; letter-spacing: -0.05em;
+  font-size: 104pt; font-weight: 700; color: var(--blue);
+  line-height: 0.9; letter-spacing: -0.055em;
   flex-shrink: 0;
 }
 .hero-stat.zero { color: var(--red); }
 .hero-ctx  {
-  font-size: 26pt; font-weight: 700; line-height: 1.1; flex: 1;
-  letter-spacing: -0.024em; padding-top: 18px;
+  font-size: 32pt; font-weight: 700; line-height: 1.08; flex: 1;
+  letter-spacing: -0.028em; padding-top: 12px;
   color: var(--muted);
 }
 .hero-ctx .headline { color: var(--text); }
@@ -541,27 +541,27 @@ html, body {
 .card-col { flex: 1; display: flex; flex-direction: column; gap: 12px; }
 .card-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
 .card-label {
-  font-size: 9.5pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
+  font-size: 11pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
 }
 .card-body {
-  font-size: 12pt; font-weight: 500; line-height: 1.4;
+  font-size: 15pt; font-weight: 500; line-height: 1.4;
   color: var(--text);
 }
 .wf-list { list-style: none; }
 .wf-list li {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 0; border-top: 1px solid #e0e2e6;
+  padding: 12px 0; border-top: 1px solid #e0e2e6;
 }
-.wf-list li:first-child { border-top: 0; padding-top: 4px; }
+.wf-list li:first-child { border-top: 0; padding-top: 6px; }
 .wf-url {
-  font-size: 10pt; color: var(--text); overflow: hidden;
+  font-size: 12pt; color: var(--text); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; padding-right: 16px;
   font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   font-weight: 400;
 }
 .pill {
-  display: inline-block; padding: 3px 10px; border-radius: 5px;
-  font-size: 8.5pt; font-weight: 500; white-space: nowrap;
+  display: inline-block; padding: 4px 11px; border-radius: 5px;
+  font-size: 10pt; font-weight: 500; white-space: nowrap;
   border: 1px solid;
 }
 .pill-red   { background: #fdecec; color: #c8102e; border-color: #f5b6b6; }
@@ -571,11 +571,11 @@ html, body {
 /* Supporting stat card — big blue number, bold dark first sentence, muted rest */
 .card-sup { }
 .sup-num  {
-  font-size: 32pt; font-weight: 700; color: var(--blue); line-height: 1;
-  letter-spacing: -0.03em; margin-bottom: 6px; display: block;
+  font-size: 44pt; font-weight: 700; color: var(--blue); line-height: 1;
+  letter-spacing: -0.03em; margin-bottom: 8px; display: block;
 }
 .sup-rest {
-  font-size: 10pt; line-height: 1.4;
+  font-size: 12pt; line-height: 1.4;
   color: var(--muted); font-weight: 500;
 }
 .sup-rest .headline { color: var(--text); font-weight: 700; }
