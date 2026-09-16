@@ -92,7 +92,9 @@ def _fmt_hook_ctx(ctx, hook_stat):
 
 
 def _split_lines(cell):
-    return [l.strip() for l in (cell or "").split("\n") if l.strip()]
+    # Normalize both Windows-style and Mac-classic line endings.
+    text = (cell or "").replace("\r\n", "\n").replace("\r", "\n")
+    return [l.strip() for l in text.split("\n") if l.strip()]
 
 
 def _domain_from(client_display):
@@ -699,6 +701,23 @@ def render(obs_rows, client_display, meta=None):
     if ending:
         page_no += 1
         parts.append(_render_ending(ending[0], client_display))
+
+    # Sheet has no data → render a friendly empty state instead of a blank page
+    if not parts:
+        parts.append(f"""
+        <section class="page intro">
+          <div class="top-nav">
+            {BRAND_MARK}
+            <div class="domain">Website audit · <b>{_html.escape(client_display or 'no data')}</b></div>
+          </div>
+          <div class="intro-body">
+            <div class="intro-left">
+              <div class="hero-heading">No findings yet</div>
+              <div class="hero-sub">Run an audit first, then edit the sheet and rebuild the deck.</div>
+            </div>
+          </div>
+        </section>
+        """)
 
     return f"""<!DOCTYPE html>
 <html lang="en">

@@ -3,7 +3,7 @@
 Bump when observation rules, catalog copy, or output structure change so
 you can tell which build produced a given audit artifact.
 """
-VERSION = "2026-09-17.1"
+VERSION = "2026-09-17.2"
 
 # Plan tier → expected leads per month at month 3-4 / 6-7 / 9-10
 # Source: internal Gushwork projection chart. Plan number = $ / month spend.
