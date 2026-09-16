@@ -95,11 +95,11 @@ def _split_lines(cell):
 
 
 def _domain_from(client_display):
-    """Best-effort site domain, e.g. 'Gushwork' -> 'gushwork.ai'."""
-    d = (client_display or "").strip().lower()
-    if not d: return ""
-    if "." in d: return d
-    return d.replace(" ", "") + ".ai" if d == "gushwork" else d + ".com"
+    """Return the site domain if `client_display` looks like one, else the
+    label unchanged. We don't invent TLDs anymore — /build-deck extracts the
+    real domain from the sheet title.
+    """
+    return (client_display or "").strip().lower()
 
 
 def _parse_formula_terms(formula):
@@ -239,9 +239,10 @@ def _render_finding(row, page_no, total_pages, client_display):
     costs     = row.get("costs", "")
     support   = row.get("support", "")
 
-    # Strip the duplicated leading number from hook_ctx if it repeats hook_stat.
-    if hook_stat and hook_ctx.startswith(hook_stat):
-        hook_ctx = hook_ctx[len(hook_stat):].lstrip()
+    # Strip a duplicated leading number from hook_ctx. Handles both the
+    # original stat ('-15%') and its Sheets-formatted equivalent ('-15.0%').
+    import re as _re
+    hook_ctx = _re.sub(r"^\s*[+\-]?\d+(?:\.\d+)?%?\s+", "", hook_ctx)
 
     # URL rows with pills. Skip generic "- Issue" rows.
     rows_html = []

@@ -121,7 +121,9 @@ def run_audit():
         notes.extend(f"Not evaluated : {x}" for x in site["na"])
 
         import datetime
-        sheet_title = f"{client_name.replace('_', ' ').title()} SEO Audit — {datetime.date.today()}"
+        # Include the full domain (with TLD) in the title so /build-deck can
+        # recover the real .org/.ai/etc — otherwise it defaults to guessing.
+        sheet_title = f"{domain} SEO Audit — {datetime.date.today()}"
         meta = {
             "version":       VERSION,
             "generated":     datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
@@ -338,7 +340,7 @@ def deck_render(sheet_url=None):
             title = (info.get("properties") or {}).get("title", "")
             m = re.match(r"^(.*?)\s+SEO Audit", title)
             if m:
-                client_display = m.group(1).strip()
+                client_display = m.group(1).strip().lower()
     except Exception:
         pass
     if not client_display:

@@ -406,11 +406,17 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             found_with_labels = "\n".join(f"{u} | {status_label}" for u in urls[:6])
             sheet_row = len(obs_data) + 1
             ctx_body = copy["hook_ctx"].replace('"', '""')
-            # E<row> is Hook Stat. Wrap it with IFERROR(TEXT(...,"+0.0%;-0.0%")..., E<row>)
-            # so numeric stats keep their sign/% and text stats pass through.
+            # Formula rules:
+            #   - Empty stat → just the context (no leading "0%").
+            #   - Numeric stat (Sheets auto-parses "-15%" as -0.15)
+            #     → format WITHOUT forced trailing zero and prefix in blue-worthy form.
+            #   - Text stat → pass through as-is.
+            # Google Sheets number format #.#% strips trailing zeros:
+            #   -0.15 → "-15%",   -0.083 → "-8.3%",   0.058 → "5.8%"
             hook_ctx_formula = (
-                f'=IFERROR(TEXT(E{sheet_row},"+0.0%;-0.0%;0%"),E{sheet_row})'
-                f'&" "&"{ctx_body}"'
+                f'=IF(E{sheet_row}="","{ctx_body}",'
+                f'IFERROR(TEXT(E{sheet_row},"+#.#%;-#.#%;0%")&" "&"{ctx_body}",'
+                f'E{sheet_row}&" "&"{ctx_body}"))'
             )
             obs_data.append([
                 r.get("category", ""),
@@ -424,15 +430,16 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 copy["support"],
             ])
 
-        # Ending row
+        # Ending row — Observation is the subline shown under the hero, so
+        # keep it as real ending copy (not a placeholder).
         obs_data.append([
             "Ending — CTA slide",
-            "CTA / closing slide — CS edits messaging",
+            "The searchers are already there. Let's make sure they land with you.",
             "", "",
             "4 extra leads",
-            "4 extra leads / month lost from the same pages, every month you wait.",
+            "Every month you wait, you lose out on 4 extra leads from the same pages.",
             "",
-            "Approve the audit fixes.",
+            "Approve the audit fixes",
             "",
         ])
         # 4) Import the styled HTML into the sheet — Drive converts HTML with
