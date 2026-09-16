@@ -216,7 +216,7 @@ _PRIORITY_HEX   = {
     "Critical": "#f4cccc",
     "High":     "#fce5cd",
     "Medium":   "#fff2cc",
-    "Low":      "#d9ead3",
+    "Low":      "#cfe2f3",  # light blue — green reads as 'passing', which Low is not
 }
 
 
@@ -320,6 +320,12 @@ def _apply_dimensions(sid, sheet_id, obs_data):
             "range": {"sheetId": sheet_id, "dimension": "ROWS",
                       "startIndex": 1, "endIndex": len(obs_data)},
             "properties": {"pixelSize": 90}, "fields": "pixelSize"}})
+    # Header-row filter (Sheets shows the dropdown funnel icons in row 1)
+    requests_.append({"setBasicFilter": {
+        "filter": {
+            "range": {"sheetId": sheet_id,
+                      "startRowIndex": 0, "endRowIndex": len(obs_data),
+                      "startColumnIndex": 0, "endColumnIndex": ncols}}}})
     try:
         _composio_proxy(
             endpoint=f"/v4/spreadsheets/{sid}:batchUpdate",
