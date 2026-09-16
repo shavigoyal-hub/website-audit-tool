@@ -435,7 +435,8 @@ def _build_slides_requests(obs_rows, client_display, meta):
     slide_counter = [0]
     def _slide_id():
         slide_counter[0] += 1
-        return f"s{slide_counter[0]}"
+        # Slides API requires objectId length >= 5.
+        return f"slide{slide_counter[0]:04d}"
 
     def _text_box(page_id, box_id, x, y, w, h):
         reqs.append({"createShape": {
