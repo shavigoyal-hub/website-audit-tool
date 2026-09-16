@@ -94,6 +94,14 @@ def _split_lines(cell):
     return [l.strip() for l in (cell or "").split("\n") if l.strip()]
 
 
+def _domain_from(client_display):
+    """Best-effort site domain, e.g. 'Gushwork' -> 'gushwork.ai'."""
+    d = (client_display or "").strip().lower()
+    if not d: return ""
+    if "." in d: return d
+    return d.replace(" ", "") + ".ai" if d == "gushwork" else d + ".com"
+
+
 def _render_intro(row, client_display):
     hook_stat = row.get("hook_stat") or "+33%"
     hook_ctx  = row.get("hook_ctx") or "Increase your leads"
@@ -101,7 +109,6 @@ def _render_intro(row, client_display):
     formula   = row.get("found") or ""
     example   = row.get("costs") or ""
 
-    # Try to color-highlight the stat portion inline
     ctx_html = _html.escape(hook_ctx)
     if hook_stat and hook_stat in hook_ctx:
         parts = hook_ctx.split(hook_stat, 1)
@@ -109,9 +116,10 @@ def _render_intro(row, client_display):
                     + f"<span class='blue'>{_html.escape(hook_stat)}</span>"
                     + _html.escape(parts[1] if len(parts) > 1 else ""))
 
+    site_domain = _domain_from(client_display)
     return f"""
     <section class="page intro">
-      <div class="head-line">Gushwork Website audit · {_html.escape(client_display)}</div>
+      <div class="head-line">Gushwork Website audit · {_html.escape(site_domain or client_display)}</div>
       <div class="intro-hero">
         <div class="hero-heading">{ctx_html}</div>
         <div class="hero-sub">{_html.escape(subtitle)}</div>
@@ -119,7 +127,7 @@ def _render_intro(row, client_display):
       <div class="intro-formula">{_html.escape(formula)}</div>
       <div class="intro-example">{_html.escape(example)}</div>
       <div class="intro-footer">
-        <div class="foot-col"><div class="foot-label">Site audited</div><div class="foot-val">{_html.escape(client_display)}</div></div>
+        <div class="foot-col"><div class="foot-label">Site audited</div><div class="foot-val">{_html.escape(site_domain or client_display)}</div></div>
         <div class="foot-col right"><div class="foot-label">Prepared by</div><div class="foot-val">Gushwork</div></div>
       </div>
     </section>
@@ -159,8 +167,13 @@ def _render_finding(row, page_no, total_pages, client_display):
         else:
             sup_html = f"<div class='sup-rest'>{_html.escape(support)}</div>"
 
-    # Normalize the hero stat too
-    hook_stat_clean = _fmt_leading_num(hook_stat) if hook_stat else ""
+    # Normalize the hero stat too. For findings without a % (About page,
+    # HTTPS redirect, WWW redirect, FAQ, Crawl budget etc.) show a bold
+    # "Fix →" label so the hero doesn't collapse.
+    if hook_stat:
+        hook_stat_clean = _fmt_leading_num(hook_stat)
+    else:
+        hook_stat_clean = "Fix →"
 
     prio_chip = ""
     if priority:
@@ -204,15 +217,28 @@ def _render_finding(row, page_no, total_pages, client_display):
 def _render_ending(row, client_display):
     ctx  = row.get("hook_ctx") or "Approve the audit fixes."
     cta  = row.get("costs") or "Approve the audit fixes."
+    site_domain = _domain_from(client_display)
     import re
-    m = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?)\s+(.*)$", ctx)
-    ctx_html = _html.escape(ctx)
+    # Highlight the number + noun phrase in blue (e.g. "4 extra leads / month")
+    m = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?\s+(?:extra\s+)?(?:\w+\s+){0,4}(?:leads|traffic|clicks|rankings|conversions))\b(.*)$",
+                 ctx, re.IGNORECASE)
     if m:
-        ctx_html = (f"<span class='blue'>{_html.escape(m.group(1))}</span> "
+        ctx_html = (f"<span class='blue'>{_html.escape(m.group(1))}</span>"
                     f"{_html.escape(m.group(2))}")
+    else:
+        m2 = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?)(\s.*)$", ctx)
+        if m2:
+            ctx_html = (f"<span class='blue'>{_html.escape(m2.group(1))}</span>"
+                        f"{_html.escape(m2.group(2))}")
+        else:
+            ctx_html = _html.escape(ctx)
+    # Header: drop duplicate when client_display already starts with "Gushwork"
+    header_label = site_domain or client_display
+    header_line = ("Gushwork" if header_label.lower().startswith("gushwork")
+                   else f"Gushwork · {header_label}")
     return f"""
     <section class="page ending">
-      <div class="head-line">Gushwork · {_html.escape(client_display)}</div>
+      <div class="head-line">{_html.escape(header_line)}</div>
       <div class="ending-hero">{ctx_html}</div>
       <div class="ending-cta">{_html.escape(cta)}</div>
     </section>
