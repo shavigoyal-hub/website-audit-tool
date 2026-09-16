@@ -225,7 +225,11 @@ def build_deck():
                 "traceback": traceback.format_exc()[:2000],
             }), 500
 
-        deck_url = request.host_url.rstrip("/") + f"/deck/{html_name}"
+        # On-the-fly deck URL — Vercel's /tmp file isn't reachable from the
+        # next request, so we point at /deck?sheet=… which re-renders live.
+        from urllib.parse import quote
+        deck_url = (request.host_url.rstrip("/")
+                    + f"/deck?sheet={quote(sheet_url, safe=':/?&=')}")
         resp = {
             "ok": True,
             "version": VERSION,
@@ -283,14 +287,64 @@ def health():
 
 
 @app.route("/deck/<path:filename>")
-def deck(filename):
-    """Serve a rendered deck HTML page inline so browsers render it directly."""
+def deck_file(filename):
+    """Legacy path — the pre-baked file may not survive Vercel's per-request
+    /tmp. Fall back to reading the sheet URL passed as ?sheet= or from the
+    session's last-build record.
+    """
+    sheet_url = request.args.get("sheet", "").strip()
     if "/" in filename or "\\" in filename or ".." in filename:
         return jsonify({"error": "Invalid filename"}), 400
     abs_path = os.path.join(OUTPUT_ROOT, filename)
-    if not os.path.exists(abs_path):
-        return jsonify({"error": f"Deck not found at {abs_path}"}), 404
-    return send_file(abs_path, as_attachment=False, mimetype="text/html")
+    if os.path.exists(abs_path):
+        return send_file(abs_path, as_attachment=False, mimetype="text/html")
+    # Fallback — render on the fly if a sheet_url is provided
+    if sheet_url:
+        return deck_render(sheet_url)
+    return jsonify({
+        "error": f"Deck not on this instance (Vercel /tmp is per-request).",
+        "fix": "Re-open from the build result — the URL now includes ?sheet=… for on-the-fly rendering.",
+    }), 404
+
+
+@app.route("/deck")
+def deck_render(sheet_url=None):
+    """Render the deck HTML on-the-fly from a Google Sheet URL.
+
+    Vercel serverless doesn't persist /tmp files between requests, so serving
+    a pre-built .html blows up. Instead we re-read the sheet + re-render.
+    """
+    sheet_url = sheet_url or request.args.get("sheet", "").strip()
+    if not sheet_url:
+        return jsonify({"error": "Missing ?sheet=<google sheet url>"}), 400
+    data = report_sheets.read_for_deck(sheet_url)
+    if not data:
+        return jsonify({
+            "error": "Could not read sheet.",
+            "sheet_error": getattr(report_sheets, "READ_LAST_ERROR", "") or "unknown",
+        }), 400
+    obs_rows = data["obs_rows"]
+    meta = data.get("meta") or {}
+    # Derive client from sheet title (as /build-deck does)
+    import re
+    client_display = None
+    try:
+        from audit.report_sheets import _extract_sheet_id
+        from audit.composio_exec import execute as _cx
+        sid = _extract_sheet_id(sheet_url)
+        if sid:
+            info = _cx("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                      {"spreadsheet_id": sid}) or {}
+            title = (info.get("properties") or {}).get("title", "")
+            m = re.match(r"^(.*?)\s+SEO Audit", title)
+            if m:
+                client_display = m.group(1).strip()
+    except Exception:
+        pass
+    if not client_display:
+        client_display = "Audit"
+    html_body = deck_html.render(obs_rows, client_display, meta=meta)
+    return html_body, 200, {"Content-Type": "text/html; charset=utf-8"}
 
 
 @app.route("/download/<path:filename>")
