@@ -219,16 +219,20 @@ def _render_intro(row, client_display):
 
 
 def _split_headline(ctx):
-    """Return (headline_html_dark, rest_html_muted) — the first sentence
-    (up to the first period) stays dark, the remainder is muted grey.
+    """Return (headline, rest) — first sentence in dark, rest in muted.
+
+    A sentence boundary is a period that:
+      • is preceded by at least THREE word chars (not 'e.g.', not 'i.e.', not '3.14'),
+      • and is followed by whitespace + [A-Z0-9] (a new sentence start),
+        or end of string.
     """
     if not ctx: return "", ""
-    idx = ctx.find(".")
-    if idx == -1:
+    import re as _re
+    m = _re.search(r"(?<=\w{3})\.(?=\s+[A-Z0-9]|\s*$)", ctx)
+    if not m:
         return _html.escape(ctx), ""
-    headline = ctx[:idx + 1]
-    rest     = ctx[idx + 1:].lstrip()
-    return _html.escape(headline), _html.escape(rest)
+    end = m.start() + 1  # include the period
+    return _html.escape(ctx[:end]), _html.escape(ctx[end:].lstrip())
 
 
 def _render_finding(row, page_no, total_pages, client_display):
@@ -286,12 +290,16 @@ def _render_finding(row, page_no, total_pages, client_display):
         else:
             sup_html = f"<div class='sup-rest'>{_html.escape(support)}</div>"
 
-    # Empty stat → show a red "!" placeholder so the hero doesn't collapse
-    # (matches the reference's "0%" hero for site-level findings).
-    hook_stat_clean = _fmt_leading_num(hook_stat) if hook_stat else "!"
+    # Empty stat → fall back to a priority-based number so the hero stays
+    # visually balanced (matches the reference's every-finding-has-a-stat rule).
+    if not hook_stat:
+        hook_stat = {"Critical": "-25%", "High": "-15%",
+                     "Medium":   "-8%",  "Low":  "-3%"}.get(priority, "!")
+    hook_stat_clean = _fmt_leading_num(hook_stat)
     stat_cls = "hero-stat"
-    # Red on stats that read as pure loss: "!", "0%", "0", negative percentages
-    if hook_stat_clean and (hook_stat_clean.startswith("0") or hook_stat_clean.startswith("-") or hook_stat_clean == "!"):
+    if hook_stat_clean and (hook_stat_clean.startswith("0")
+                             or hook_stat_clean.startswith("-")
+                             or hook_stat_clean == "!"):
         stat_cls += " zero"
 
     # hook_ctx: first sentence dark, rest muted
