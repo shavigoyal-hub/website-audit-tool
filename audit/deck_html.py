@@ -239,12 +239,21 @@ def _render_finding(row, page_no, total_pages, client_display):
     costs     = row.get("costs", "")
     support   = row.get("support", "")
 
-    # Strip a duplicated leading number from hook_ctx. Handles both the
-    # original stat ('-15%') and its Sheets-formatted equivalent ('-15.0%').
+    # Strip a duplicated leading number from hook_ctx. Handles the raw stat
+    # ('-15%'), its Sheets-formatted variant ('-15.0%') and odd spacing
+    # from Sheets ('-15. 0%').
     import re as _re
-    hook_ctx = _re.sub(r"^\s*[+\-]?\d+(?:\.\d+)?%?\s+", "", hook_ctx)
+    hook_ctx = _re.sub(r"^\s*[+\-]?\d[\d.,\s]*%\s+", "", hook_ctx)
 
-    # URL rows with pills. Skip generic "- Issue" rows.
+    # URL rows with pills. Render as PATH ONLY (matches reference PDF style).
+    import re as _ure
+    def _to_path(u):
+        m = _ure.match(r"^https?://[^/]+(/.*)?$", u.strip())
+        if m:
+            path = m.group(1) or ""
+            return "/ (homepage)" if path in ("", "/") else path
+        return u.strip()
+
     rows_html = []
     for entry in _split_lines(row.get("found", ""))[:6]:
         if entry.strip() == "-" or entry.strip().startswith("- |"):
@@ -254,9 +263,10 @@ def _render_finding(row, page_no, total_pages, client_display):
         else:
             url, label = entry, ""
         if not url.strip(): continue
+        display_url = _to_path(url)
         pcls = _pill_class(label or "Issue")
         rows_html.append(
-            f"<li><span class='wf-url'>{_html.escape(url)}</span>"
+            f"<li><span class='wf-url'>{_html.escape(display_url)}</span>"
             f"<span class='pill {pcls}'>{_html.escape(label or 'Issue')}</span></li>"
         )
 
@@ -276,11 +286,12 @@ def _render_finding(row, page_no, total_pages, client_display):
         else:
             sup_html = f"<div class='sup-rest'>{_html.escape(support)}</div>"
 
-    # Empty stat → don't show a placeholder.
-    hook_stat_clean = _fmt_leading_num(hook_stat) if hook_stat else ""
+    # Empty stat → show a red "!" placeholder so the hero doesn't collapse
+    # (matches the reference's "0%" hero for site-level findings).
+    hook_stat_clean = _fmt_leading_num(hook_stat) if hook_stat else "!"
     stat_cls = "hero-stat"
-    # Red on stats that read as pure loss: "0%", "0", negative percentages
-    if hook_stat_clean and (hook_stat_clean.startswith("0") or hook_stat_clean.startswith("-")):
+    # Red on stats that read as pure loss: "!", "0%", "0", negative percentages
+    if hook_stat_clean and (hook_stat_clean.startswith("0") or hook_stat_clean.startswith("-") or hook_stat_clean == "!"):
         stat_cls += " zero"
 
     # hook_ctx: first sentence dark, rest muted
@@ -294,8 +305,7 @@ def _render_finding(row, page_no, total_pages, client_display):
         prio_chip = (f"<span class='chip {_priority_class(priority)}'>"
                      f"<span class='dot'></span>{_html.escape(priority)}</span>")
 
-    stat_block = (f"<div class='{stat_cls}'>{_html.escape(hook_stat_clean)}</div>"
-                  if hook_stat_clean else "")
+    stat_block = f"<div class='{stat_cls}'>{_html.escape(hook_stat_clean)}</div>"
 
     site_domain = _domain_from(client_display)
     return f"""
