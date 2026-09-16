@@ -324,12 +324,21 @@ HOOK_COPY = {
 }
 
 
-def for_row(key, default_obs="", default_costs=""):
+def for_row(key, default_obs="", default_costs="", priority=""):
     """Return dict for a given observation key, or best-effort defaults."""
     if key and key in HOOK_COPY:
         return HOOK_COPY[key]
+    # Fallback stat scaled to priority so site-level findings (About page,
+    # WWW redirect, sitemap, robots) still get a meaningful hero number
+    # instead of a blank/`!` placeholder.
+    fallback_stat = {
+        "Critical": "-25%",
+        "High":     "-15%",
+        "Medium":   "-8%",
+        "Low":      "-3%",
+    }.get(priority, "")
     return {
-        "hook_stat": "",
+        "hook_stat": fallback_stat,
         "hook_ctx":  default_obs or "",
         "costs":     default_costs or "",
         "support":   "",

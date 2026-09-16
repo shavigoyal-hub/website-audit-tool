@@ -400,7 +400,8 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         # PDF can render a colored status pill per URL.
         for r in obs_rows:
             key = r.get("key", "")
-            copy = _hook_for(key, r.get("observation", ""), r.get("impact", ""))
+            copy = _hook_for(key, r.get("observation", ""), r.get("impact", ""),
+                              priority=r.get("priority", ""))
             status_label, _ = _STATUS_LABEL.get(key, ("Issue", "medium"))
             ref = r.get("reference", "") or ""
             # Only include entries that actually look like URLs or paths —
@@ -441,8 +442,8 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 copy["support"],
             ])
 
-        # Ending row — Observation is the subline shown under the hero, so
-        # keep it as real ending copy (not a placeholder).
+        # Ending row — Observation is the subline shown under the hero.
+        # Wording mirrors the reference PDF's final page.
         obs_data.append([
             "Ending — CTA slide",
             "The searchers are already there. Let's make sure they land with you.",

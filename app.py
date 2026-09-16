@@ -207,11 +207,23 @@ def build_deck():
                     client_display = m.group(1).strip()
         except Exception as exc:
             print(f"[deck] get sheet title failed: {exc}")
-        if not client_display:
-            live = meta.get("live_url") or ""
-            m = re.match(r"https?://(?:www\.)?([^/]+)", live)
-            domain = m.group(1) if m else "audit"
-            client_display = re.sub(r"\.[^.]+$", "", domain).replace(".", " ").title()
+        if not client_display or "." not in client_display:
+            # Fallback: scan the sheet's URLs to find the real host
+            found_urls = []
+            for r in obs_rows:
+                for line in (r.get("found") or "").split("\n"):
+                    m2 = re.match(r"https?://([^/\s|]+)", line.strip())
+                    if m2:
+                        found_urls.append(m2.group(1))
+            if found_urls:
+                # Pick the most common host (strip www.)
+                from collections import Counter
+                host = Counter(h.lower().lstrip("www.") for h in found_urls).most_common(1)[0][0]
+                client_display = host
+            else:
+                live = meta.get("live_url") or ""
+                m = re.match(r"https?://(?:www\.)?([^/]+)", live)
+                client_display = m.group(1) if m else (client_display or "Audit")
 
         os.makedirs(OUTPUT_ROOT, exist_ok=True)
         slug = re.sub(r"[^a-z0-9]+", "_", client_display.lower()) or "audit"
@@ -343,8 +355,20 @@ def deck_render(sheet_url=None):
                 client_display = m.group(1).strip().lower()
     except Exception:
         pass
-    if not client_display:
-        client_display = "Audit"
+    if not client_display or "." not in client_display:
+        # Fallback: pull the real host from URLs in the sheet.
+        found_urls = []
+        for r in obs_rows:
+            for line in (r.get("found") or "").split("\n"):
+                m2 = re.match(r"https?://([^/\s|]+)", line.strip())
+                if m2:
+                    found_urls.append(m2.group(1))
+        if found_urls:
+            from collections import Counter
+            host = Counter(h.lower().lstrip("www.") for h in found_urls).most_common(1)[0][0]
+            client_display = host
+        elif not client_display:
+            client_display = "Audit"
     html_body = deck_html.render(obs_rows, client_display, meta=meta)
     return html_body, 200, {"Content-Type": "text/html; charset=utf-8"}
 
