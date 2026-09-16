@@ -173,7 +173,12 @@ def build_deck():
 
         data = report_sheets.read_for_deck(sheet_url)
         if not data:
-            return jsonify({"error": "Could not read sheet (no auth or Observations tab missing)."}), 400
+            from audit.composio_exec import LAST_TRACE as _trace
+            return jsonify({
+                "error": "Could not read sheet.",
+                "sheet_error": getattr(report_sheets, "READ_LAST_ERROR", "") or "unknown",
+                "composio_debug": {"trace": _trace[-6:]},
+            }), 400
         meta = data.get("meta") or {}
         obs_rows = data["obs_rows"]
 

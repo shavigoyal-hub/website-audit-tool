@@ -472,6 +472,9 @@ def _extract_sheet_id(url_or_id):
     return m.group(1) if m else url_or_id.strip()
 
 
+READ_LAST_ERROR = ""
+
+
 def read_for_deck(sheet_url_or_id):
     """Fetch Observations tab via Composio's Sheets read action.
 
@@ -481,15 +484,22 @@ def read_for_deck(sheet_url_or_id):
       7 What It Costs You | 8 Supporting Stats
     First data row → intro; last data row → ending; middle → findings.
     """
+    global READ_LAST_ERROR
+    READ_LAST_ERROR = ""
     sid = _extract_sheet_id(sheet_url_or_id)
-    if not sid or not _sheets_available():
+    if not sid:
+        READ_LAST_ERROR = f"Could not extract spreadsheet id from url: {sheet_url_or_id[:120]!r}"
+        return None
+    if not _sheets_available():
+        READ_LAST_ERROR = "COMPOSIO_API_KEY not set"
         return None
     try:
         obs_resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
             "spreadsheet_id": sid, "ranges": ["Observations!A1:I"],
         })
     except Exception as exc:
-        print(f"[sheets] read Observations failed: {exc}")
+        READ_LAST_ERROR = f"BATCH_GET Observations failed for id {sid}: {exc}"
+        print(f"[sheets] {READ_LAST_ERROR}")
         return None
     obs_values = _extract_first_range(obs_resp) or []
     data_rows = [r for r in obs_values[1:] if r and any(str(c).strip() for c in r)]
