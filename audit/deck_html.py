@@ -36,16 +36,58 @@ def _priority_class(p):
     }.get(p or "", "chip-medium")
 
 
+def _fmt_leading_num(num_str):
+    """Clean a stat string. Old sheets have '-0.12' where a % is meant.
+      '-0.12'  -> '-12%'
+      '0.544'  -> '54%'
+      '-12%'   -> '-12%'
+      '+32.3%' -> '+32.3%'
+    Also trims trailing '.0' or '.X0' from percentages.
+    """
+    import re
+    s = (num_str or "").strip()
+    if s.endswith("%"):
+        core = s[:-1]
+        sign = ""
+        if core.startswith("+"):
+            sign = "+"; core = core[1:]
+        elif core.startswith("-"):
+            sign = "-"; core = core[1:]
+        try:
+            f = float(core)
+            if f == int(f):
+                core = str(int(f))
+            else:
+                core = f"{f:.1f}".rstrip("0").rstrip(".")
+        except ValueError:
+            pass
+        return sign + core + "%"
+    m = re.fullmatch(r"([+\-]?)(\d+(?:\.\d+)?)", s)
+    if not m:
+        return s
+    sign, num = m.group(1), m.group(2)
+    try:
+        f = float(num)
+    except ValueError:
+        return s
+    if abs(f) < 1 and "." in num:
+        pct = f * 100
+        if pct == int(pct):
+            return f"{sign}{int(abs(pct))}%"
+        return f"{sign}{abs(pct):.1f}".rstrip("0").rstrip(".") + "%"
+    return s
+
+
 def _fmt_hook_ctx(ctx, hook_stat):
     """Return HTML with any leading number in `ctx` wrapped in <span class='blue'>."""
     import re
     if not ctx:
         return ""
-    ctx_esc = _html.escape(ctx)
-    m = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?)(\s+.*)$", ctx_esc)
+    m = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?)(\s+.*)$", ctx)
     if m:
-        return f"<span class='blue'>{m.group(1)}</span>{m.group(2)}"
-    return ctx_esc
+        num_clean = _fmt_leading_num(m.group(1))
+        return f"<span class='blue'>{_html.escape(num_clean)}</span>{_html.escape(m.group(2))}"
+    return _html.escape(ctx)
 
 
 def _split_lines(cell):
@@ -111,10 +153,14 @@ def _render_finding(row, page_no, total_pages, client_display):
         import re
         m = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?)\s*(.*)$", support)
         if m and m.group(1):
-            sup_html = (f"<div class='sup-num'>{_html.escape(m.group(1))}</div>"
+            num_clean = _fmt_leading_num(m.group(1))
+            sup_html = (f"<div class='sup-num'>{_html.escape(num_clean)}</div>"
                         f"<div class='sup-rest'>{_html.escape(m.group(2))}</div>")
         else:
             sup_html = f"<div class='sup-rest'>{_html.escape(support)}</div>"
+
+    # Normalize the hero stat too
+    hook_stat_clean = _fmt_leading_num(hook_stat) if hook_stat else ""
 
     prio_chip = ""
     if priority:
@@ -128,7 +174,7 @@ def _render_finding(row, page_no, total_pages, client_display):
         <div class="head-right">{prio_chip}</div>
       </div>
       <div class="hero">
-        <div class="hero-stat">{_html.escape(hook_stat)}</div>
+        <div class="hero-stat">{_html.escape(hook_stat_clean)}</div>
         <div class="hero-ctx">{_fmt_hook_ctx(hook_ctx, hook_stat)}</div>
       </div>
       <div class="cards">

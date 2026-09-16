@@ -389,7 +389,12 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             found_with_labels = "\n".join(f"{u} | {status_label}" for u in urls[:6])
             sheet_row = len(obs_data) + 1
             ctx_body = copy["hook_ctx"].replace('"', '""')
-            hook_ctx_formula = f'=E{sheet_row}&" "&"{ctx_body}"'
+            # E<row> is Hook Stat. Wrap it with IFERROR(TEXT(...,"+0.0%;-0.0%")..., E<row>)
+            # so numeric stats keep their sign/% and text stats pass through.
+            hook_ctx_formula = (
+                f'=IFERROR(TEXT(E{sheet_row},"+0.0%;-0.0%;0%"),E{sheet_row})'
+                f'&" "&"{ctx_body}"'
+            )
             obs_data.append([
                 r.get("category", ""),
                 r.get("observation", ""),
