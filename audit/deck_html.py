@@ -28,12 +28,13 @@ def _pill_class(label):
 
 
 def _priority_class(p):
+    key = (p or "").strip().title()
     return {
         "Critical": "chip-critical",
         "High":     "chip-high",
         "Medium":   "chip-medium",
         "Low":      "chip-low",
-    }.get(p or "", "chip-medium")
+    }.get(key, "chip-medium")
 
 
 def _fmt_leading_num(num_str):
@@ -260,13 +261,18 @@ def _render_finding(row, page_no, total_pages, client_display):
 
     rows_html = []
     for entry in _split_lines(row.get("found", ""))[:6]:
-        if entry.strip() == "-" or entry.strip().startswith("- |"):
+        stripped = entry.strip()
+        if stripped in ("-", "") or stripped.startswith("- |") or stripped.startswith("-|"):
             continue
-        if " | " in entry:
-            url, label = entry.split(" | ", 1)
+        # Split on '|' with or without spaces; whichever the sheet uses
+        if "|" in stripped:
+            parts = stripped.split("|", 1)
+            url   = parts[0].strip()
+            label = parts[1].strip()
         else:
-            url, label = entry, ""
-        if not url.strip(): continue
+            url, label = stripped, ""
+        if not url or url == "-":
+            continue
         display_url = _to_path(url)
         pcls = _pill_class(label or "Issue")
         rows_html.append(

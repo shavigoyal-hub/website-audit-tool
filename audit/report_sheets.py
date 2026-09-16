@@ -576,11 +576,13 @@ def read_for_deck(sheet_url_or_id):
     obs_rows = []
     def _g(row, i):
         return row[i].strip() if i < len(row) and row[i] is not None else ""
-    last_idx = len(data_rows) - 1
+    # Need at least 3 rows for both intro and ending to be distinct;
+    # otherwise treat all rows as findings so we don't silently drop content.
+    n = len(data_rows)
     for i, row in enumerate(data_rows):
-        if i == 0:
+        if n >= 2 and i == 0:
             stype = "intro"
-        elif i == last_idx:
+        elif n >= 3 and i == n - 1:
             stype = "ending"
         else:
             stype = "finding"
