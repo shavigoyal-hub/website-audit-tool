@@ -382,15 +382,16 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         ]
         obs_data = [header]
 
-        # Intro row (Sheets row 2 → Hook Stat cell = E2)
+        # Intro row (Sheets row 2 → Hook Stat cell = E2). Heading uses
+        # "33%" (no leading +) so it wraps into 2 lines like the reference.
         obs_data.append([
             "Intro — cover slide",
-            "Same pages. Same website.",   # subtitle rendered under hero
+            "Same pages. Same website.",
             "", "",
             "+33%",
-            'Increase your leads by +33%',
+            'Increase your leads by 33%',
             "+5.8% Meta descriptions  ×  +25% Structured data  =  +33% More leads",
-            "10 leads → 14 leads. Same pages, same website. Before any ranking gains.",
+            "If you get 10 leads a month today 10 leads → 14 leads. Same pages, same website. Before any ranking gains.",
             "",
         ])
 
@@ -402,7 +403,17 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             copy = _hook_for(key, r.get("observation", ""), r.get("impact", ""))
             status_label, _ = _STATUS_LABEL.get(key, ("Issue", "medium"))
             ref = r.get("reference", "") or ""
-            urls = [u.strip() for u in ref.split("\n") if u.strip()]
+            # Only include entries that actually look like URLs or paths —
+            # observations.py falls back to the evidence-tab name (e.g. the
+            # category "Missing H1") when there are no examples, which we
+            # don't want rendered as a URL row on the deck.
+            urls = []
+            for u in ref.split("\n"):
+                u = u.strip()
+                if not u or u == "-":
+                    continue
+                if u.startswith("http") or u.startswith("/") or "." in u:
+                    urls.append(u)
             found_with_labels = "\n".join(f"{u} | {status_label}" for u in urls[:6])
             sheet_row = len(obs_data) + 1
             ctx_body = copy["hook_ctx"].replace('"', '""')

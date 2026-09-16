@@ -538,7 +538,7 @@ html, body {
   border-radius: 14px;
   padding: 22px 26px;
 }
-.card-wf { flex: 1.1; min-height: 2.5in; }
+.card-wf { flex: 1.1; }
 .card-col { flex: 1; display: flex; flex-direction: column; gap: 12px; }
 .card-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
 .card-label {
