@@ -129,54 +129,80 @@ def _parse_formula_terms(formula):
     return terms
 
 
+BRAND_MARK = ('<span class="brand-mark">'
+              '<span class="logo"></span>Gushwork</span>')
+
+
 def _render_intro(row, client_display):
     hook_stat = row.get("hook_stat") or "+33%"
-    hook_ctx  = row.get("hook_ctx") or "Increase your leads"
+    hook_ctx  = row.get("hook_ctx") or "Increase your leads by 33%"
     subtitle  = row.get("observation") or "Same pages. Same website."
     formula   = row.get("found") or ""
     example   = row.get("costs") or ""
 
-    # Intro headline: number stays BLACK (matches PDF).
+    # Intro headline — highlight the stat portion in blue.
+    # Strip a leading '+' from the stat when it appears inline in the heading.
     heading_html = _html.escape(hook_ctx)
+    for candidate in (hook_stat, hook_stat.lstrip("+")):
+        if candidate and candidate in hook_ctx:
+            parts = hook_ctx.split(candidate, 1)
+            heading_html = (_html.escape(parts[0])
+                            + f"<span class='blue'>{_html.escape(candidate)}</span>"
+                            + _html.escape(parts[1] if len(parts) > 1 else ""))
+            break
 
-    # Formula: stacked with big blue numbers and grey labels
+    # Formula cards — last one highlighted
+    terms = [t for t in _parse_formula_terms(formula)]
+    total_cards = sum(1 for t in terms if t[0] == 'term')
     formula_html = ""
-    for t in _parse_formula_terms(formula):
+    card_i = 0
+    for t in terms:
         if t[0] == 'op':
             formula_html += f"<div class='formula-op'>{_html.escape(t[1])}</div>"
         else:
+            card_i += 1
             num, label = t[1], t[2]
+            hi = " hi" if card_i == total_cards else ""
             formula_html += (
-                f"<div class='formula-term'>"
+                f"<div class='formula-card{hi}'>"
                 f"<div class='formula-num'>{_html.escape(num)}</div>"
                 f"<div class='formula-label'>{_html.escape(label)}</div>"
                 f"</div>"
             )
 
-    # Example: split at "→ N leads" — pull out the blue "N → N leads" phrase.
+    # Uplift card
     import re
-    ex_html = ""
-    m = re.match(r'^(.*?)\s*(\d+\s+leads\s*[→\-→>]+\s*\d+\s+leads)\.?\s*(.*)$', example)
+    lead_text = "If you get 10 leads a month today"
+    tail_text = "With the same pages and website. Before any ranking gains."
+    blue_bit  = "10 leads &nbsp;<span class='arrow'>→</span>&nbsp; <span class='blue'>14 leads</span>"
+    m = re.match(r'^(.*?)\s*(\d+)\s+leads\s*[→\-→>]+\s*(\d+)\s+leads\.?\s*(.*)$', example)
     if m:
-        lead, blue_bit, tail = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
-        ex_html = (
-            f"<div class='intro-example-lead'>{_html.escape(lead) or 'If you get 10 leads a month today'}</div>"
-            f"<div class='intro-example-big'>{_html.escape(blue_bit)}</div>"
-            f"<div class='intro-example-tail'>{_html.escape(tail) or 'With the same pages and website. Before any ranking gains.'}</div>"
-        )
-    else:
-        ex_html = f"<div class='intro-example-lead'>{_html.escape(example)}</div>"
+        if m.group(1).strip(): lead_text = m.group(1).strip()
+        if m.group(4).strip(): tail_text = m.group(4).strip()
+        blue_bit = (f"{_html.escape(m.group(2))} leads &nbsp;<span class='arrow'>→</span>&nbsp; "
+                    f"<span class='blue'>{_html.escape(m.group(3))} leads</span>")
 
     site_domain = _domain_from(client_display)
     return f"""
     <section class="page intro">
-      <div class="head-line">Gushwork Website audit · {_html.escape(site_domain or client_display)}</div>
-      <div class="intro-hero">
-        <div class="hero-heading">{heading_html}</div>
-        <div class="hero-sub">{_html.escape(subtitle)}</div>
+      <div class="top-nav">
+        {BRAND_MARK}
+        <div class="domain">Website audit · <b>{_html.escape(site_domain or client_display)}</b></div>
       </div>
-      <div class="intro-formula">{formula_html}</div>
-      <div class="intro-example">{ex_html}</div>
+      <div class="intro-body">
+        <div class="intro-left">
+          <div class="hero-heading">{heading_html}</div>
+          <div class="hero-sub">{_html.escape(subtitle)}</div>
+        </div>
+        <div class="intro-right">
+          <div class="intro-formula">{formula_html}</div>
+          <div class="uplift-card">
+            <div class="uplift-lead">{_html.escape(lead_text)}</div>
+            <div class="uplift-big">{blue_bit}</div>
+            <div class="uplift-tail">{_html.escape(tail_text)}</div>
+          </div>
+        </div>
+      </div>
       <div class="intro-footer">
         <div class="foot-col"><div class="foot-label">Site audited</div><div class="foot-val">{_html.escape(site_domain or client_display)}</div></div>
         <div class="foot-col right"><div class="foot-label">Prepared by</div><div class="foot-val">Gushwork</div></div>
@@ -226,23 +252,27 @@ def _render_finding(row, page_no, total_pages, client_display):
             f"<span class='pill {pcls}'>{_html.escape(label or 'Issue')}</span></li>"
         )
 
-    # Supporting stat split
+    # Supporting stat — big blue number, first sentence dark bold, rest muted
     sup_html = ""
     if support:
         import re
         m = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?)\s*(.*)$", support)
         if m and m.group(1):
             num_clean = _fmt_leading_num(m.group(1))
-            sup_html = (f"<div class='sup-num'>{_html.escape(num_clean)}</div>"
-                        f"<div class='sup-rest'>{_html.escape(m.group(2))}</div>")
+            rest_hl, rest_tail = _split_headline(m.group(2))
+            sup_rest_html = f"<span class='headline'>{rest_hl}</span>"
+            if rest_tail:
+                sup_rest_html += f" {rest_tail}"
+            sup_html = (f"<span class='sup-num'>{_html.escape(num_clean)}</span>"
+                        f"<div class='sup-rest'>{sup_rest_html}</div>")
         else:
             sup_html = f"<div class='sup-rest'>{_html.escape(support)}</div>"
 
-    # Empty stat → don't show a placeholder; keep the hero-stat column empty
-    # and let the hook context fill the width.
+    # Empty stat → don't show a placeholder.
     hook_stat_clean = _fmt_leading_num(hook_stat) if hook_stat else ""
     stat_cls = "hero-stat"
-    if hook_stat_clean.startswith("0"):
+    # Red on stats that read as pure loss: "0%", "0", negative percentages
+    if hook_stat_clean and (hook_stat_clean.startswith("0") or hook_stat_clean.startswith("-")):
         stat_cls += " zero"
 
     # hook_ctx: first sentence dark, rest muted
@@ -288,41 +318,43 @@ def _render_finding(row, page_no, total_pages, client_display):
       </div>
       <div class="footer">
         <div>{_html.escape(site_domain or client_display)} · Website audit</div>
-        <div class="brand">Gushwork</div>
-        <div>{page_no:02d} / {total_pages:02d}</div>
+        {BRAND_MARK}
+        <div class="page-no">{page_no:02d} / {total_pages:02d}</div>
       </div>
     </section>
     """
 
 
 def _render_ending(row, client_display):
-    ctx  = row.get("hook_ctx") or "Approve the audit fixes."
+    ctx  = row.get("hook_ctx") or "Every month you wait, you lose out on extra leads from the same pages."
     cta  = row.get("costs") or "Approve the audit fixes"
-    cta  = cta.rstrip(".")   # button label — no trailing period
+    cta  = cta.rstrip(".")
     site_domain = _domain_from(client_display)
-    # Ending headline pattern: first sentence dark, rest of ctx as muted subline
-    hl, rest = _split_headline(ctx)
-    # Within the headline, highlight the leading number phrase in blue
-    import re
-    m = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?\s+(?:extra\s+)?(?:\w+\s+){0,4}(?:leads|traffic|clicks|rankings|conversions))\b(.*)$",
-                 ctx, re.IGNORECASE)
-    if m:
-        hero_html = (f"<span class='blue'>{_html.escape(m.group(1))}</span>"
-                     f"<span class='headline'>{_html.escape(m.group(2))}</span>")
-    else:
-        hero_html = f"<span class='headline'>{hl}</span>"
+    subtitle = row.get("observation") or "The searchers are already there. Let's make sure they land with you."
 
-    header_label = site_domain or client_display
-    header_line = ("Gushwork" if header_label.lower().startswith("gushwork")
-                   else f"Gushwork · {header_label}")
-    subline = (rest or
-               "The searchers are already there. Let's make sure they land with you.")
+    # Highlight the "N extra leads" phrase in blue (or leading number).
+    import re
+    m = re.search(r"(\d+(?:\.\d+)?%?\s+(?:extra\s+)?(?:\w+\s+){0,3}(?:leads|traffic|clicks|rankings|conversions))",
+                  ctx, re.IGNORECASE)
+    if m:
+        s, e = m.start(1), m.end(1)
+        hero_html = (_html.escape(ctx[:s])
+                     + f"<span class='blue'>{_html.escape(ctx[s:e])}</span>"
+                     + _html.escape(ctx[e:]))
+    else:
+        hero_html = _html.escape(ctx)
+
     return f"""
     <section class="page ending">
-      <div class="head-line">{_html.escape(header_line)}</div>
-      <div class="ending-hero">{hero_html}</div>
-      <div class="ending-sub">{_html.escape(subline)}</div>
-      <div class="ending-cta">{_html.escape(cta)}</div>
+      <div class="top-nav">
+        {BRAND_MARK}
+        <div class="domain"><b>{_html.escape(site_domain or client_display)}</b></div>
+      </div>
+      <div class="ending-body">
+        <div class="ending-hero">{hero_html}</div>
+        <div class="ending-sub">{_html.escape(subtitle)}</div>
+        <a class="ending-cta">{_html.escape(cta)}</a>
+      </div>
     </section>
     """
 
@@ -344,11 +376,15 @@ def _render_impact(plan_tier, tier, client_display):
 
 CSS = """
 :root {
-  --blue: #0057ff;
-  --red:  #d63b3b;
-  --text: #0b0b0f;
-  --muted: #6b7280;
-  --sep: #e5e7eb;
+  --blue: #1868ff;
+  --red:  #c8102e;
+  --text: #0d1421;
+  --muted: #7f8695;
+  --card:  #f4f5f7;
+  --card-blue: #dfeaff;
+  --sep:  #e8ebee;
+  --dark: #0e1526;
+  --dark-2: #171e2e;
   --white: #ffffff;
 }
 @page { size: 13.33in 7.5in; margin: 0; }
@@ -380,153 +416,215 @@ html, body {
   .page { box-shadow: none; page-break-after: always; border-radius: 0; }
 }
 
-/* Small grey header row — regular weight, not bold. */
-.head-line { font-size: 11pt; font-weight: 500; color: var(--muted); letter-spacing: -0.005em; }
 .blue { color: var(--blue); }
 .red  { color: var(--red); }
 
-/* ── Intro — LEFT aligned, black stat inline ────────────────────────── */
-.intro-hero { margin: 60px 0 18px; text-align: left; }
-.hero-heading {
-  font-size: 68pt; font-weight: 700; line-height: 1.02; letter-spacing: -0.035em;
-  color: var(--text); max-width: 11.5in;
+/* Top nav header (intro + ending) — logo left, domain right */
+.top-nav {
+  display: flex; align-items: center; justify-content: space-between;
+  margin-bottom: 24px;
 }
-.hero-heading .stat-inline { color: var(--text); }  /* number stays black in PDF */
+.brand-mark {
+  display: inline-flex; align-items: center; gap: 10px;
+  font-size: 16pt; font-weight: 700; letter-spacing: -0.015em;
+  color: var(--text);
+}
+.brand-mark .logo {
+  width: 26px; height: 26px; border-radius: 6px;
+  background: var(--blue); position: relative;
+}
+.brand-mark .logo::after {
+  content: ""; position: absolute; inset: 0;
+  background: linear-gradient(45deg, transparent 45%, #fff 45%, #fff 55%, transparent 55%);
+  border-radius: 6px;
+}
+.top-nav .domain {
+  font-size: 12pt; color: var(--muted); font-weight: 500;
+}
+.top-nav .domain b {
+  color: var(--text); font-weight: 700;
+}
+/* Small grey line for finding pages */
+.head-line { font-size: 12pt; font-weight: 500; color: var(--muted); letter-spacing: -0.005em; }
+
+/* ── Intro ──────────────────────────────────────────────────────────── */
+.intro-body { display: flex; gap: 60px; align-items: flex-start; margin-top: 30px; }
+.intro-left { flex: 1; }
+.hero-heading {
+  font-size: 88pt; font-weight: 700; line-height: 0.98; letter-spacing: -0.045em;
+  color: var(--text);
+}
+.hero-heading .blue { color: var(--blue); }
 .hero-sub {
-  font-size: 22pt; color: var(--muted); margin-top: 14px;
+  font-size: 22pt; color: var(--muted); margin-top: 24px;
   font-weight: 500; letter-spacing: -0.01em;
 }
+
+.intro-right { flex: 0 0 5.6in; }
 .intro-formula {
-  margin-top: 46px;
-  display: flex; align-items: baseline; gap: 22px; flex-wrap: wrap;
+  display: flex; align-items: stretch; gap: 12px; flex-wrap: nowrap;
+  margin-bottom: 22px;
 }
-.formula-term { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; }
-.formula-num { font-size: 32pt; font-weight: 700; color: var(--blue); line-height: 1; letter-spacing: -0.02em; }
-.formula-label { font-size: 12pt; color: var(--muted); font-weight: 500; }
-.formula-op { font-size: 26pt; color: var(--muted); font-weight: 500; padding-bottom: 18px; }
-.intro-example { margin-top: 46px; }
-.intro-example-lead { font-size: 14pt; color: var(--muted); }
-.intro-example-big {
-  font-size: 34pt; font-weight: 700; color: var(--blue); letter-spacing: -0.02em; line-height: 1.1;
-  margin-top: 4px;
+.formula-card {
+  flex: 1; border: 1px solid var(--sep); border-radius: 12px;
+  padding: 16px 18px; background: var(--white);
+  display: flex; flex-direction: column; gap: 4px;
 }
-.intro-example-tail { font-size: 14pt; color: var(--muted); margin-top: 8px; }
+.formula-card.hi { background: var(--card-blue); border-color: #cadaff; }
+.formula-num { font-size: 22pt; font-weight: 700; color: var(--blue); line-height: 1; letter-spacing: -0.02em; }
+.formula-label { font-size: 10pt; color: var(--muted); font-weight: 500; }
+.formula-op { display: flex; align-items: center; padding: 0 4px; color: var(--muted); font-size: 18pt; }
+
+.uplift-card {
+  border: 1px solid var(--sep); border-radius: 14px;
+  padding: 22px 26px; background: var(--white);
+}
+.uplift-lead { font-size: 10pt; color: var(--muted); font-weight: 500; }
+.uplift-big {
+  font-size: 44pt; font-weight: 700; letter-spacing: -0.03em; line-height: 1;
+  margin-top: 8px;
+  color: var(--muted);
+}
+.uplift-big .blue { color: var(--blue); }
+.uplift-big .arrow { color: var(--muted); padding: 0 8px; }
+.uplift-tail { font-size: 10pt; color: var(--muted); font-weight: 500; margin-top: 8px; }
+
 .intro-footer {
   position: absolute; bottom: 0.55in; left: 0.85in; right: 0.85in;
   display: flex; justify-content: space-between;
-  border-top: 1px solid var(--sep); padding-top: 14px;
+  border-top: 1px solid var(--sep); padding-top: 16px;
 }
 .foot-col.right { text-align: right; }
-.foot-label { font-size: 9pt; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
-.foot-val { font-size: 12pt; font-weight: 600; color: var(--text); }
+.foot-label { font-size: 10pt; color: var(--muted); margin-bottom: 4px; font-weight: 500; }
+.foot-val { font-size: 14pt; font-weight: 700; color: var(--text); letter-spacing: -0.005em; }
 
 /* ── Finding page ───────────────────────────────────────────────────── */
 .head-row { display: flex; justify-content: space-between; align-items: center; }
 .head-right { display: flex; gap: 8px; }
 .chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: 6px;
-  font-size: 10pt; font-weight: 600; line-height: 1;
-  background: transparent;
-  border: 1px solid;
+  display: inline-flex; align-items: center; gap: 8px;
+  padding: 5px 12px; border-radius: 6px;
+  font-size: 10.5pt; font-weight: 500; line-height: 1;
+  background: var(--white); border: 1px solid;
 }
 .chip .dot { width: 7px; height: 7px; border-radius: 50%; }
-.chip-critical { color: #b91c1c; border-color: #f5b6b6; } .chip-critical .dot { background: #dc2626; }
-.chip-high     { color: #c2410c; border-color: #fbd0a5; } .chip-high     .dot { background: #f97316; }
-.chip-medium   { color: #6b7280; border-color: #d1d5db; } .chip-medium   .dot { background: #9ca3af; }
-.chip-low      { color: #2563eb; border-color: #bfdbfe; } .chip-low      .dot { background: #3b82f6; }
+.chip-critical { color: #c8102e; border-color: #f5b6b6; background: #fdecec; } .chip-critical .dot { background: #c8102e; }
+.chip-high     { color: #c2410c; border-color: #fbd0a5; background: #fef5e2; } .chip-high     .dot { background: #f97316; }
+.chip-medium   { color: #4b5563; border-color: #d1d5db; background: #f3f4f6; } .chip-medium   .dot { background: #6b7280; }
+.chip-low      { color: #2563eb; border-color: #bfdbfe; background: #eff5ff; } .chip-low      .dot { background: #3b82f6; }
 
 .hero {
-  display: flex; align-items: flex-start; gap: 40px;
-  margin: 34px 0 30px;
+  display: flex; align-items: flex-start; gap: 32px;
+  margin: 40px 0 40px;
 }
 .hero-stat {
-  font-size: 116pt; font-weight: 700; color: var(--blue);
-  line-height: 0.95; letter-spacing: -0.045em;
+  font-size: 148pt; font-weight: 700; color: var(--blue);
+  line-height: 0.9; letter-spacing: -0.055em;
+  flex-shrink: 0;
 }
 .hero-stat.zero { color: var(--red); }
 .hero-ctx  {
-  font-size: 26pt; font-weight: 600; line-height: 1.2; flex: 1;
-  letter-spacing: -0.018em; padding-top: 18px;
-  color: var(--muted);       /* grey secondary — matches PDF */
+  font-size: 32pt; font-weight: 700; line-height: 1.08; flex: 1;
+  letter-spacing: -0.028em; padding-top: 22px;
+  color: var(--muted);
 }
-.hero-ctx .headline { color: var(--text); }   /* first sentence in dark */
+.hero-ctx .headline { color: var(--text); }
 
-.cards { display: flex; gap: 20px; }
-/* WHITE card with thin grey border and smaller radius */
+.cards { display: flex; gap: 18px; }
+/* GREY-FILLED cards, larger radius, no border */
 .card {
-  background: var(--white);
-  border: 1px solid var(--sep);
-  border-radius: 10px;
-  padding: 22px 24px;
+  background: var(--card);
+  border-radius: 14px;
+  padding: 22px 26px;
 }
-.card-wf { flex: 1.25; min-height: 3in; }
-.card-col { flex: 1; display: flex; flex-direction: column; gap: 16px; }
+.card-wf { flex: 1.1; min-height: 2.8in; }
+.card-col { flex: 1; display: flex; flex-direction: column; gap: 14px; }
 .card-head { display: flex; justify-content: space-between; margin-bottom: 10px; }
 .card-label {
-  font-size: 10pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
+  font-size: 10.5pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
 }
 .card-body {
-  font-size: 14pt; font-weight: 500; line-height: 1.4;
+  font-size: 14pt; font-weight: 500; line-height: 1.45;
   color: var(--text);
 }
 .wf-list { list-style: none; }
 .wf-list li {
   display: flex; align-items: center; justify-content: space-between;
-  padding: 10px 0; border-top: 1px solid var(--sep);
+  padding: 12px 0; border-top: 1px solid #e0e2e6;
 }
-.wf-list li:first-child { border-top: 0; }
+.wf-list li:first-child { border-top: 0; padding-top: 8px; }
 .wf-url {
-  font-size: 11pt; color: var(--text); overflow: hidden;
+  font-size: 12pt; color: var(--text); overflow: hidden;
   text-overflow: ellipsis; white-space: nowrap; padding-right: 16px;
   font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   font-weight: 400;
 }
-/* Bordered pills, small radius (~6px) — matches PDF */
 .pill {
-  display: inline-block; padding: 3px 10px; border-radius: 6px;
-  font-size: 9pt; font-weight: 600; white-space: nowrap;
-  background: transparent; border: 1px solid;
+  display: inline-block; padding: 4px 12px; border-radius: 6px;
+  font-size: 9.5pt; font-weight: 500; white-space: nowrap;
+  border: 1px solid;
 }
-.pill-red   { background: #fdecec; color: #b91c1c; border-color: #f5b6b6; }
+.pill-red   { background: #fdecec; color: #c8102e; border-color: #f5b6b6; }
 .pill-amber { background: #fef5e2; color: #b45309; border-color: #fbd08a; }
-.pill-green { background: #e8f7ec; color: #166534; border-color: #a7d9b3; }
+.pill-green { background: #eaf7ee; color: #166534; border-color: #b8dfc3; }
 
-.card-sup { display: flex; align-items: baseline; gap: 18px; }
+/* Supporting stat card — big blue number, bold dark first sentence, muted rest */
+.card-sup { }
 .sup-num  {
   font-size: 40pt; font-weight: 700; color: var(--blue); line-height: 1;
-  letter-spacing: -0.03em;
+  letter-spacing: -0.03em; margin-bottom: 8px; display: block;
 }
 .sup-rest {
-  font-size: 12pt; font-weight: 500; line-height: 1.35;
-  color: var(--muted);
+  font-size: 12pt; line-height: 1.4;
+  color: var(--muted); font-weight: 500;
 }
-/* Footer bar with hairline top border */
+.sup-rest .headline { color: var(--text); font-weight: 700; }
+
+/* Code block (robots.txt style) */
+.code-block {
+  background: var(--dark); color: #dfe4ee;
+  border-radius: 12px; padding: 22px 26px;
+  font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace;
+  font-size: 12pt; line-height: 1.5;
+  white-space: pre; overflow: hidden;
+}
+.code-below { margin-top: 12px; font-family: 'JetBrains Mono', ui-monospace, Menlo, monospace; font-size: 11pt; color: var(--text); }
+
+/* Footer bar — hairline + centered brand */
 .footer {
   position: absolute; bottom: 0.42in; left: 0.85in; right: 0.85in;
-  display: flex; justify-content: space-between; align-items: center;
-  padding-top: 12px; border-top: 1px solid var(--sep);
-  font-size: 9pt; color: var(--muted); font-weight: 500;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
+  padding-top: 14px; border-top: 1px solid var(--sep);
+  font-size: 10pt; color: var(--muted); font-weight: 500;
 }
-.footer .brand { text-align: center; flex: 1; font-weight: 600; color: var(--text); }
+.footer .brand-mark { justify-self: center; font-size: 11pt; }
+.footer .brand-mark .logo { width: 18px; height: 18px; border-radius: 4px; }
+.footer .page-no { text-align: right; font-weight: 500; }
 
-/* ── Ending — left aligned, blue inline, subline, button CTA ────────── */
-.ending-hero {
-  position: absolute; top: 1.4in; left: 0.85in; right: 0.85in;
-  font-size: 44pt; font-weight: 700; line-height: 1.15;
-  letter-spacing: -0.025em; color: var(--muted);
-  max-width: 11in;
+/* ── Ending — DARK background, blue inline, blue button CTA ─────────── */
+.page.ending {
+  background: var(--dark);
+  color: var(--white);
 }
-.ending-hero .headline { color: var(--text); }
+.page.ending .top-nav .brand-mark { color: var(--white); }
+.page.ending .top-nav .domain { color: #a4adbd; }
+.page.ending .top-nav .domain b { color: var(--white); }
+.ending-body { margin-top: 100px; }
+.ending-hero {
+  font-size: 76pt; font-weight: 700; line-height: 1.02;
+  letter-spacing: -0.035em; color: var(--white);
+  max-width: 12in;
+}
+.ending-hero .blue { color: #6ea3ff; }
 .ending-sub {
-  position: absolute; top: 4.4in; left: 0.85in;
-  font-size: 16pt; color: var(--muted); font-weight: 500;
-  max-width: 10.5in; line-height: 1.4;
+  margin-top: 40px;
+  font-size: 18pt; color: #b9c0d0; font-weight: 500;
+  max-width: 10.5in; line-height: 1.35;
 }
 .ending-cta {
-  position: absolute; bottom: 1.2in; left: 0.85in;
-  display: inline-block; padding: 14px 26px; border-radius: 8px;
-  background: var(--text); color: var(--white);
+  margin-top: 46px;
+  display: inline-block; padding: 16px 28px; border-radius: 8px;
+  background: var(--blue); color: var(--white);
   font-size: 15pt; font-weight: 600; letter-spacing: -0.005em;
 }
 
