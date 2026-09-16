@@ -197,16 +197,28 @@ def _format_observations(sid, sheet_id, obs_data):
 
 
 def _share(spreadsheet_id):
+    """Share the sheet so BOTH gushwork.ai users AND Composio's own Sheets
+    connection can access it. Composio's googlesheets connected account may
+    be a different Google account than the googledrive one that created the
+    file — without an anyone-with-link permission the Sheets API returns
+    403 Forbidden on subsequent calls.
+    """
+    # 1. Domain-wide writer for internal collaboration
     try:
         _composio_execute("GOOGLEDRIVE_ADD_FILE_SHARING_PREFERENCE", {
-            "file_id": spreadsheet_id,
-            "role": "writer",
-            "type": "domain",
-            "domain": _SHARE_DOMAIN,
+            "file_id": spreadsheet_id, "role": "writer", "type": "domain",
+            "domain": _SHARE_DOMAIN, "sendNotificationEmail": False,
+        })
+    except Exception as exc:
+        print(f"[sheets] domain share failed (non-fatal): {exc}")
+    # 2. Anyone-with-link writer so Composio's Sheets connection can act on it
+    try:
+        _composio_execute("GOOGLEDRIVE_ADD_FILE_SHARING_PREFERENCE", {
+            "file_id": spreadsheet_id, "role": "writer", "type": "anyone",
             "sendNotificationEmail": False,
         })
     except Exception as exc:
-        print(f"[sheets] share failed (non-fatal): {exc}")
+        print(f"[sheets] anyone share failed (non-fatal): {exc}")
 
 
 _HEADER_HEX     = "#1a1a1a"
@@ -352,6 +364,11 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
     try:
         # 1) Create blank spreadsheet via Drive → gives us a fileId
         sid = _create_spreadsheet(spreadsheet_title)
+
+        # 2) Share IMMEDIATELY so the Composio googlesheets connection (which
+        # may be a different Google account than googledrive) can access it.
+        # Without this, later Sheets API calls return 403 Forbidden.
+        _share(sid)
 
         # 3) Observations tab — 10 cols. Row order in the sheet decides the
         # deck order. First data row → intro slide, last → ending. Everything

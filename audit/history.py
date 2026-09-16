@@ -14,7 +14,7 @@ import os
 
 from audit.composio_exec import execute as _cx
 
-HISTORY_TITLE = "Gushwork Audit History"
+HISTORY_TITLE = "Gushwork Website Audit Tool — History"
 HISTORY_TAB   = "History"
 
 _HEADER = ["Timestamp (UTC)", "Client", "Live URL",
