@@ -204,24 +204,15 @@ def build_deck():
                 "traceback": traceback.format_exc()[:2000],
             }), 500
 
-        # Also build the reportlab PDF as a downloadable alternative
-        pdf_name = f"{slug}_audit.pdf"
-        pdf_path = os.path.join(OUTPUT_ROOT, pdf_name)
-        pdf_ok = report_pdf.build(pdf_path, obs_rows,
-                                  client_display=client_display, meta=meta)
-
         deck_url = request.host_url.rstrip("/") + f"/deck/{html_name}"
         resp = {
             "ok": True,
             "version": VERSION,
             "deck_url": deck_url,
-            "message": f"Deck built ({len(obs_rows)} pages). Open in browser, then Print → Save as PDF for a pixel-perfect PDF.",
+            "message": f"Deck built ({len(obs_rows)} pages).",
         }
-        if pdf_ok:
-            resp["pdf"] = pdf_name
         try:
-            history.update_deck(sheet_url, deck_url,
-                                 request.host_url.rstrip("/") + f"/download/{pdf_name}" if pdf_ok else "")
+            history.update_deck(sheet_url, deck_url, "")
         except Exception as exc:
             print(f"[history] update_deck failed: {exc}")
         return jsonify(resp)
