@@ -429,27 +429,42 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             "mime_type": "text/html",
         })
 
-        # 5) Set title, freeze, then column widths + row heights via
-        #    tools/proxy since Composio has no named action for dimensions.
+        # 5a) Rename the imported tab to "Observations" — MUST succeed or the
+        #     deck builder can't find it later. If Composio errors, retry with
+        #     title-only fields.
+        info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                                 {"spreadsheet_id": sid}) or {}
+        sheets = info.get("sheets") or []
+        imported_id = ((sheets[0].get("properties") or {}).get("sheetId")
+                       if sheets else 0)
         try:
-            info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
-                                     {"spreadsheet_id": sid}) or {}
-            sheets = info.get("sheets") or []
-            imported_id = ((sheets[0].get("properties") or {}).get("sheetId")
-                           if sheets else 0)
             _composio_execute("GOOGLESHEETS_UPDATE_SHEET_PROPERTIES", {
                 "spreadsheetId": sid,
                 "updateSheetProperties": {
-                    "properties": {"sheetId": imported_id,
-                                   "title": "Observations",
+                    "properties": {"sheetId": imported_id, "title": "Observations",
                                    "gridProperties": {"frozenRowCount": 1,
                                                       "frozenColumnCount": 1}},
                     "fields": "title,gridProperties.frozenRowCount,gridProperties.frozenColumnCount",
                 },
             })
+        except Exception as exc:
+            print(f"[sheets] combined rename+freeze failed: {exc} — retrying title only")
+            try:
+                _composio_execute("GOOGLESHEETS_UPDATE_SHEET_PROPERTIES", {
+                    "spreadsheetId": sid,
+                    "updateSheetProperties": {
+                        "properties": {"sheetId": imported_id, "title": "Observations"},
+                        "fields": "title",
+                    },
+                })
+            except Exception as exc2:
+                print(f"[sheets] rename fallback also failed: {exc2}")
+
+        # 5b) Column widths + row heights via proxy (best-effort).
+        try:
             _apply_dimensions(sid, imported_id, obs_data)
         except Exception as exc:
-            print(f"[sheets] freeze/dimensions (non-fatal): {exc}")
+            print(f"[sheets] dimensions (non-fatal): {exc}")
 
         # 6) Share with the org (non-fatal if it fails)
         _share(sid)
@@ -493,14 +508,33 @@ def read_for_deck(sheet_url_or_id):
     if not _sheets_available():
         READ_LAST_ERROR = "COMPOSIO_API_KEY not set"
         return None
+    # Prefer 'Observations' but gracefully fall back to the first tab of
+    # the spreadsheet if the rename step failed during /run.
+    tab_name = "Observations"
     try:
         obs_resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": ["Observations!A1:I"],
+            "spreadsheet_id": sid, "ranges": [f"{tab_name}!A1:I"],
         })
     except Exception as exc:
-        READ_LAST_ERROR = f"BATCH_GET Observations failed for id {sid}: {exc}"
-        print(f"[sheets] {READ_LAST_ERROR}")
-        return None
+        # Look up the first tab name and retry
+        try:
+            info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                                     {"spreadsheet_id": sid}) or {}
+            sheets = info.get("sheets") or []
+            if not sheets:
+                READ_LAST_ERROR = f"spreadsheet {sid} has no tabs: {exc}"
+                return None
+            tab_name = ((sheets[0].get("properties") or {}).get("title") or "")
+            if not tab_name:
+                READ_LAST_ERROR = f"first tab has no title on {sid}"
+                return None
+            obs_resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
+                "spreadsheet_id": sid, "ranges": [f"{tab_name}!A1:I"],
+            })
+        except Exception as exc2:
+            READ_LAST_ERROR = f"BATCH_GET {tab_name!r} failed on {sid}: {exc2}"
+            print(f"[sheets] {READ_LAST_ERROR}")
+            return None
     obs_values = _extract_first_range(obs_resp) or []
     data_rows = [r for r in obs_values[1:] if r and any(str(c).strip() for c in r)]
     obs_rows = []
