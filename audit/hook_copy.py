@@ -324,13 +324,41 @@ HOOK_COPY = {
 }
 
 
+def _short_hook(obs):
+    """Compress a long observation to a headline that fits the hero.
+
+    Long observations from parameters.py (e.g. 'Multiple pages found wasting
+    crawl budget : 10 of 19 crawled URLs are redirects, errors or
+    non-indexable') break the hero layout. Rule of thumb:
+      1. Cut at first colon (raw metrics tend to follow ':').
+      2. Then cut at first sentence-end.
+      3. If still >90 chars, hard-truncate on a word boundary + ellipsis.
+    """
+    s = (obs or "").strip()
+    if not s:
+        return ""
+    # Cut at ' : ' or ': ' which usually separates the headline from the
+    # numeric detail ("... crawl budget : 10 of 19 crawled URLs …")
+    for sep in (" : ", " :", ": "):
+        if sep in s:
+            s = s.split(sep, 1)[0].strip()
+            break
+    # First sentence
+    import re as _re
+    m = _re.search(r"(?<=\w{3})\.(?:\s+|$)", s)
+    if m:
+        s = s[:m.start() + 1]
+    # Hard cap at 90 chars on word boundary
+    if len(s) > 90:
+        cut = s[:90].rsplit(" ", 1)[0].rstrip(",.:;")
+        s = cut + "…"
+    return s
+
+
 def for_row(key, default_obs="", default_costs="", priority=""):
     """Return dict for a given observation key, or best-effort defaults."""
     if key and key in HOOK_COPY:
         return HOOK_COPY[key]
-    # Fallback stat scaled to priority so site-level findings (About page,
-    # WWW redirect, sitemap, robots) still get a meaningful hero number
-    # instead of a blank/`!` placeholder.
     fallback_stat = {
         "Critical": "-25%",
         "High":     "-15%",
@@ -339,7 +367,7 @@ def for_row(key, default_obs="", default_costs="", priority=""):
     }.get(priority, "")
     return {
         "hook_stat": fallback_stat,
-        "hook_ctx":  default_obs or "",
+        "hook_ctx":  _short_hook(default_obs),
         "costs":     default_costs or "",
         "support":   "",
     }

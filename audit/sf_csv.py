@@ -158,7 +158,7 @@ def _finding(key, urls, evidence=None, detail=None):
     urls = list(dict.fromkeys(urls))  # dedupe, keep order
     if not urls:
         return None
-    examples = urls[:5]  # cap at 5 for reference column readability
+    examples = urls[:8]  # up to 8 so deck can show max examples per finding
     return {"key": key, "count": len(urls), "examples": examples, "evidence": evidence, "detail": detail}
 
 
