@@ -262,7 +262,7 @@ def _render_finding(row, page_no, total_pages, client_display):
         return u.strip()
 
     rows_html = []
-    for entry in _split_lines(row.get("found", ""))[:6]:
+    for entry in _split_lines(row.get("found", ""))[:8]:
         stripped = entry.strip()
         if stripped in ("-", "") or stripped.startswith("- |") or stripped.startswith("-|"):
             continue

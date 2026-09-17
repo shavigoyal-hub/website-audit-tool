@@ -415,7 +415,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                     continue
                 if u.startswith("http") or u.startswith("/") or "." in u:
                     urls.append(u)
-            found_with_labels = "\n".join(f"{u} | {status_label}" for u in urls[:6])
+            found_with_labels = "\n".join(f"{u} | {status_label}" for u in urls[:8])
             sheet_row = len(obs_data) + 1
             ctx_body = copy["hook_ctx"].replace('"', '""')
             # Formula rules:

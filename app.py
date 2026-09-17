@@ -104,10 +104,12 @@ def run_audit():
         psi_live, psi_rows, psi_passed = {}, [], []
         if manual_psi:
             psi_live = manual_psi
-            psi_rows = observations.psi_to_observations(psi_live)
-            _, psi_passed = observations.psi_status(psi_live)
-        elif psi_key:
+        else:
+            # Always run PSI. When PAGESPEED_API_KEY is missing we still call
+            # the API anonymously — lower rate limits but a report is better
+            # than silently skipping speed data.
             psi_live = pagespeed.fetch_many(reps, "mobile", psi_key)
+        if psi_live:
             psi_rows = observations.psi_to_observations(psi_live)
             _, psi_passed = observations.psi_status(psi_live)
 
@@ -121,9 +123,11 @@ def run_audit():
         notes.extend(f"Not evaluated : {x}" for x in site["na"])
 
         import datetime
-        # Include the full domain (with TLD) in the title so /build-deck can
-        # recover the real .org/.ai/etc — otherwise it defaults to guessing.
-        sheet_title = f"{domain} SEO Audit — {datetime.date.today()}"
+        # Human-friendly sheet title. The real domain doesn't live here
+        # anymore — /build-deck extracts it from URL cells inside the sheet.
+        # Format: "Exit Boston — SEO Audit (2026-09-11)"
+        friendly = client_name.replace("_", " ").replace("-", " ").title()
+        sheet_title = f"{friendly} — SEO Audit ({datetime.date.today()})"
         meta = {
             "version":       VERSION,
             "generated":     datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
@@ -350,9 +354,12 @@ def deck_render(sheet_url=None):
             info = _cx("GOOGLESHEETS_GET_SPREADSHEET_INFO",
                       {"spreadsheet_id": sid}) or {}
             title = (info.get("properties") or {}).get("title", "")
-            m = re.match(r"^(.*?)\s+SEO Audit", title)
+            # Handles both new format "Foo Bar — SEO Audit (2026-09-11)"
+            # and the older "foo.com SEO Audit — 2026-09-11".
+            m = re.match(r"^(.+?)\s+(?:—|-)\s+SEO Audit", title) \
+                or re.match(r"^(.+?)\s+SEO Audit", title)
             if m:
-                client_display = m.group(1).strip().lower()
+                client_display = m.group(1).strip()
     except Exception:
         pass
     if not client_display or "." not in client_display:
