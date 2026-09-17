@@ -15,6 +15,90 @@ from audit.composio_exec import reset_trace as _reset_trace, LAST_TRACE
 from audit.hook_copy import for_row as _hook_for
 from audit.hook_copy import STATUS_LABEL as _STATUS_LABEL
 
+
+_PRIO_RANK = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
+
+# Canonical family name per finding key, so ALL H1 sub-issues collapse into
+# one 'H1 Tags' row (not one row per Missing/Multiple/Short/etc.).
+_CATEGORY_FAMILY = {
+    # H1
+    "h1_missing":   "H1 Tags",
+    "h1_multiple":  "H1 Tags",
+    "h1_short":     "H1 Tags",
+    "h1_long":      "H1 Tags",
+    "h1_duplicate": "H1 Tags",
+    # Meta descriptions
+    "meta_missing":   "Meta Description",
+    "meta_long":      "Meta Description",
+    "meta_short":     "Meta Description",
+    "meta_duplicate": "Meta Description",
+    # Title tags
+    "title_missing":   "Title Tags",
+    "title_long":      "Title Tags",
+    "title_short":     "Title Tags",
+    "title_duplicate": "Title Tags",
+    "title_stuffed":   "Title Tags",
+    # Page speed
+    "lcp_high":       "Page Speed",
+    "lcp_medium":     "Page Speed",
+    "cls_high":       "Page Speed",
+    "perf_low":       "Page Speed",
+    "perf_moderate":  "Page Speed",
+}
+
+
+def _merge_findings_by_category(rows):
+    """Group findings that share the same top-level category into one row.
+
+    Category families we merge (identified by the CATEGORY dict in
+    observations.py which produces short labels like 'H1 Tags',
+    'Meta Description', 'Title Length', 'Page Speed'):
+      H1 Tags       → h1_missing, h1_multiple, h1_short, h1_long, h1_duplicate
+      Meta Description → meta_missing, meta_long, meta_short, meta_duplicate
+      Title Length     → title_long, title_short (title_missing stays as its own
+                          'Missing Titles' category)
+      Page Speed       → lcp_high, lcp_medium, perf_low, perf_moderate
+
+    Merging: keep the highest-priority row as base, join URL examples with
+    each finding's specific status label, keep the harshest hook_stat.
+    """
+    # Group by CANONICAL family name (H1 Tags, Meta Description, Title Tags,
+    # Page Speed). Findings not in the family map stand alone.
+    groups = {}
+    order  = []
+    for r in rows:
+        key = r.get("key", "")
+        family = _CATEGORY_FAMILY.get(key, (r.get("category") or "").strip())
+        if family not in groups:
+            order.append(family)
+            groups[family] = []
+        groups[family].append(r)
+
+    merged = []
+    for family in order:
+        group = groups[family]
+        if len(group) == 1:
+            merged.append(group[0])
+            continue
+        # Sort by priority (Critical first)
+        group.sort(key=lambda x: _PRIO_RANK.get(x.get("priority", ""), 9))
+        base = dict(group[0])
+        base["category"] = family      # rename to the family label
+        # Combine URL examples across all sub-findings, each with its own pill.
+        combined_refs = []
+        for f in group:
+            key = f.get("key", "")
+            label, _ = _STATUS_LABEL.get(key, ("Issue", "medium"))
+            ref = f.get("reference", "") or ""
+            for u in ref.split("\n"):
+                u = u.strip()
+                if not u or u == "-": continue
+                combined_refs.append(f"{u}||LABEL={label}")
+        base["reference"]      = "\n".join(combined_refs)
+        base["_merged_labels"] = True
+        merged.append(base)
+    return merged
+
 _SHARE_DOMAIN = "gushwork.ai"
 
 # Last error surfaced via /run response
@@ -395,6 +479,13 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             "",
         ])
 
+        # Merge findings by category — all H1 rows collapse into one, all
+        # Meta / Title rows too — so the deck doesn't show 4 near-identical
+        # slides for the same category. Priority ordering keeps the worst
+        # first; URLs from every merged sub-finding are combined with their
+        # specific status labels.
+        obs_rows = _merge_findings_by_category(obs_rows)
+
         # Finding rows — Hook Context references Hook Stat in column E.
         # "What We Found" is seeded as "URL | STATUS_LABEL" per line so the
         # PDF can render a colored status pill per URL.
@@ -402,20 +493,26 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             key = r.get("key", "")
             copy = _hook_for(key, r.get("observation", ""), r.get("impact", ""),
                               priority=r.get("priority", ""))
-            status_label, _ = _STATUS_LABEL.get(key, ("Issue", "medium"))
+            default_label, _ = _STATUS_LABEL.get(key, ("Issue", "medium"))
             ref = r.get("reference", "") or ""
+            merged = r.get("_merged_labels", False)
             # Only include entries that actually look like URLs or paths —
             # observations.py falls back to the evidence-tab name (e.g. the
             # category "Missing H1") when there are no examples, which we
             # don't want rendered as a URL row on the deck.
-            urls = []
-            for u in ref.split("\n"):
-                u = u.strip()
-                if not u or u == "-":
+            labelled = []
+            for entry in ref.split("\n"):
+                entry = entry.strip()
+                if not entry or entry == "-":
                     continue
+                if merged and "||LABEL=" in entry:
+                    u, label = entry.split("||LABEL=", 1)
+                    u = u.strip(); label = label.strip()
+                else:
+                    u, label = entry, default_label
                 if u.startswith("http") or u.startswith("/") or "." in u:
-                    urls.append(u)
-            found_with_labels = "\n".join(f"{u} | {status_label}" for u in urls[:8])
+                    labelled.append((u, label))
+            found_with_labels = "\n".join(f"{u} | {lb}" for u, lb in labelled[:8])
             sheet_row = len(obs_data) + 1
             ctx_body = copy["hook_ctx"].replace('"', '""')
             # Formula rules:

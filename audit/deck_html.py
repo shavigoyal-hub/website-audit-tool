@@ -249,7 +249,10 @@ def _render_finding(row, page_no, total_pages, client_display):
     priority = row.get("priority", "")
     hook_stat = row.get("hook_stat", "")
     hook_ctx  = row.get("hook_ctx", "")
-    costs     = row.get("costs", "")
+    # Costs column preferred, then fall back to the sheet's Impact column,
+    # then to the observation. That way CS-edited impact copy in the sheet
+    # still surfaces on the deck.
+    costs     = row.get("costs", "") or row.get("impact", "") or row.get("observation", "")
     support   = row.get("support", "")
 
     # Strip a duplicated leading number from hook_ctx. Handles the raw stat
@@ -569,9 +572,11 @@ html, body {
   background: var(--card);
   border-radius: 14px;
   padding: 22px 26px;
+  min-width: 0;               /* allow flex children to shrink for ellipsis */
 }
-.card-wf { flex: 1.1; }
-.card-col { flex: 1; display: flex; flex-direction: column; gap: 12px; }
+/* Fixed card widths so URLs truncate predictably and layout stays stable */
+.card-wf  { flex: 0 0 6.4in; }
+.card-col { flex: 0 0 4.6in; display: flex; flex-direction: column; gap: 12px; }
 .card-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
 .card-label {
   font-size: 11pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
@@ -583,16 +588,20 @@ html, body {
 .wf-list { list-style: none; }
 .wf-list li {
   display: flex; align-items: center; justify-content: space-between;
+  gap: 14px;
   padding: 12px 0; border-top: 1px solid #e0e2e6;
 }
 .wf-list li:first-child { border-top: 0; padding-top: 6px; }
 .wf-url {
+  flex: 1 1 auto;               /* takes remaining width */
+  min-width: 0;                 /* required for text-overflow inside flex */
   font-size: 12pt; color: var(--text); overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap; padding-right: 16px;
+  text-overflow: ellipsis; white-space: nowrap;
   font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   font-weight: 400;
 }
 .pill {
+  flex: 0 0 auto;               /* keeps pill full width, never shrinks */
   display: inline-block; padding: 4px 11px; border-radius: 5px;
   font-size: 10pt; font-weight: 500; white-space: nowrap;
   border: 1px solid;
