@@ -585,18 +585,24 @@ html, body {
   font-size: 15pt; font-weight: 500; line-height: 1.4;
   color: var(--text);
 }
-.wf-list { list-style: none; }
+.wf-list { list-style: none; min-width: 0; width: 100%; }
 .wf-list li {
   display: flex; align-items: center; justify-content: space-between;
   gap: 14px;
   padding: 12px 0; border-top: 1px solid #e0e2e6;
+  min-width: 0;                  /* propagate shrink through the flex chain */
+  width: 100%;
 }
 .wf-list li:first-child { border-top: 0; padding-top: 6px; }
 .wf-url {
-  flex: 1 1 auto;               /* takes remaining width */
-  min-width: 0;                 /* required for text-overflow inside flex */
-  font-size: 12pt; color: var(--text); overflow: hidden;
-  text-overflow: ellipsis; white-space: nowrap;
+  flex: 1 1 0;                  /* basis 0 so it shrinks below content width */
+  min-width: 0;                  /* required for text-overflow inside flex */
+  max-width: 100%;
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12pt; color: var(--text);
   font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   font-weight: 400;
 }
