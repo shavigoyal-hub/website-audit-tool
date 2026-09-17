@@ -481,18 +481,18 @@ html, body {
   color: var(--text); font-weight: 700;
 }
 /* Small grey line for finding pages */
-.head-line { font-size: 13pt; font-weight: 500; color: var(--muted); letter-spacing: -0.005em; }
+.head-line { font-size: 11pt; font-weight: 500; color: var(--muted); letter-spacing: -0.005em; }
 
 /* ── Intro ──────────────────────────────────────────────────────────── */
 .intro-body { display: flex; gap: 60px; align-items: flex-start; margin-top: 30px; }
 .intro-left { flex: 1; }
 .hero-heading {
-  font-size: 66pt; font-weight: 700; line-height: 1.0; letter-spacing: -0.04em;
+  font-size: 58pt; font-weight: 700; line-height: 1.0; letter-spacing: -0.04em;
   color: var(--text);
 }
 .hero-heading .blue { color: var(--blue); }
 .hero-sub {
-  font-size: 17pt; color: var(--muted); margin-top: 18px;
+  font-size: 16pt; color: var(--muted); margin-top: 18px;
   font-weight: 500; letter-spacing: -0.01em;
 }
 
@@ -507,18 +507,18 @@ html, body {
   display: flex; flex-direction: column; gap: 4px;
 }
 .formula-card.hi { background: var(--card-blue); border-color: #cadaff; }
-.formula-num { font-size: 18pt; font-weight: 700; color: var(--blue); line-height: 1; letter-spacing: -0.02em; }
-.formula-label { font-size: 9pt; color: var(--muted); font-weight: 500; }
-.formula-op { display: flex; align-items: center; padding: 0 2px; color: var(--muted); font-size: 15pt; }
+.formula-num { font-size: 20pt; font-weight: 700; color: var(--blue); line-height: 1; letter-spacing: -0.02em; }
+.formula-label { font-size: 10pt; color: var(--muted); font-weight: 500; }
+.formula-op { display: flex; align-items: center; padding: 0 4px; color: var(--muted); font-size: 16pt; }
 
 .uplift-card {
-  border: 1px solid var(--sep); border-radius: 12px;
-  padding: 18px 22px; background: var(--white);
+  border: 1px solid var(--sep); border-radius: 14px;
+  padding: 20px 24px; background: var(--white);
 }
-.uplift-lead { font-size: 9pt; color: var(--muted); font-weight: 500; }
+.uplift-lead { font-size: 10pt; color: var(--muted); font-weight: 500; }
 .uplift-big {
   font-size: 34pt; font-weight: 700; letter-spacing: -0.03em; line-height: 1;
-  margin-top: 6px;
+  margin-top: 8px;
   color: var(--muted);
 }
 .uplift-big .blue { color: var(--blue); }
@@ -538,30 +538,30 @@ html, body {
 .head-row { display: flex; justify-content: space-between; align-items: center; }
 .head-right { display: flex; gap: 8px; }
 .chip {
-  display: inline-flex; align-items: center; gap: 7px;
-  padding: 5px 12px; border-radius: 5px;
-  font-size: 10.5pt; font-weight: 500; line-height: 1;
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 4px 10px; border-radius: 6px;
+  font-size: 9.5pt; font-weight: 500; line-height: 1;
   background: var(--white); border: 1px solid;
 }
-.chip .dot { width: 7px; height: 7px; border-radius: 50%; }
+.chip .dot { width: 6px; height: 6px; border-radius: 50%; }
 .chip-critical { color: #c8102e; border-color: #f5b6b6; background: #fdecec; } .chip-critical .dot { background: #c8102e; }
 .chip-high     { color: #c2410c; border-color: #fbd0a5; background: #fef5e2; } .chip-high     .dot { background: #f97316; }
 .chip-medium   { color: #4b5563; border-color: #d1d5db; background: #f3f4f6; } .chip-medium   .dot { background: #6b7280; }
 .chip-low      { color: #2563eb; border-color: #bfdbfe; background: #eff5ff; } .chip-low      .dot { background: #3b82f6; }
 
 .hero {
-  display: flex; align-items: flex-start; gap: 30px;
-  margin: 32px 0 34px;
+  display: flex; align-items: flex-start; gap: 28px;
+  margin: 28px 0 30px;
 }
 .hero-stat {
-  font-size: 104pt; font-weight: 700; color: var(--blue);
-  line-height: 0.9; letter-spacing: -0.055em;
+  font-size: 92pt; font-weight: 700; color: var(--blue);
+  line-height: 0.9; letter-spacing: -0.05em;
   flex-shrink: 0;
 }
 .hero-stat.zero { color: var(--red); }
 .hero-ctx  {
-  font-size: 32pt; font-weight: 700; line-height: 1.08; flex: 1;
-  letter-spacing: -0.028em; padding-top: 12px;
+  font-size: 30pt; font-weight: 700; line-height: 1.1; flex: 1;
+  letter-spacing: -0.025em; padding-top: 10px;
   color: var(--muted);
 }
 .hero-ctx .headline { color: var(--text); }
@@ -570,19 +570,19 @@ html, body {
 /* GREY-FILLED cards, larger radius, no border */
 .card {
   background: var(--card);
-  border-radius: 14px;
-  padding: 22px 26px;
-  min-width: 0;               /* allow flex children to shrink for ellipsis */
+  border-radius: 16px;
+  padding: 26px 30px;
+  min-width: 0;
 }
 /* Fixed card widths so URLs truncate predictably and layout stays stable */
-.card-wf  { flex: 0 0 6.4in; }
-.card-col { flex: 0 0 4.6in; display: flex; flex-direction: column; gap: 12px; }
+.card-wf  { flex: 0 0 6.6in; }
+.card-col { flex: 0 0 4.5in; display: flex; flex-direction: column; gap: 14px; }
 .card-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
 .card-label {
-  font-size: 11pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
+  font-size: 10pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
 }
 .card-body {
-  font-size: 15pt; font-weight: 500; line-height: 1.4;
+  font-size: 13pt; font-weight: 500; line-height: 1.45;
   color: var(--text);
 }
 .wf-list { list-style: none; min-width: 0; width: 100%; }
@@ -595,21 +595,21 @@ html, body {
 }
 .wf-list li:first-child { border-top: 0; padding-top: 6px; }
 .wf-url {
-  flex: 1 1 0;                  /* basis 0 so it shrinks below content width */
-  min-width: 0;                  /* required for text-overflow inside flex */
+  flex: 1 1 0;
+  min-width: 0;
   max-width: 100%;
   display: block;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12pt; color: var(--text);
+  font-size: 11.5pt; color: var(--text);
   font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   font-weight: 400;
 }
 .pill {
-  flex: 0 0 auto;               /* keeps pill full width, never shrinks */
-  display: inline-block; padding: 4px 11px; border-radius: 5px;
-  font-size: 10pt; font-weight: 500; white-space: nowrap;
+  flex: 0 0 auto;
+  display: inline-block; padding: 3px 10px; border-radius: 5px;
+  font-size: 9.5pt; font-weight: 500; white-space: nowrap;
   border: 1px solid;
 }
 .pill-red   { background: #fdecec; color: #c8102e; border-color: #f5b6b6; }
@@ -619,12 +619,12 @@ html, body {
 /* Supporting stat card — big blue number, bold dark first sentence, muted rest */
 .card-sup { }
 .sup-num  {
-  font-size: 44pt; font-weight: 700; color: var(--blue); line-height: 1;
-  letter-spacing: -0.03em; margin-bottom: 8px; display: block;
+  font-size: 36pt; font-weight: 700; color: var(--blue); line-height: 1;
+  letter-spacing: -0.03em; margin-bottom: 6px; display: block;
 }
 .sup-rest {
-  font-size: 12pt; line-height: 1.4;
-  color: var(--muted); font-weight: 500;
+  font-size: 11pt; line-height: 1.45;
+  color: var(--muted); font-weight: 400;
 }
 .sup-rest .headline { color: var(--text); font-weight: 700; }
 
@@ -643,7 +643,7 @@ html, body {
   position: absolute; bottom: 0.42in; left: 0.85in; right: 0.85in;
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
   padding-top: 14px; border-top: 1px solid var(--sep);
-  font-size: 10pt; color: var(--muted); font-weight: 500;
+  font-size: 9.5pt; color: var(--muted); font-weight: 500;
 }
 .footer .brand-mark { justify-self: center; font-size: 11pt; }
 .footer .brand-mark .logo { width: 18px; height: 18px; border-radius: 4px; }
