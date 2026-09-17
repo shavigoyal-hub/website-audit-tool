@@ -481,7 +481,7 @@ html, body {
   color: var(--text); font-weight: 700;
 }
 /* Small grey line for finding pages */
-.head-line { font-size: 11pt; font-weight: 500; color: var(--muted); letter-spacing: -0.005em; }
+.head-line { font-size: 12pt; font-weight: 500; color: var(--muted); letter-spacing: -0.005em; }
 
 /* ── Intro ──────────────────────────────────────────────────────────── */
 .intro-body { display: flex; gap: 60px; align-items: flex-start; margin-top: 30px; }
@@ -538,12 +538,12 @@ html, body {
 .head-row { display: flex; justify-content: space-between; align-items: center; }
 .head-right { display: flex; gap: 8px; }
 .chip {
-  display: inline-flex; align-items: center; gap: 6px;
-  padding: 4px 10px; border-radius: 6px;
-  font-size: 9.5pt; font-weight: 500; line-height: 1;
+  display: inline-flex; align-items: center; gap: 7px;
+  padding: 5px 12px; border-radius: 7px;
+  font-size: 11pt; font-weight: 500; line-height: 1;
   background: var(--white); border: 1px solid;
 }
-.chip .dot { width: 6px; height: 6px; border-radius: 50%; }
+.chip .dot { width: 7px; height: 7px; border-radius: 50%; }
 .chip-critical { color: #c8102e; border-color: #f5b6b6; background: #fdecec; } .chip-critical .dot { background: #c8102e; }
 .chip-high     { color: #c2410c; border-color: #fbd0a5; background: #fef5e2; } .chip-high     .dot { background: #f97316; }
 .chip-medium   { color: #4b5563; border-color: #d1d5db; background: #f3f4f6; } .chip-medium   .dot { background: #6b7280; }
@@ -554,14 +554,14 @@ html, body {
   margin: 28px 0 30px;
 }
 .hero-stat {
-  font-size: 92pt; font-weight: 700; color: var(--blue);
-  line-height: 0.9; letter-spacing: -0.05em;
+  font-size: 110pt; font-weight: 700; color: var(--blue);
+  line-height: 0.9; letter-spacing: -0.055em;
   flex-shrink: 0;
 }
 .hero-stat.zero { color: var(--red); }
 .hero-ctx  {
-  font-size: 30pt; font-weight: 700; line-height: 1.1; flex: 1;
-  letter-spacing: -0.025em; padding-top: 10px;
+  font-size: 34pt; font-weight: 700; line-height: 1.08; flex: 1;
+  letter-spacing: -0.028em; padding-top: 14px;
   color: var(--muted);
 }
 .hero-ctx .headline { color: var(--text); }
@@ -579,10 +579,10 @@ html, body {
 .card-col { flex: 0 0 4.5in; display: flex; flex-direction: column; gap: 14px; }
 .card-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
 .card-label {
-  font-size: 10pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
+  font-size: 11pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
 }
 .card-body {
-  font-size: 13pt; font-weight: 500; line-height: 1.45;
+  font-size: 15pt; font-weight: 500; line-height: 1.4;
   color: var(--text);
 }
 .wf-list { list-style: none; min-width: 0; width: 100%; }
@@ -602,14 +602,14 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 11.5pt; color: var(--text);
+  font-size: 13pt; color: var(--text);
   font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   font-weight: 400;
 }
 .pill {
   flex: 0 0 auto;
-  display: inline-block; padding: 3px 10px; border-radius: 5px;
-  font-size: 9.5pt; font-weight: 500; white-space: nowrap;
+  display: inline-block; padding: 4px 11px; border-radius: 6px;
+  font-size: 11pt; font-weight: 500; white-space: nowrap;
   border: 1px solid;
 }
 .pill-red   { background: #fdecec; color: #c8102e; border-color: #f5b6b6; }
@@ -619,11 +619,11 @@ html, body {
 /* Supporting stat card — big blue number, bold dark first sentence, muted rest */
 .card-sup { }
 .sup-num  {
-  font-size: 36pt; font-weight: 700; color: var(--blue); line-height: 1;
-  letter-spacing: -0.03em; margin-bottom: 6px; display: block;
+  font-size: 44pt; font-weight: 700; color: var(--blue); line-height: 1;
+  letter-spacing: -0.03em; margin-bottom: 8px; display: block;
 }
 .sup-rest {
-  font-size: 11pt; line-height: 1.45;
+  font-size: 13pt; line-height: 1.4;
   color: var(--muted); font-weight: 400;
 }
 .sup-rest .headline { color: var(--text); font-weight: 700; }
@@ -643,7 +643,7 @@ html, body {
   position: absolute; bottom: 0.42in; left: 0.85in; right: 0.85in;
   display: grid; grid-template-columns: 1fr auto 1fr; align-items: center;
   padding-top: 14px; border-top: 1px solid var(--sep);
-  font-size: 9.5pt; color: var(--muted); font-weight: 500;
+  font-size: 10.5pt; color: var(--muted); font-weight: 500;
 }
 .footer .brand-mark { justify-self: center; font-size: 11pt; }
 .footer .brand-mark .logo { width: 18px; height: 18px; border-radius: 4px; }
