@@ -135,8 +135,14 @@ def _parse_formula_terms(formula):
 GUSHWORK_LOGO_SVG = (
     '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">'
     '<rect x="0" y="0" width="100" height="100" rx="22" fill="#1868ff"/>'
-    # Single diagonal white parallelogram — slanted from top-right to bottom-left
-    '<path d="M62 22 L78 22 L38 78 L22 78 Z" fill="#ffffff"/>'
+    # White "document with folded corner" outline — matches the reference.
+    # Vertical left edge, horizontal top edge, diagonal from top-right down,
+    # vertical right edge, horizontal bottom.
+    '<path d="M28 28 L58 28 L72 42 L72 72 L28 72 Z" '
+    'fill="none" stroke="#ffffff" stroke-width="5.5" '
+    'stroke-linejoin="round" stroke-linecap="round"/>'
+    # Small triangle indicating the folded corner at top-right
+    '<path d="M58 28 L58 42 L72 42 Z" fill="#ffffff"/>'
     '</svg>'
 )
 BRAND_MARK = ('<span class="brand-mark">'
