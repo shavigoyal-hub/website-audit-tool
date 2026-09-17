@@ -27,6 +27,31 @@ def _pill_class(label):
     return "pill-amber"
 
 
+def _fallback_label(category, observation=""):
+    """The pill for a row the sheet left unlabelled.
+
+    "Issue" told the reader nothing — a Social / OG Tags card read
+    "/ (homepage)  [Issue]". The category already says what was checked, so
+    the label is that category's own status ("No OG tags", "No schema",
+    "Thin"); failing that, the plainest word the observation supports.
+    """
+    try:
+        from audit.observations import CATEGORY as _CAT
+        cat = (category or "").strip().lower()
+        for key, name in _CAT.items():
+            if str(name).strip().lower() == cat and key in STATUS_LABEL:
+                return STATUS_LABEL[key][0]
+    except Exception:
+        pass
+    low = (observation or "").lower()
+    for word, label in (("missing", "Missing"), ("duplicate", "Duplicate"), ("too long", "Too long"),
+                        ("too short", "Too short"), ("thin", "Thin"), ("slow", "Slow"), ("blocked", "Blocked"),
+                        ("broken", "Broken"), ("not found", "Not found")):
+        if word in low:
+            return label
+    return "Needs fixing"
+
+
 def _priority_class(p):
     key = (p or "").strip().title()
     return {
@@ -133,16 +158,19 @@ def _parse_formula_terms(formula):
 
 
 GUSHWORK_LOGO_SVG = (
-    '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">'
-    '<rect x="0" y="0" width="100" height="100" rx="22" fill="#1868ff"/>'
-    # White "document with folded corner" outline — matches the reference.
-    # Vertical left edge, horizontal top edge, diagonal from top-right down,
-    # vertical right edge, horizontal bottom.
-    '<path d="M28 28 L58 28 L72 42 L72 72 L28 72 Z" '
-    'fill="none" stroke="#ffffff" stroke-width="5.5" '
-    'stroke-linejoin="round" stroke-linecap="round"/>'
-    # Small triangle indicating the folded corner at top-right
-    '<path d="M58 28 L58 42 L72 42 Z" fill="#ffffff"/>'
+    # THE REFERENCE'S OWN ARTWORK. These are the vector paths drawn in
+    # ArizonaHomeGrantsWebsiteAudit.pdf (32x32 box, #0070FF tile with an 8px
+    # radius, two white shapes split by a curved sweep). It had been redrawn by
+    # eye twice — a parallelogram, then a document with a folded corner — and
+    # neither is the Gushwork mark.
+    '<svg viewBox="0 0 32 32" xmlns="http://www.w3.org/2000/svg">'
+    '<rect x="0" y="0" width="32" height="32" rx="8" fill="#0070ff"/>'
+    '<path fill="#ffffff" d="M23.3218 8.9127C23.5005 8.4721 23.1699 8 22.6945 8H9.8286'
+    'C8.8187 8 8 8.8187 8 9.8286V21.3556C8 22.4036 9.0342 23.1366 9.9921 22.7114'
+    'C16.1699 19.969 20.8757 14.9415 23.3218 8.9127Z"/>'
+    '<path fill="#ffffff" d="M14.5032 24C14.2804 24 14.1871 23.7106 14.3652 23.5767'
+    'C18.9801 20.1053 22.2868 15.1609 23.7532 9.6104C23.7881 9.4783 24 9.5032 24 9.6399'
+    'V22.1714C24 23.1813 23.1813 24 22.1714 24H14.5032Z"/>'
     '</svg>'
 )
 BRAND_MARK = ('<span class="brand-mark">'
@@ -285,10 +313,12 @@ def _render_finding(row, page_no, total_pages, client_display):
         if not url or url == "-":
             continue
         display_url = _to_path(url)
-        pcls = _pill_class(label or "Issue")
+        if not label or label.strip().lower() == "issue":
+            label = _fallback_label(category, row.get("observation", ""))
+        pcls = _pill_class(label)
         rows_html.append(
             f"<li><span class='wf-url'>{_html.escape(display_url)}</span>"
-            f"<span class='pill {pcls}'>{_html.escape(label or 'Issue')}</span></li>"
+            f"<span class='pill {pcls}'>{_html.escape(label)}</span></li>"
         )
 
     # Supporting stat — big blue number, first sentence dark bold, rest muted
@@ -349,7 +379,7 @@ def _render_finding(row, page_no, total_pages, client_display):
             <div class="card-label">What we found</div>
             <div class="card-label right">{_html.escape(category)}</div>
           </div>
-          <ul class="wf-list">{"".join(rows_html) or "<li><span class='wf-url'>Site-wide</span><span class='pill pill-amber'>Issue</span></li>"}</ul>
+          <ul class="wf-list">{"".join(rows_html) or f"<li><span class='wf-url'>Site-wide</span><span class='pill {_pill_class(_fallback_label(category, row.get('observation', '')))}'>{_html.escape(_fallback_label(category, row.get('observation', '')))}</span></li>"}</ul>
         </div>
         <div class="card-col">
           <div class="card card-costs">
@@ -566,17 +596,27 @@ html, body {
 }
 .hero-ctx .headline { color: var(--text); }
 
-.cards { display: flex; gap: 18px; }
-/* GREY-FILLED cards, larger radius, no border */
+/* MEASURED FROM THE REFERENCE PDF (its drawing commands, 1600px canvas):
+   two EQUAL columns 698px wide with a 44px gutter; each card HUGS its content
+   (six rows = 384px, two rows = far shorter) — a card is never stretched to
+   its neighbour's height, which is what left a one-row "What we found" card
+   as a tall empty box. Fill #F8FAFC, 1px #E2E8F0 border, 12px radius, 24px
+   padding. This page is 1280px wide, so lengths are those x 0.8. */
+.cards {
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 35px; align-items: start;
+}
 .card {
-  background: var(--card);
-  border-radius: 16px;
-  padding: 26px 30px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 19px 20px 22px;
   min-width: 0;
 }
-/* Fixed card widths so URLs truncate predictably and layout stays stable */
-.card-wf  { flex: 0 0 6.6in; }
-.card-col { flex: 0 0 4.5in; display: flex; flex-direction: column; gap: 14px; }
+.card-wf  { min-width: 0; }
+.card-col { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
+/* The supporting-stat card is WHITE in the reference, border only. */
+.card.card-sup { background: #fff; }
 .card-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
 .card-label {
   font-size: 11pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
@@ -589,7 +629,7 @@ html, body {
 .wf-list li {
   display: flex; align-items: center; justify-content: space-between;
   gap: 14px;
-  padding: 12px 0; border-top: 1px solid #e0e2e6;
+  padding: 12px 0; border-top: 1px solid #e2e8f0;
   min-width: 0;                  /* propagate shrink through the flex chain */
   width: 100%;
 }
