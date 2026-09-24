@@ -299,11 +299,17 @@ def _render_finding(row, page_no, total_pages, client_display):
         return u.strip()
 
     rows_html = []
-    for entry in _split_lines(row.get("found", ""))[:8]:
+    # Cap at 6 to fit within the page height. Deduplicate by normalized
+    # display path (a trailing slash is not a different URL, and the same
+    # merged category can pick up '/homepage' twice when H1_missing and
+    # H1_multiple both flag it).
+    seen = set()
+    for entry in _split_lines(row.get("found", "")):
+        if len(rows_html) >= 6:
+            break
         stripped = entry.strip()
         if stripped in ("-", "") or stripped.startswith("- |") or stripped.startswith("-|"):
             continue
-        # Split on '|' with or without spaces; whichever the sheet uses
         if "|" in stripped:
             parts = stripped.split("|", 1)
             url   = parts[0].strip()
@@ -313,6 +319,12 @@ def _render_finding(row, page_no, total_pages, client_display):
         if not url or url == "-":
             continue
         display_url = _to_path(url)
+        # Normalize: strip trailing slash except homepage marker
+        norm = display_url.rstrip("/") or "/"
+        dedupe_key = (norm.lower(), (label or "").lower())
+        if dedupe_key in seen:
+            continue
+        seen.add(dedupe_key)
         if not label or label.strip().lower() == "issue":
             label = _fallback_label(category, row.get("observation", ""))
         pcls = _pill_class(label)
@@ -629,11 +641,11 @@ html, body {
 .wf-list li {
   display: flex; align-items: center; justify-content: space-between;
   gap: 14px;
-  padding: 12px 0; border-top: 1px solid #e2e8f0;
-  min-width: 0;                  /* propagate shrink through the flex chain */
+  padding: 8px 0; border-top: 1px solid #e2e8f0;
+  min-width: 0;
   width: 100%;
 }
-.wf-list li:first-child { border-top: 0; padding-top: 6px; }
+.wf-list li:first-child { border-top: 0; padding-top: 4px; }
 .wf-url {
   flex: 1 1 0;
   min-width: 0;
@@ -642,14 +654,14 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 13pt; color: var(--text);
+  font-size: 12pt; color: var(--text);
   font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   font-weight: 400;
 }
 .pill {
   flex: 0 0 auto;
-  display: inline-block; padding: 4px 11px; border-radius: 6px;
-  font-size: 11pt; font-weight: 500; white-space: nowrap;
+  display: inline-block; padding: 3px 10px; border-radius: 6px;
+  font-size: 10pt; font-weight: 500; white-space: nowrap;
   border: 1px solid;
 }
 .pill-red   { background: #fdecec; color: #c8102e; border-color: #f5b6b6; }
