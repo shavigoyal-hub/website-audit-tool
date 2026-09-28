@@ -18,6 +18,10 @@ from audit.hook_copy import STATUS_LABEL as _STATUS_LABEL
 
 _PRIO_RANK = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 
+# Findings intentionally NOT reported in the sheet / deck.
+# User rule: never surface these as observations.
+SKIP_KEYS = {"h1_long", "h1_duplicate", "og_missing"}
+
 # Canonical family name per finding key, so ALL H1 sub-issues collapse into
 # one 'H1 Tags' row (not one row per Missing/Multiple/Short/etc.).
 _CATEGORY_FAMILY = {
@@ -423,6 +427,23 @@ def _apply_dimensions(sid, sheet_id, obs_data):
             "range": {"sheetId": sheet_id,
                       "startRowIndex": 0, "endRowIndex": len(obs_data),
                       "startColumnIndex": 0, "endColumnIndex": ncols}}}})
+    # Priority column (C, index 2) — data-validation dropdown so cells show
+    # the arrow chevron and only accept Critical / High / Medium / Low.
+    priority_values = [
+        {"userEnteredValue": "Critical"},
+        {"userEnteredValue": "High"},
+        {"userEnteredValue": "Medium"},
+        {"userEnteredValue": "Low"},
+    ]
+    requests_.append({"setDataValidation": {
+        "range": {"sheetId": sheet_id,
+                  "startRowIndex": 1, "endRowIndex": len(obs_data),
+                  "startColumnIndex": 2, "endColumnIndex": 3},
+        "rule": {
+            "condition": {"type": "ONE_OF_LIST", "values": priority_values},
+            "showCustomUi": True,
+            "strict": False,
+        }}})
     try:
         _composio_proxy(
             endpoint=f"https://sheets.googleapis.com/v4/spreadsheets/{sid}:batchUpdate",
@@ -484,6 +505,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         # slides for the same category. Priority ordering keeps the worst
         # first; URLs from every merged sub-finding are combined with their
         # specific status labels.
+        obs_rows = [r for r in obs_rows if r.get("key", "") not in SKIP_KEYS]
         obs_rows = _merge_findings_by_category(obs_rows)
 
         # Finding rows — Hook Context references Hook Stat in column E.
@@ -538,6 +560,10 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 copy["costs"],
                 copy["support"],
             ])
+
+        # 4 blank rows for the user to add parameters manually after the run.
+        for _ in range(4):
+            obs_data.append(["", "", "", "", "", "", "", "", ""])
 
         # Ending row — Observation is the subline shown under the hero.
         # Wording mirrors the reference PDF's final page.
@@ -699,6 +725,74 @@ def read_for_deck(sheet_url_or_id):
             "reference":   "",
         })
     return {"meta": {}, "obs_rows": obs_rows}
+
+
+def append_finding(sheet_url_or_id, url, label, priority="Medium", category=None):
+    """Fill the next blank row above the Ending row with a manual finding.
+
+    Sheet is created with 4 blank rows before Ending — this fills them one
+    by one. Returns (row_number, None) on success, (None, error_message) on
+    failure. Never rewrites existing rows (memory: append-only edits).
+    """
+    global LAST_ERROR
+    LAST_ERROR = ""
+    sid = _extract_sheet_id(sheet_url_or_id)
+    if not sid:
+        return None, "Bad sheet URL"
+    if not _sheets_available():
+        return None, "COMPOSIO_API_KEY not set"
+    try:
+        resp = _composio_execute("GOOGLESHEETS_BATCH_GET", {
+            "spreadsheet_id": sid, "ranges": ["Observations!A1:I"],
+        })
+    except Exception as exc:
+        return None, f"read failed: {exc}"
+    rows = _extract_first_range(resp) or []
+    ending_row_idx = None
+    for i, r in enumerate(rows, start=1):
+        if r and str(r[0] if r else "").strip().startswith("Ending"):
+            ending_row_idx = i
+            break
+    if ending_row_idx is None:
+        return None, "Could not find Ending row"
+    target_row = None
+    for i in range(ending_row_idx - 1, 1, -1):
+        r = rows[i - 1] if i - 1 < len(rows) else []
+        if not r or all(not str(c).strip() for c in r):
+            target_row = i
+            break
+    if target_row is None:
+        return None, "No blank row left — all 4 slots used."
+    from audit.hook_copy import for_row as _hf
+    copy = _hf("", default_obs=label, default_costs="", priority=priority)
+    ctx_body = copy["hook_ctx"].replace('"', '""')
+    formula = (
+        f'=IF(E{target_row}="","{ctx_body}",'
+        f'IFERROR(TEXT(E{target_row},"+#.#%;-#.#%;0%")&" "&"{ctx_body}",'
+        f'E{target_row}&" "&"{ctx_body}"))'
+    )
+    values = [[
+        category or "Manual",
+        label,
+        priority,
+        "",
+        copy["hook_stat"],
+        formula,
+        f"{url} | Custom" if url else "Site-wide | Custom",
+        copy["costs"] or f"{label} — flagged manually during review.",
+        copy["support"],
+    ]]
+    try:
+        _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
+            "spreadsheet_id": sid,
+            "sheet_name": "Observations",
+            "first_cell_location": f"A{target_row}",
+            "valueInputOption": "USER_ENTERED",
+            "values": values,
+        })
+    except Exception as exc:
+        return None, f"write failed: {exc}"
+    return target_row, None
 
 
 def _extract_first_range(resp):

@@ -96,11 +96,28 @@ def evaluate(df, live_url):
                              "Without a sitemap, pages are discovered and indexed slower."))
 
     # --- Favicon ---
+    # Detection is broad: any <link rel="...icon..."> in the homepage HTML, OR
+    # a 200 on any of the common favicon paths. A blocked or unreachable
+    # homepage (403/None) is treated as inconclusive rather than "missing".
     home = _get(origin + "/")
-    fav_html = bool(home is not None and re.search(r'rel=["\'][^"\']*icon', home.text or "", re.I))
-    fav_file = _get(f"{origin}/favicon.ico")
-    if fav_html or (fav_file is not None and fav_file.status_code == 200):
+    fav_html = bool(home is not None and re.search(
+        r'<link[^>]+rel=["\'][^"\']*(?:icon|shortcut icon|apple-touch-icon|mask-icon)[^"\']*["\']',
+        home.text or "", re.I))
+    fav_paths = [
+        "/favicon.ico", "/favicon.png", "/favicon.svg",
+        "/apple-touch-icon.png", "/apple-touch-icon-precomposed.png",
+    ]
+    fav_file_ok = False
+    for p in fav_paths:
+        r = _get(f"{origin}{p}")
+        if r is not None and r.status_code == 200 and (r.headers.get("Content-Type", "").startswith("image/") or p.endswith(".ico")):
+            fav_file_ok = True
+            break
+    homepage_blocked = (home is None) or (home.status_code in (401, 403, 405, 429))
+    if fav_html or fav_file_ok:
         passed.append("Favicon present")
+    elif homepage_blocked:
+        na.append("Favicon (homepage fetch blocked, not evaluated)")
     else:
         issues.append(_issue("favicon_missing", "Favicon", "Low",
                              "No favicon detected",

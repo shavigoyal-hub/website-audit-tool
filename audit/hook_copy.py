@@ -15,8 +15,6 @@ STATUS_LABEL = {
     "h1_missing":       ("No H1", "critical"),
     "h1_multiple":      ("Competing H1s", "high"),
     "h1_short":         ("Short H1", "low"),
-    "h1_long":          ("Long H1", "low"),
-    "h1_duplicate":     ("Duplicate H1", "medium"),
     "meta_missing":     ("Missing", "high"),
     "meta_long":        ("Too long", "medium"),
     "meta_short":       ("Too short", "low"),
@@ -50,7 +48,6 @@ STATUS_LABEL = {
     "url_long":         ("Long URL", "low"),
     "low_inlinks":      ("Few inlinks", "medium"),
     "pagination_no_rel":("No rel pagination", "low"),
-    "og_missing":       ("No OG tags", "medium"),
     "hreflang_missing": ("No hreflang", "high"),
     "cta_missing":      ("No CTA", "high"),
     "spelling_grammar": ("Errors", "low"),
@@ -61,32 +58,20 @@ HOOK_COPY = {
     # ── H1 tags ────────────────────────────────────────────────────────────
     "h1_missing": {
         "hook_stat": "+32.3%",
-        "hook_ctx":  "more leads per position climbed. Pages with no H1 give Google no topic to rank for.",
-        "costs":     "Your top pages give Google nothing to rank. Missing H1s remove the primary on-page relevance signal — directly hurting rankings and leads.",
-        "support":   "79% of visitors scan, not read. No headline, no reason to stay.",
+        "hook_ctx":  "more leads per position climbed on Google. Pages with no H1 give Google no topic to rank for.",
+        "costs":     "Missing H1s give Google no topic to rank the page for, directly hurting rankings and leads.",
+        "support":   "H1 is the strongest on-page signal Google uses to understand what a page is about.",
     },
     "h1_multiple": {
         "hook_stat": "-15%",
         "hook_ctx":  "ranking dilution when multiple H1s compete on one page.",
-        "costs":     "Competing H1s blur which topic the page is about — Google picks the weaker one.",
+        "costs":     "Competing H1s blur which topic the page is about, and Google picks the weaker one.",
         "support":   "",
     },
     "h1_short": {
         "hook_stat": "-8%",
-        "hook_ctx":  "CTR loss when H1s are too short to describe the page.",
-        "costs":     "Short H1s under-describe the page and weaken relevance signals.",
-        "support":   "",
-    },
-    "h1_long": {
-        "hook_stat": "-6%",
-        "hook_ctx":  "H1 dilution when the headline over-reaches.",
-        "costs":     "Overly long H1s dilute the primary topic signal.",
-        "support":   "",
-    },
-    "h1_duplicate": {
-        "hook_stat": "-12%",
-        "hook_ctx":  "cannibalisation risk from duplicate H1s across pages.",
-        "costs":     "Duplicate H1s blur which page is most relevant for a topic.",
+        "hook_ctx":  "Google ranking impact when H1s are too short to describe the page.",
+        "costs":     "Short H1s under-describe the page and weaken Google's ranking signal for it.",
         "support":   "",
     },
     # ── Meta descriptions ─────────────────────────────────────────────────
@@ -117,8 +102,8 @@ HOOK_COPY = {
     # ── Title tags ────────────────────────────────────────────────────────
     "title_missing": {
         "hook_stat": "-40%",
-        "hook_ctx":  "ranking loss when the title tag is missing — Google's #1 on-page signal.",
-        "costs":     "Missing titles severely weaken relevance signals and rankings.",
+        "hook_ctx":  "leads lost when the title tag is missing. It's Google's #1 on-page ranking signal.",
+        "costs":     "Missing titles severely weaken relevance signals, rankings and leads.",
         "support":   "",
     },
     "title_long": {
@@ -135,8 +120,8 @@ HOOK_COPY = {
     },
     "title_duplicate": {
         "hook_stat": "-15%",
-        "hook_ctx":  "cannibalisation from duplicate title tags.",
-        "costs":     "Duplicate titles confuse search engines about which page to rank.",
+        "hook_ctx":  "ranking loss from duplicate titles. Google picks one page and hides the rest.",
+        "costs":     "Duplicate titles confuse Google about which page to rank, so none of them rank well.",
         "support":   "",
     },
     "title_stuffed": {
@@ -147,9 +132,9 @@ HOOK_COPY = {
     },
     # ── Schema / structured data ─────────────────────────────────────────
     "structured_data": {
-        "hook_stat": "+25%",
+        "hook_stat": "+5%",
         "hook_ctx":  "more leads with structured data. You have none.",
-        "costs":     "No rich results, no local signal. Searchers pick someone else.",
+        "costs":     "No rich results on Google and no signal for LLMs like ChatGPT or Perplexity. Searchers pick someone else.",
         "support":   "+82% CTR for rich results. +35% more visits with search features on.",
     },
     "faq_missing": {
@@ -160,10 +145,10 @@ HOOK_COPY = {
     },
     # ── Content depth ────────────────────────────────────────────────────
     "thin_content": {
-        "hook_stat": "54.4%",
-        "hook_ctx":  "of clicks go to the top 3 results. Thin pages don't get there.",
-        "costs":     "Money-decision pages don't earn enough trust to rank if they're thin.",
-        "support":   "",
+        "hook_stat": "+15%",
+        "hook_ctx":  "more leads once thin pages get real depth. Top-3 clicks go to pages with substance.",
+        "costs":     "Money-decision pages don't earn enough trust to rank if they're thin, so they don't drive leads.",
+        "support":   "54.4% of Google clicks go to the top 3 results — thin pages don't get there.",
     },
     "near_duplicate": {
         "hook_stat": "-30%",
@@ -179,9 +164,9 @@ HOOK_COPY = {
         "support":   "",
     },
     "canonical_missing": {
-        "hook_stat": "-10%",
+        "hook_stat": "-25%",
         "hook_ctx":  "authority leaked when there is no canonical tag.",
-        "costs":     "Google may index the wrong URL variant and split link equity.",
+        "costs":     "Google may index the wrong URL variant and split link equity across duplicates.",
         "support":   "",
     },
     "canonical_not_self": {
@@ -224,8 +209,8 @@ HOOK_COPY = {
     # ── Speed / Core Web Vitals ─────────────────────────────────────────
     "lcp_high": {
         "hook_stat": "-24%",
-        "hook_ctx":  "conversions when LCP is above 4 seconds.",
-        "costs":     "Slow load kills the click before the page ever loads.",
+        "hook_ctx":  "lost rankings and leads when LCP is above 4 seconds. Slow pages don't rank on mobile.",
+        "costs":     "Slow load kills the click before the page ever loads, and Google pushes slow pages down on mobile.",
         "support":   "53% of mobile visits leave if a page takes >3s.",
     },
     "lcp_medium": {
@@ -296,12 +281,6 @@ HOOK_COPY = {
         "support":   "",
     },
     # ── OG / hreflang / CTA ──────────────────────────────────────────────
-    "og_missing": {
-        "hook_stat": "-20%",
-        "hook_ctx":  "social CTR when shared links lack a rich preview.",
-        "costs":     "Missing OG tags mean shares look bare — trust drops before the click.",
-        "support":   "",
-    },
     "hreflang_missing": {
         "hook_stat": "-25%",
         "hook_ctx":  "international traffic when Google can't map language variants.",
@@ -309,9 +288,9 @@ HOOK_COPY = {
         "support":   "",
     },
     "cta_missing": {
-        "hook_stat": "-35%",
-        "hook_ctx":  "conversion loss on pages without a clear CTA.",
-        "costs":     "Visitors arrive but there's nothing for them to do.",
+        "hook_stat": "+35%",
+        "hook_ctx":  "more leads when pages get a clear CTA. Right now visitors have nothing to click.",
+        "costs":     "Visitors arrive but there's nothing for them to do, so traffic doesn't turn into leads.",
         "support":   "",
     },
     # ── Spelling / grammar ───────────────────────────────────────────────

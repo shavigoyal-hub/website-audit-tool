@@ -263,6 +263,45 @@ def build_deck():
         return jsonify({"error": traceback.format_exc()}), 500
 
 
+@app.route("/append-finding", methods=["POST"])
+def append_finding_route():
+    """Append a manual finding to the reviewed sheet.
+
+    Body: sheet_url + prompt ("<url> <label>"), or explicit url/label/priority.
+    Fills the next blank row above the Ending row.
+    """
+    try:
+        sheet_url = request.form.get("sheet_url", "").strip()
+        prompt = request.form.get("prompt", "").strip()
+        url = request.form.get("url", "").strip()
+        label = request.form.get("label", "").strip()
+        priority = request.form.get("priority", "Medium").strip() or "Medium"
+        category = request.form.get("category", "").strip() or None
+
+        if not sheet_url:
+            return jsonify({"error": "sheet_url required"}), 400
+
+        if prompt and not (url and label):
+            m = re.match(r"(https?://\S+)\s+(.*)", prompt)
+            if m:
+                url = url or m.group(1).strip().rstrip(".,;")
+                label = label or m.group(2).strip()
+            else:
+                label = label or prompt
+
+        if not label:
+            return jsonify({"error": "Need at least a label or prompt"}), 400
+
+        row, err = report_sheets.append_finding(
+            sheet_url, url, label, priority=priority, category=category)
+        if err:
+            return jsonify({"ok": False, "error": err}), 400
+        return jsonify({"ok": True, "row": row,
+                        "message": f"Added row {row} — {label}"})
+    except Exception:
+        return jsonify({"error": traceback.format_exc()}), 500
+
+
 @app.route("/history")
 def history_route():
     """Return recent audit runs + the history sheet URL."""

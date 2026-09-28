@@ -523,7 +523,7 @@ html, body {
   color: var(--text); font-weight: 700;
 }
 /* Small grey line for finding pages */
-.head-line { font-size: 12pt; font-weight: 500; color: var(--muted); letter-spacing: -0.005em; }
+.head-line { font-size: 10pt; font-weight: 500; color: var(--muted); letter-spacing: -0.005em; }
 
 /* ── Intro ──────────────────────────────────────────────────────────── */
 .intro-body { display: flex; gap: 60px; align-items: flex-start; margin-top: 30px; }
@@ -579,10 +579,11 @@ html, body {
 /* ── Finding page ───────────────────────────────────────────────────── */
 .head-row { display: flex; justify-content: space-between; align-items: center; }
 .head-right { display: flex; gap: 8px; }
+.chip-small { font-size: 9pt; } /* fallback for legacy pill callers */
 .chip {
   display: inline-flex; align-items: center; gap: 7px;
   padding: 5px 12px; border-radius: 7px;
-  font-size: 11pt; font-weight: 500; line-height: 1;
+  font-size: 9.5pt; font-weight: 500; line-height: 1;
   background: var(--white); border: 1px solid;
 }
 .chip .dot { width: 7px; height: 7px; border-radius: 50%; }
@@ -596,14 +597,14 @@ html, body {
   margin: 28px 0 30px;
 }
 .hero-stat {
-  font-size: 110pt; font-weight: 700; color: var(--blue);
+  font-size: 88pt; font-weight: 700; color: var(--blue);
   line-height: 0.9; letter-spacing: -0.055em;
   flex-shrink: 0;
 }
 .hero-stat.zero { color: var(--red); }
 .hero-ctx  {
-  font-size: 34pt; font-weight: 700; line-height: 1.08; flex: 1;
-  letter-spacing: -0.028em; padding-top: 14px;
+  font-size: 26pt; font-weight: 700; line-height: 1.1; flex: 1;
+  letter-spacing: -0.025em; padding-top: 12px;
   color: var(--muted);
 }
 .hero-ctx .headline { color: var(--text); }
@@ -631,10 +632,10 @@ html, body {
 .card.card-sup { background: #fff; }
 .card-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
 .card-label {
-  font-size: 11pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
+  font-size: 9.5pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
 }
 .card-body {
-  font-size: 15pt; font-weight: 500; line-height: 1.4;
+  font-size: 12.5pt; font-weight: 500; line-height: 1.4;
   color: var(--text);
 }
 .wf-list { list-style: none; min-width: 0; width: 100%; }
@@ -654,14 +655,14 @@ html, body {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  font-size: 12pt; color: var(--text);
+  font-size: 10.5pt; color: var(--text);
   font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   font-weight: 400;
 }
 .pill {
   flex: 0 0 auto;
-  display: inline-block; padding: 3px 10px; border-radius: 6px;
-  font-size: 10pt; font-weight: 500; white-space: nowrap;
+  display: inline-block; padding: 2px 9px; border-radius: 6px;
+  font-size: 8.5pt; font-weight: 500; white-space: nowrap;
   border: 1px solid;
 }
 .pill-red   { background: #fdecec; color: #c8102e; border-color: #f5b6b6; }
@@ -671,11 +672,11 @@ html, body {
 /* Supporting stat card — big blue number, bold dark first sentence, muted rest */
 .card-sup { }
 .sup-num  {
-  font-size: 44pt; font-weight: 700; color: var(--blue); line-height: 1;
-  letter-spacing: -0.03em; margin-bottom: 8px; display: block;
+  font-size: 36pt; font-weight: 700; color: var(--blue); line-height: 1;
+  letter-spacing: -0.03em; margin-bottom: 6px; display: block;
 }
 .sup-rest {
-  font-size: 13pt; line-height: 1.4;
+  font-size: 11pt; line-height: 1.4;
   color: var(--muted); font-weight: 400;
 }
 .sup-rest .headline { color: var(--text); font-weight: 700; }

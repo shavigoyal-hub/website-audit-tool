@@ -142,6 +142,19 @@
 
     <div id="result"></div>
 
+    <div id="appendBox" style="display:none; margin-top:24px; padding-top:20px; border-top:1px dashed #e5e7eb;">
+      <label>Add another finding (chatbot)</label>
+      <p class="hint">Paste one per row like <code>https://site.com/page/ flat architecture</code>. Fills the next blank row above the Ending slide (4 slots).</p>
+      <input type="text" id="appendPrompt" placeholder="https://clearwaterprocessing.com/our-services/ flat architecture" />
+      <div style="display:flex; gap:8px; align-items:center; margin-top:-10px; margin-bottom:12px;">
+        <select id="appendPriority" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fafafa;">
+          <option>Critical</option><option>High</option><option selected>Medium</option><option>Low</option>
+        </select>
+        <button type="button" id="appendBtn" style="flex:1;padding:11px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">Add to sheet</button>
+      </div>
+      <div id="appendResult" style="font-size:13px;color:#166534;"></div>
+    </div>
+
     <form id="deckForm" style="display:none; margin-top:24px; padding-top:20px; border-top:1px dashed #e5e7eb;">
       <label for="sheet_url">Sheet URL</label>
       <p class="hint">In the sheet: edit Hook Stat / Hook Context / What we found / What it costs you per row, set <strong>Slide #</strong> for ordering, tick <strong>Approved</strong> on the rows you want in the deck.</p>
@@ -195,6 +208,7 @@
             links = `<a href="${data.sheet_url}" target="_blank" style="color:#166534;font-weight:700">📊 Open Google Sheet</a>`;
             document.getElementById("sheet_url").value = data.sheet_url;
             document.getElementById("deckForm").style.display = "block";
+            document.getElementById("appendBox").style.display = "block";
           }
           let warning = "";
           if (data.warning) {
@@ -221,6 +235,34 @@
         btn.disabled = false;
         btnText.style.display = "block";
         spinner.style.display = "none";
+      }
+    });
+
+    document.getElementById("appendBtn").addEventListener("click", async function () {
+      const prompt = document.getElementById("appendPrompt").value.trim();
+      const priority = document.getElementById("appendPriority").value;
+      const sheetUrl = document.getElementById("sheet_url").value.trim();
+      const out = document.getElementById("appendResult");
+      if (!prompt) { out.style.color = "#991b1b"; out.textContent = "Enter a URL + label."; return; }
+      out.style.color = "#6b7280"; out.textContent = "Adding…";
+      try {
+        const fd = new FormData();
+        fd.append("sheet_url", sheetUrl);
+        fd.append("prompt", prompt);
+        fd.append("priority", priority);
+        const res = await fetch("/append-finding", { method: "POST", body: fd });
+        const data = await res.json();
+        if (data.ok) {
+          out.style.color = "#166534";
+          out.textContent = "✓ " + data.message;
+          document.getElementById("appendPrompt").value = "";
+        } else {
+          out.style.color = "#991b1b";
+          out.textContent = "✗ " + (data.error || "failed");
+        }
+      } catch (err) {
+        out.style.color = "#991b1b";
+        out.textContent = "✗ " + err.message;
       }
     });
 
