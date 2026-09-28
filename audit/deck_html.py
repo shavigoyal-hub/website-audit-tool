@@ -283,11 +283,22 @@ def _render_finding(row, page_no, total_pages, client_display):
     costs     = row.get("costs", "") or row.get("impact", "") or row.get("observation", "")
     support   = row.get("support", "")
 
-    # Strip a duplicated leading number from hook_ctx. Handles the raw stat
-    # ('-15%'), its Sheets-formatted variant ('-15.0%') and odd spacing
-    # from Sheets ('-15. 0%').
+    # Strip a duplicated leading number from hook_ctx.
     import re as _re
     hook_ctx = _re.sub(r"^\s*[+\-]?\d[\d.,\s]*%\s+", "", hook_ctx)
+
+    # Sheets written by other tools sometimes leave hook_ctx / support
+    # blank while filling only observation + impact. Fall back to the
+    # first sentence of observation so the hero isn't just a naked stat.
+    if not hook_ctx.strip():
+        obs = (row.get("observation") or "").strip()
+        # Cut at first line-break (evidence starts on next line via 'eg:')
+        obs = obs.split("\n", 1)[0].strip()
+        # Cut at first sentence end
+        m = _re.search(r"(?<=\w{3})\.(?:\s+|$)", obs)
+        if m:
+            obs = obs[:m.start() + 1]
+        hook_ctx = obs
 
     # URL rows with pills. Render as PATH ONLY (matches reference PDF style).
     import re as _ure
