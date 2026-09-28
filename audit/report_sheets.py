@@ -625,7 +625,13 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         except Exception as exc:
             print(f"[sheets] dimensions (non-fatal): {exc}")
 
-        # 6) Share with the org (non-fatal if it fails)
+        # 6) Sources tab (hidden by default — reviewer can un-hide from Sheets)
+        try:
+            _write_sources_tab(sid)
+        except Exception as exc:
+            print(f"[sheets] sources tab (non-fatal): {exc}")
+
+        # 7) Share with the org (non-fatal if it fails)
         _share(sid)
 
         return f"https://docs.google.com/spreadsheets/d/{sid}"
@@ -725,6 +731,50 @@ def read_for_deck(sheet_url_or_id):
             "reference":   "",
         })
     return {"meta": {}, "obs_rows": obs_rows}
+
+
+def _write_sources_tab(spreadsheet_id):
+    """Add a hidden 'Sources' tab with methodology + per-stat citations."""
+    from audit import sources as _sources
+    # Add the tab
+    _add_sheet_tab(spreadsheet_id, "Sources")
+    # Look up its numeric sheetId
+    info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                             {"spreadsheet_id": spreadsheet_id}) or {}
+    sheet_id = None
+    for s in (info.get("sheets") or []):
+        props = s.get("properties") or {}
+        if props.get("title") == "Sources":
+            sheet_id = props.get("sheetId")
+            break
+    # Write the HTML block by pasting values row-by-row
+    rows = [["Sources & methodology"], [""],
+            ["1. Lead math — how percentages become leads"]]
+    for k, v in _sources.LEAD_MATH:
+        rows.append([k, v])
+    rows.append([""])
+    rows.append(["2. Per-finding stat sources"])
+    rows.append(["Finding key", "Stat", "Signal", "Source"])
+    for key, stat, direction, source in _sources.STAT_SOURCES:
+        rows.append([key, stat, direction, source])
+    _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
+        "spreadsheet_id": spreadsheet_id,
+        "sheet_name": "Sources",
+        "first_cell_location": "A1",
+        "valueInputOption": "USER_ENTERED",
+        "values": rows,
+    })
+    # Hide the tab
+    if sheet_id is not None:
+        try:
+            _composio_execute("GOOGLESHEETS_UPDATE_SHEET_PROPERTIES", {
+                "spreadsheetId": spreadsheet_id,
+                "updateSheetProperties": {
+                    "properties": {"sheetId": sheet_id, "hidden": True},
+                    "fields": "hidden",
+                }})
+        except Exception as exc:
+            print(f"[sheets] hide Sources (non-fatal): {exc}")
 
 
 def append_finding(sheet_url_or_id, url, label, priority="Medium",
