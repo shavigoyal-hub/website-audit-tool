@@ -353,23 +353,28 @@ def psi_to_observations(psi_live):
         if any("image" in t for t in opp_titles):
             img.append(url)
 
-    def add(key, ex):
+    def add(key, ex, urls=None):
         spec = CATALOG[key]
-        rows.append({"category": CATEGORY.get(key, "Page Speed"),
+        ref = "\n".join(urls) if urls else "-"
+        rows.append({"key": key,
+                     "category": CATEGORY.get(key, "Page Speed"),
                      "observation": f"{spec[1]}\nEg: {ex}" if ex else spec[1],
-                     "priority": spec[0], "impact": spec[2], "reference": "-"})
+                     "priority": spec[0], "impact": spec[2],
+                     "reference": ref})
 
     if lcp:
         u, v = max(lcp, key=lambda x: x[1])
-        add("lcp_high" if v >= 4 else "lcp_medium", f"{u} ({v}s)")
+        add("lcp_high" if v >= 4 else "lcp_medium",
+            f"{u} ({v}s)", urls=[x[0] for x in lcp])
     if cls:
         u, v = max(cls, key=lambda x: x[1])
-        add("cls_high", f"{u} (CLS {v})")
+        add("cls_high", f"{u} (CLS {v})", urls=[x[0] for x in cls])
     if perf:
         u, v = min(perf, key=lambda x: x[1])
-        add("perf_low" if v < 50 else "perf_moderate", f"{u} (score {v}/100)")
+        add("perf_low" if v < 50 else "perf_moderate",
+            f"{u} (score {v}/100)", urls=[x[0] for x in perf])
     if rb:
-        add("render_blocking", rb[0])
+        add("render_blocking", rb[0], urls=rb)
     if img:
-        add("unoptimized_images", img[0])
+        add("unoptimized_images", img[0], urls=img)
     return rows

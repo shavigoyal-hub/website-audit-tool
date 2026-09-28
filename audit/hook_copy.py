@@ -47,10 +47,60 @@ STATUS_LABEL = {
     "render_blocking":  ("Render blocking", "medium"),
     "url_long":         ("Long URL", "low"),
     "low_inlinks":      ("Few inlinks", "medium"),
+    "flat_architecture":("Flat structure", "medium"),
+    "orphan_page":      ("Orphan", "high"),
     "pagination_no_rel":("No rel pagination", "low"),
     "hreflang_missing": ("No hreflang", "high"),
     "cta_missing":      ("No CTA", "high"),
     "spelling_grammar": ("Errors", "low"),
+}
+
+
+# ── Hint → canonical finding key ────────────────────────────────────────
+# Maps free-text phrases the user types in the chatbot to the observation
+# key whose canonical copy we should reuse. Match is case-insensitive
+# substring — longest phrase wins.
+HINT_ALIASES = {
+    "flat architecture":       "flat_architecture",
+    "flat site":               "flat_architecture",
+    "flat structure":          "flat_architecture",
+    "orphan":                  "orphan_page",
+    "no internal links":       "low_inlinks",
+    "few internal links":      "low_inlinks",
+    "thin content":            "thin_content",
+    "duplicate content":       "near_duplicate",
+    "no h1":                   "h1_missing",
+    "missing h1":              "h1_missing",
+    "multiple h1":             "h1_multiple",
+    "short h1":                "h1_short",
+    "no meta":                 "meta_missing",
+    "missing meta":            "meta_missing",
+    "no title":                "title_missing",
+    "missing title":           "title_missing",
+    "duplicate title":         "title_duplicate",
+    "keyword stuff":           "title_stuffed",
+    "no schema":               "structured_data",
+    "no structured data":      "structured_data",
+    "no faq":                  "faq_missing",
+    "noindex":                 "non_indexable",
+    "no canonical":            "canonical_missing",
+    "wrong canonical":         "canonical_not_self",
+    "404":                     "error_404",
+    "server error":            "error_5xx",
+    "render":                  "render_error",
+    "js dependent":            "render_js_dependent",
+    "slow":                    "lcp_high",
+    "lcp":                     "lcp_high",
+    "layout shift":            "cls_high",
+    "cls":                     "cls_high",
+    "heavy image":             "unoptimized_images",
+    "large image":             "image_large",
+    "long url":                "url_long",
+    "no cta":                  "cta_missing",
+    "missing cta":             "cta_missing",
+    "no hreflang":             "hreflang_missing",
+    "spelling":                "spelling_grammar",
+    "grammar":                 "spelling_grammar",
 }
 
 
@@ -272,6 +322,18 @@ HOOK_COPY = {
         "hook_stat": "-20%",
         "hook_ctx":  "crawl priority for pages with very few internal links.",
         "costs":     "Google under-values pages nothing else on the site links to.",
+        "support":   "",
+    },
+    "flat_architecture": {
+        "hook_stat": "-18%",
+        "hook_ctx":  "PageRank flow when every page sits at the same depth from the homepage.",
+        "costs":     "A flat structure gives every page the same weight, so Google can't tell which ones matter.",
+        "support":   "Deep-link hierarchies concentrate authority on money pages.",
+    },
+    "orphan_page": {
+        "hook_stat": "-30%",
+        "hook_ctx":  "discoverability for orphan pages that no other page links to.",
+        "costs":     "Orphan pages are hard for Google to find and easy for users to miss.",
         "support":   "",
     },
     "pagination_no_rel": {

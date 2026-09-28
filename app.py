@@ -286,23 +286,35 @@ def append_finding_route():
         if not sheet_url:
             return jsonify({"error": "sheet_url required"}), 400
 
+        hint = ""
         if prompt and not (url and label):
             m = re.match(r"(https?://\S+)\s+(.*)", prompt)
             if m:
                 url = url or m.group(1).strip().rstrip(".,;")
-                label = label or m.group(2).strip()
+                hint = m.group(2).strip()
             else:
-                label = label or prompt
+                hint = prompt
 
-        if not label:
-            return jsonify({"error": "Need at least a label or prompt"}), 400
+        if not (url or label or hint):
+            return jsonify({"error": "Need at least a URL, label, or prompt"}), 400
+
+        from audit.live_check import audit_url
+        analysis = audit_url(url, hint) if url else {
+            "key": "", "label": label or hint, "url": url,
+            "evidence": "no URL to fetch", "detected": [],
+        }
+        finding_key = analysis["key"]
+        row_label   = label or analysis["label"]
 
         row, err = report_sheets.append_finding(
-            sheet_url, url, label, priority=priority, category=category)
+            sheet_url, url, row_label, priority=priority,
+            category=category, finding_key=finding_key)
         if err:
-            return jsonify({"ok": False, "error": err}), 400
+            return jsonify({"ok": False, "error": err,
+                            "analysis": analysis}), 400
         return jsonify({"ok": True, "row": row,
-                        "message": f"Added row {row} — {label}"})
+                        "message": f"Added row {row} — {row_label} ({analysis['evidence']})",
+                        "analysis": analysis})
     except Exception:
         return jsonify({"error": traceback.format_exc()}), 500
 

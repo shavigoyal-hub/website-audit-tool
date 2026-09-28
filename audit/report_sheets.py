@@ -727,12 +727,17 @@ def read_for_deck(sheet_url_or_id):
     return {"meta": {}, "obs_rows": obs_rows}
 
 
-def append_finding(sheet_url_or_id, url, label, priority="Medium", category=None):
+def append_finding(sheet_url_or_id, url, label, priority="Medium",
+                   category=None, finding_key=""):
     """Fill the next blank row above the Ending row with a manual finding.
 
     Sheet is created with 4 blank rows before Ending — this fills them one
     by one. Returns (row_number, None) on success, (None, error_message) on
     failure. Never rewrites existing rows (memory: append-only edits).
+
+    When `finding_key` is a known key in HOOK_COPY (e.g. resolved by the
+    live_check chatbot), the row uses that entry's canonical hook_stat,
+    hook_ctx, costs and support copy instead of the priority-based fallback.
     """
     global LAST_ERROR
     LAST_ERROR = ""
@@ -764,7 +769,7 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium", category=None
     if target_row is None:
         return None, "No blank row left — all 4 slots used."
     from audit.hook_copy import for_row as _hf
-    copy = _hf("", default_obs=label, default_costs="", priority=priority)
+    copy = _hf(finding_key, default_obs=label, default_costs="", priority=priority)
     ctx_body = copy["hook_ctx"].replace('"', '""')
     formula = (
         f'=IF(E{target_row}="","{ctx_body}",'
