@@ -235,6 +235,7 @@ def append_finding_route():
             return jsonify({"error": "prompt required"}), 400
 
         from audit.live_check import audit_url
+        from audit.llm_frame import frame as _llm_frame
 
         results = []
         errors = []
@@ -248,15 +249,30 @@ def append_finding_route():
                 url = ""
                 hint = line
 
+            # 1. Static rule check + on-page detection.
             analysis = audit_url(url, hint) if url else {
                 "key": "", "label": hint or "Custom", "url": "",
                 "evidence": "no URL to audit", "detected": [],
             }
             row_label = analysis["label"]
+            row_priority = priority
+
+            # 2. Ask Claude to phrase it if ANTHROPIC_API_KEY is available.
+            overrides = _llm_frame(url, hint)
+            if overrides:
+                analysis["framed_by"] = "llm"
+                analysis["label"] = overrides.get("label") or analysis["label"]
+                row_label = analysis["label"]
+                row_priority = overrides.get("priority") or row_priority
+                # Include the pill wording on 'What we found'
+                overrides.setdefault("status_label", overrides.get("label"))
+                if overrides.get("verified") is False:
+                    analysis["evidence"] = "LLM could not verify from HTML — added on your say-so."
 
             row, err = report_sheets.append_finding(
-                sheet_url, url, row_label, priority=priority,
-                category=category, finding_key=analysis["key"])
+                sheet_url, url, row_label, priority=row_priority,
+                category=category, finding_key=analysis["key"],
+                overrides=overrides)
             if err:
                 errors.append({"line": line, "error": err,
                                 "analysis": analysis})

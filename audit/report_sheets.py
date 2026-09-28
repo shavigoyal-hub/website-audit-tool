@@ -778,7 +778,7 @@ def _write_sources_tab(spreadsheet_id):
 
 
 def append_finding(sheet_url_or_id, url, label, priority="Medium",
-                   category=None, finding_key=""):
+                   category=None, finding_key="", overrides=None):
     """Fill the next blank row above the Ending row with a manual finding.
 
     Sheet is created with 4 blank rows before Ending — this fills them one
@@ -788,6 +788,11 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
     When `finding_key` is a known key in HOOK_COPY (e.g. resolved by the
     live_check chatbot), the row uses that entry's canonical hook_stat,
     hook_ctx, costs and support copy instead of the priority-based fallback.
+
+    `overrides` dict (from llm_frame.frame) can supply explicit hook_stat /
+    hook_ctx / costs / support / label / status_label — takes precedence
+    over everything else. Any missing field falls back to HOOK_COPY[key]
+    then to the priority-based fallback.
     """
     global LAST_ERROR
     LAST_ERROR = ""
@@ -820,22 +825,33 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
         return None, "No blank row left — all 4 slots used."
     from audit.hook_copy import for_row as _hf
     copy = _hf(finding_key, default_obs=label, default_costs="", priority=priority)
-    ctx_body = copy["hook_ctx"].replace('"', '""')
+    overrides = overrides or {}
+    hook_stat = overrides.get("hook_stat") or copy["hook_stat"]
+    hook_ctx  = overrides.get("hook_ctx")  or copy["hook_ctx"]
+    costs     = overrides.get("costs")     or copy["costs"] \
+                or f"{label}, flagged manually during review."
+    support   = overrides.get("support") if overrides.get("support") is not None \
+                else copy["support"]
+    row_label = overrides.get("label")    or label
+    row_priority = overrides.get("priority") or priority
+    row_category = overrides.get("category") or category or "Manual"
+    pill = overrides.get("status_label") or row_label
+    ctx_body = hook_ctx.replace('"', '""')
     formula = (
         f'=IF(E{target_row}="","{ctx_body}",'
         f'IFERROR(TEXT(E{target_row},"+#.#%;-#.#%;0%")&" "&"{ctx_body}",'
         f'E{target_row}&" "&"{ctx_body}"))'
     )
     values = [[
-        category or "Manual",
-        label,
-        priority,
+        row_category,
+        row_label,
+        row_priority,
         "",
-        copy["hook_stat"],
+        hook_stat,
         formula,
-        f"{url} | Custom" if url else "Site-wide | Custom",
-        copy["costs"] or f"{label} — flagged manually during review.",
-        copy["support"],
+        f"{url} | {pill}" if url else f"Site-wide | {pill}",
+        costs,
+        support,
     ]]
     try:
         _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
