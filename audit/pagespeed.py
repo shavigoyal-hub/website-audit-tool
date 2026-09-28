@@ -19,6 +19,11 @@ def fetch(url, strategy="mobile", api_key=None, retries=2):
     if api_key:
         params["key"] = api_key
     last = None
+    try:
+        from audit import metrics as _m
+        _m.incr("psi_calls")
+    except Exception:
+        pass
     for attempt in range(retries + 1):
         try:
             r = requests.get(ENDPOINT, params=params, timeout=90)

@@ -43,6 +43,11 @@ def _toolkit(slug):
 
 def execute(slug, arguments, retry=3):
     """Call POST /api/v3/tools/execute/{slug}. Returns response_data or raises."""
+    try:
+        from audit import metrics as _m
+        _m.incr("composio_calls")
+    except Exception:
+        pass
     key = _api_key()
     if not key:
         raise RuntimeError("COMPOSIO_API_KEY not set")
@@ -151,6 +156,11 @@ def proxy(endpoint, method, body=None, toolkit="googlesheets"):
     account's API. Lets us call Google APIs directly for capabilities not
     covered by named actions (updateDimensionProperties, presentations.create).
     """
+    try:
+        from audit import metrics as _m
+        _m.incr("composio_calls")
+    except Exception:
+        pass
     key = _api_key()
     if not key:
         raise RuntimeError("COMPOSIO_API_KEY not set")

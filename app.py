@@ -10,7 +10,7 @@ import traceback
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file
 
-from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_pdf, deck_html, sf_csv, history
+from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_pdf, deck_html, sf_csv, history, metrics
 from audit.version import VERSION
 
 app = Flask(__name__)
@@ -65,6 +65,7 @@ def index():
 @app.route("/run", methods=["POST"])
 def run_audit():
     try:
+        metrics.reset()
         live_url = request.form.get("live_url", "").strip()
         mockup_url = request.form.get("mockup_url", "").strip()
         plan          = request.form.get("plan", "").strip()
@@ -97,6 +98,7 @@ def run_audit():
         status_num = pd.to_numeric(df.get("Status Code", pd.Series([], dtype=str)), errors="coerce").fillna(0).astype(int)
         total_pages = int((sf_csv.is_html(df) & (status_num == 200)).sum())
         total_images = int(sf_csv.is_image(df_raw).sum())
+        metrics.set_value("pages_crawled", total_pages)
 
         findings = sf_csv.run_checks(df, df, has_images_csv=False)
         reps = sf_csv.representative_pages(df, custom_patterns=page_type_patterns)
@@ -139,17 +141,20 @@ def run_audit():
             meta=meta,
         )
 
+        metrics_snap = metrics.snapshot()
         resp = {
             "ok": True,
             "version": VERSION,
             "observations": len(rows),
             "message": f"Audit complete — {len(rows)} observations found.",
+            "metrics": metrics_snap,
         }
         if sheet_url:
             resp["sheet_url"] = sheet_url
             resp["message"] += " Google Sheet created — open, edit, then build the deck."
             try:
-                history.append_run(client_name, live_url, sheet_url)
+                history.append_run(client_name, live_url, sheet_url,
+                                    metrics=metrics_snap)
             except Exception as exc:
                 print(f"[history] append_run failed: {exc}")
         else:

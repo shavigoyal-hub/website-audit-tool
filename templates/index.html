@@ -113,12 +113,15 @@
         row.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;font-size:12px;padding:8px 10px;border:1px solid #f3f4f6;border-radius:8px;background:#fafafa;align-items:center;";
         const client = run.client || "—";
         const ts = (run.timestamp || "").replace("T"," ").replace("Z"," UTC");
+        const cost = run.cost_usd ? `$${Number(run.cost_usd).toFixed(4)}` : "";
+        const pages = run.pages ? `${run.pages}p` : "";
         row.innerHTML = `
           <span style="font-weight:600;color:#111;min-width:140px">${client}</span>
           <span style="color:#6b7280;font-size:11px">${ts}</span>
           ${run.sheet_url ? `<a href="${run.sheet_url}" target="_blank" style="color:#6366f1;font-weight:600">Sheet</a>` : ""}
           ${run.deck_url  ? `<a href="${run.deck_url}"  target="_blank" style="color:#6366f1;font-weight:600">Deck</a>` : ""}
           ${run.pdf_url   ? `<a href="${run.pdf_url}"   target="_blank" style="color:#6366f1;font-weight:600">PDF</a>` : ""}
+          ${cost ? `<span style="color:#059669;font-size:11px;margin-left:auto">${cost} · ${pages}</span>` : ""}
         `;
         list.appendChild(row);
       });
@@ -156,9 +159,8 @@
     </div>
 
     <form id="deckForm" style="display:none; margin-top:24px; padding-top:20px; border-top:1px dashed #e5e7eb;">
-      <label for="sheet_url">Sheet URL</label>
-      <p class="hint">In the sheet: edit Hook Stat / Hook Context / What we found / What it costs you per row, set <strong>Slide #</strong> for ordering, tick <strong>Approved</strong> on the rows you want in the deck.</p>
-      <input type="url" id="sheet_url" name="sheet_url" placeholder="https://docs.google.com/spreadsheets/d/..." required />
+      <p class="hint" style="margin-bottom:14px">In the sheet: edit Hook Stat / Hook Context / What we found / What it costs you per row, then hit build.</p>
+      <input type="hidden" id="sheet_url" name="sheet_url" required />
       <input type="hidden" name="force" value="1" />
 
       <button type="submit" id="deckBtn" style="background:#0f172a">
@@ -222,7 +224,18 @@
             }
           }
           const v = data.version ? `<br><span style="color:#6b7280;font-size:11px">v${data.version}</span>` : "";
-          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}${warning}${v}`;
+          let metricsLine = "";
+          if (data.metrics && data.metrics.counts) {
+            const c = data.metrics.counts;
+            const cost = (data.metrics.est_cost_usd || 0).toFixed(4);
+            metricsLine = `<div style="margin-top:10px;padding:8px 10px;background:#f8fafc;border-radius:6px;font-size:11px;color:#475569">
+              <strong>Run cost:</strong> $${cost} &middot;
+              ${c.pages_crawled || 0} pages &middot;
+              ${c.composio_calls || 0} Composio calls &middot;
+              ${c.psi_calls || 0} PSI calls
+            </div>`;
+          }
+          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}${metricsLine}${warning}${v}`;
         } else {
           result.className = "error";
           result.innerHTML = `❌ <strong>Error:</strong><br><pre style="white-space:pre-wrap;font-size:12px;margin-top:8px">${data.error}</pre>`;

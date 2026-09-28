@@ -18,7 +18,8 @@ HISTORY_TITLE = "Gushwork Website Audit Tool — History"
 HISTORY_TAB   = "History"
 
 _HEADER = ["Timestamp (UTC)", "Client", "Live URL",
-           "Sheet URL", "Deck URL", "PDF URL"]
+           "Sheet URL", "Deck URL", "PDF URL",
+           "Pages", "Composio Calls", "PSI Calls", "Est Cost USD"]
 
 # Cache the found sheet id so we don't Drive-search every request.
 _CACHED_ID = None
@@ -102,7 +103,7 @@ def get_url():
 def _read_rows(sid):
     try:
         resp = _cx("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": [f"{HISTORY_TAB}!A1:F"],
+            "spreadsheet_id": sid, "ranges": [f"{HISTORY_TAB}!A1:J"],
         })
     except Exception as exc:
         print(f"[history] read failed: {exc}")
@@ -116,19 +117,29 @@ def _next_free_row(sid):
     return len(rows) + 1 if rows else 1
 
 
-def append_run(client, live_url, sheet_url):
-    """Append a fresh row for a completed /run."""
+def append_run(client, live_url, sheet_url, metrics=None):
+    """Append a fresh row for a completed /run.
+
+    `metrics` is the audit.metrics.snapshot() dict; if provided the row also
+    carries page-crawled count, per-service call counts, and estimated cost.
+    """
     sid = _find_history_sheet()
     if not sid:
         return None
     row_num = _next_free_row(sid)
     ts = _dt.datetime.utcnow().isoformat(timespec="seconds") + "Z"
+    counts = (metrics or {}).get("counts") or {}
+    cost   = (metrics or {}).get("est_cost_usd") or ""
     try:
         _cx("GOOGLESHEETS_BATCH_UPDATE", {
             "spreadsheet_id": sid, "sheet_name": HISTORY_TAB,
             "first_cell_location": f"A{row_num}",
             "valueInputOption": "USER_ENTERED",
-            "values": [[ts, client, live_url, sheet_url, "", ""]],
+            "values": [[ts, client, live_url, sheet_url, "", "",
+                        counts.get("pages_crawled", ""),
+                        counts.get("composio_calls", ""),
+                        counts.get("psi_calls", ""),
+                        cost]],
         })
         return row_num
     except Exception as exc:
@@ -172,11 +183,13 @@ def list_recent(n=25):
         return []
     out = []
     for r in rows[1:]:
-        while len(r) < 6:
+        while len(r) < 10:
             r.append("")
         out.append({
             "timestamp": r[0], "client": r[1], "live_url": r[2],
             "sheet_url": r[3], "deck_url": r[4], "pdf_url": r[5],
+            "pages": r[6], "composio_calls": r[7],
+            "psi_calls": r[8], "cost_usd": r[9],
         })
     out.reverse()
     return out[:n]
