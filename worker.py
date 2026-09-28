@@ -46,10 +46,12 @@ def main():
         try:
             res = _run(job["live_url"])
             sheet = res.get("sheet_url") or ""
-            jobs.mark_done(job["id"], sheet)
+            crawler = res.get("crawler", "")
+            pages = res["metrics"]["counts"].get("pages_crawled", 0)
+            jobs.mark_done(job["id"], sheet, crawler=crawler, pages=pages)
             print(f"[worker] done {job['id']} → {sheet}  "
-                  f"(cost ${res['metrics']['est_cost_usd']}, "
-                  f"pages {res['metrics']['counts']['pages_crawled']})")
+                  f"(crawler={crawler}, pages={pages}, "
+                  f"cost=${res['metrics']['est_cost_usd']})")
         except KeyboardInterrupt:
             jobs.mark_error(job["id"], "worker interrupted")
             print("[worker] interrupted; job marked error")

@@ -16,7 +16,7 @@ from audit.history import _find_history_sheet as _find_sheet
 JOBS_TAB = "Jobs"
 JOB_HEADER = ["id", "created_utc", "client", "live_url",
               "status", "worker", "started_utc", "finished_utc",
-              "sheet_url", "error"]
+              "sheet_url", "error", "crawler", "pages"]
 
 
 def _ensure_tab(sid):
@@ -57,7 +57,7 @@ def _ensure_tab(sid):
 def _read_rows(sid):
     try:
         resp = _cx("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": [f"{JOBS_TAB}!A1:J"]})
+            "spreadsheet_id": sid, "ranges": [f"{JOBS_TAB}!A1:L"]})
     except Exception as exc:
         print(f"[jobs] read: {exc}")
         return []
@@ -90,7 +90,7 @@ def enqueue(client, live_url):
             "first_cell_location": f"A{row_num}",
             "valueInputOption": "USER_ENTERED",
             "values": [[jid, _now(), client, live_url,
-                        "pending", "", "", "", "", ""]],
+                        "pending", "", "", "", "", "", "", ""]],
         })
         return jid
     except Exception as exc:
@@ -139,7 +139,7 @@ def claim_next(worker_id):
     return None
 
 
-def mark_done(job_id, sheet_url):
+def mark_done(job_id, sheet_url, crawler="", pages=""):
     sid = _find_sheet()
     row = _find_row(sid, job_id) if sid else None
     if not row:
@@ -148,7 +148,8 @@ def mark_done(job_id, sheet_url):
         "spreadsheet_id": sid, "sheet_name": JOBS_TAB,
         "first_cell_location": f"E{row}",
         "valueInputOption": "USER_ENTERED",
-        "values": [["done", "", "", _now(), sheet_url or "", ""]],
+        "values": [["done", "", "", _now(), sheet_url or "", "",
+                    crawler or "", pages if pages != "" else ""]],
     })
     return True
 
