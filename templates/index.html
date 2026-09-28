@@ -305,11 +305,20 @@
         const data = await res.json();
         if (data.ok) {
           out.style.color = "#166534";
-          out.textContent = "✓ " + data.message;
+          let detail = "✓ " + data.message;
+          if (data.analysis) {
+            const a = data.analysis;
+            detail += `<br><span style="font-size:11px;color:#475569">matched key: <b>${a.key || "(none — added as raw label)"}</b> · ${a.evidence || ""}</span>`;
+            if (a.detected && a.detected.length) {
+              detail += `<br><span style="font-size:11px;color:#475569">on-page issues detected: ${a.detected.map(d=>d.key).join(", ")}</span>`;
+            }
+          }
+          out.innerHTML = detail;
           document.getElementById("appendPrompt").value = "";
         } else {
           out.style.color = "#991b1b";
-          out.textContent = "✗ " + (data.error || "failed");
+          out.innerHTML = "✗ " + (data.error || "failed") +
+            (data.analysis ? `<br><span style="font-size:11px">${data.analysis.evidence}</span>` : "");
         }
       } catch (err) {
         out.style.color = "#991b1b";

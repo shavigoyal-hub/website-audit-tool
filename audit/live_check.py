@@ -21,12 +21,26 @@ def _fetch(url, timeout=15):
         return None
 
 
+def _norm_tokens(s):
+    """Lowercase words, split on non-alnum, keep 3+ char stems."""
+    import re as _re
+    return [w[:8] for w in _re.split(r"[^a-z0-9]+", s.lower()) if len(w) >= 3]
+
+
 def _match_hint(hint):
-    """Return the canonical observation key for a hint, or None."""
+    """Return the canonical observation key for a hint, or None.
+
+    Matching passes, most-strict first:
+      1. Exact alias substring (case-insensitive).
+      2. Direct HOOK_COPY key match.
+      3. Fuzzy token overlap: every alias-token appears as a prefix of some
+         hint-token (so 'architure' matches 'architecture', 'archi' matches
+         'architecture', 'missing h1' matches 'h1 is missing').
+    """
     if not hint:
         return None
     h = hint.lower().strip()
-    # Longest alias substring wins so 'missing h1' beats 'h1'.
+    # Pass 1: exact substring, longest alias wins
     best = None
     best_len = 0
     for phrase, key in HINT_ALIASES.items():
@@ -35,10 +49,44 @@ def _match_hint(hint):
             best_len = len(phrase)
     if best:
         return best
-    # Direct HOOK_COPY key
+    # Pass 2: direct HOOK_COPY key
     if h.replace(" ", "_") in HOOK_COPY:
         return h.replace(" ", "_")
-    return None
+    # Pass 3: fuzzy — every alias-token has a hint-token that shares a
+    # long common prefix (handles typos like 'architure' vs 'architecture').
+    def _shared_prefix(a, b):
+        n = 0
+        for x, y in zip(a, b):
+            if x != y:
+                break
+            n += 1
+        return n
+
+    def _fuzzy_match(pt, ht):
+        # Short tokens must match exactly; longer tokens allow a shared
+        # prefix of ceil(70% of the shorter length).
+        if len(pt) <= 3 or len(ht) <= 3:
+            return pt == ht
+        need = max(4, (min(len(pt), len(ht)) * 7 + 9) // 10)
+        return _shared_prefix(pt, ht) >= need
+
+    hint_tokens = _norm_tokens(h)
+    if not hint_tokens:
+        return None
+    best = None
+    best_score = 0
+    for phrase, key in HINT_ALIASES.items():
+        phrase_tokens = _norm_tokens(phrase)
+        if not phrase_tokens:
+            continue
+        score = 0
+        for pt in phrase_tokens:
+            if any(_fuzzy_match(pt, ht) for ht in hint_tokens):
+                score += 1
+        if score == len(phrase_tokens) and score > best_score:
+            best = key
+            best_score = score
+    return best
 
 
 def _analyze_html(html):
