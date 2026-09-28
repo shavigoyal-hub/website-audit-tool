@@ -10,7 +10,7 @@ import traceback
 import pandas as pd
 from flask import Flask, jsonify, render_template, request, send_file
 
-from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_pdf, deck_html, sf_csv, history, metrics
+from audit import crawler, observations, pagespeed, parameters, report_xlsx, report_sheets, report_pdf, deck_html, sf_csv, history, metrics, jobs, pipeline
 from audit.version import VERSION
 
 app = Flask(__name__)
@@ -64,108 +64,55 @@ def index():
 
 @app.route("/run", methods=["POST"])
 def run_audit():
-    try:
-        metrics.reset()
-        live_url = request.form.get("live_url", "").strip()
-        mockup_url = request.form.get("mockup_url", "").strip()
-        plan          = request.form.get("plan", "").strip()
-        current_spend = request.form.get("current_spend", "").strip()
-        sell_price    = request.form.get("sell_price", "").strip()
+    """Enqueue an audit — the local worker (worker.py) drains the queue.
 
+    Pass sync=1 in the form to bypass the queue and run inline (used for
+    ad-hoc local testing where you don't want the worker running).
+    """
+    try:
+        live_url = request.form.get("live_url", "").strip()
         if not live_url:
             return jsonify({"error": "Live URL is required."}), 400
+
+        sync = request.form.get("sync", "").lower() in ("1", "true", "yes", "on")
 
         m = re.match(r"https?://(?:www\.)?([^/]+)", live_url)
         domain = m.group(1) if m else live_url
         client_name = re.sub(r"\.[^.]+$", "", domain).replace(".", "_").lower()
 
-        psi_key = os.environ.get("PAGESPEED_API_KEY")
+        if sync:
+            result = pipeline.run(live_url)
+            resp = {
+                "ok": True, "version": VERSION,
+                "observations": result["observations"],
+                "sheet_url": result.get("sheet_url"),
+                "metrics": result["metrics"],
+                "crawler": result["crawler"],
+                "message": f"Audit complete — {result['observations']} observations found.",
+            }
+            return jsonify(resp)
 
-        exclude_patterns, page_type_patterns, manual_psi = [], None, None
-        client_json = os.path.join("clients", f"{client_name}.json")
-        if os.path.exists(client_json):
-            with open(client_json) as f:
-                stored = json.load(f)
-            exclude_patterns = stored.get("exclude_url_patterns", [])
-            page_type_patterns = stored.get("page_type_patterns")
-            manual_psi = stored.get("manual_psi")
-            if not mockup_url:
-                mockup_url = stored.get("mockup_url", "")
-
-        df_raw = _get_dataframes(live_url)
-        df = sf_csv.load_from_df(df_raw, exclude_patterns=exclude_patterns)
-
-        status_num = pd.to_numeric(df.get("Status Code", pd.Series([], dtype=str)), errors="coerce").fillna(0).astype(int)
-        total_pages = int((sf_csv.is_html(df) & (status_num == 200)).sum())
-        total_images = int(sf_csv.is_image(df_raw).sum())
-        metrics.set_value("pages_crawled", total_pages)
-
-        findings = sf_csv.run_checks(df, df, has_images_csv=False)
-        reps = sf_csv.representative_pages(df, custom_patterns=page_type_patterns)
-
-        psi_live, psi_rows, psi_passed = {}, [], []
-        if manual_psi:
-            psi_live = manual_psi
-        else:
-            # Always run PSI. When PAGESPEED_API_KEY is missing we still call
-            # the API anonymously — lower rate limits but a report is better
-            # than silently skipping speed data.
-            psi_live = pagespeed.fetch_many(reps, "mobile", psi_key)
-        if psi_live:
-            psi_rows = observations.psi_to_observations(psi_live)
-            _, psi_passed = observations.psi_status(psi_live)
-
-        live_url_norm = live_url if live_url.endswith("/") else live_url + "/"
-        site = parameters.evaluate(df, live_url_norm)
-        site_obs = [{"category": i["category"], "observation": i["observation"],
-                     "priority": i["priority"], "impact": i["impact"], "reference": i["reference"]}
-                    for i in site["issues"]]
-
-        rows, notes = observations.build_rows(findings, psi_rows, site_obs)
-        notes.extend(f"Not evaluated : {x}" for x in site["na"])
-
-        import datetime
-        # Human-friendly sheet title. The real domain doesn't live here
-        # anymore — /build-deck extracts it from URL cells inside the sheet.
-        # Format: "Exit Boston — SEO Audit (2026-09-11)"
-        friendly = client_name.replace("_", " ").replace("-", " ").title()
-        sheet_title = f"{friendly} — SEO Audit ({datetime.date.today()})"
-        meta = {
-            "version":       VERSION,
-            "generated":     datetime.datetime.utcnow().isoformat(timespec="seconds") + "Z",
-            "live_url":      live_url,
-        }
-        sheet_url = report_sheets.build(
-            sheet_title, rows, evidence_tabs=[],
-            total_pages=total_pages, total_images=total_images,
-            meta=meta,
-        )
-
-        metrics_snap = metrics.snapshot()
-        resp = {
-            "ok": True,
-            "version": VERSION,
-            "observations": len(rows),
-            "message": f"Audit complete — {len(rows)} observations found.",
-            "metrics": metrics_snap,
-        }
-        if sheet_url:
-            resp["sheet_url"] = sheet_url
-            resp["message"] += " Google Sheet created — open, edit, then build the deck."
-            try:
-                history.append_run(client_name, live_url, sheet_url,
-                                    metrics=metrics_snap)
-            except Exception as exc:
-                print(f"[history] append_run failed: {exc}")
-        else:
-            from audit.composio_exec import LAST_TRACE as _trace
-            resp["warning"] = "Sheet skipped — see sheet_error for the cause."
-            resp["sheet_error"] = report_sheets.LAST_ERROR or "no exception recorded"
-            resp["composio_debug"] = {"trace": _trace[-10:]}
-        return jsonify(resp)
-
+        jid = jobs.enqueue(client_name, live_url)
+        if not jid:
+            return jsonify({
+                "error": "Could not enqueue job — history sheet unreachable.",
+            }), 500
+        return jsonify({
+            "ok": True, "version": VERSION,
+            "job_id": jid,
+            "poll_url": f"/job/{jid}",
+            "message": "Queued for local worker.",
+        })
     except Exception:
         return jsonify({"error": traceback.format_exc()}), 500
+
+
+@app.route("/job/<jid>")
+def job_status(jid):
+    j = jobs.get(jid)
+    if not j:
+        return jsonify({"error": "unknown job"}), 404
+    return jsonify(j)
 
 
 @app.route("/build-deck", methods=["POST"])

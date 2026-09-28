@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  launchd agent so worker.py runs at login and restarts if it dies.
+  Install:
+    cp com.gushwork.audit-worker.plist ~/Library/LaunchAgents/
+    launchctl load ~/Library/LaunchAgents/com.gushwork.audit-worker.plist
+  Uninstall:
+    launchctl unload ~/Library/LaunchAgents/com.gushwork.audit-worker.plist
+
+  Requires: COMPOSIO_API_KEY (and PAGESPEED_API_KEY, optional) exported
+  in ~/.zshrc/.bashrc — launchd reads them via the ProgramArguments shell.
+  Edit WorkingDirectory and paths if your checkout lives elsewhere.
+-->
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+ "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.gushwork.audit-worker</string>
+
+    <key>ProgramArguments</key>
+    <array>
+        <string>/bin/zsh</string>
+        <string>-lc</string>
+        <string>cd /Users/shavigoyal/Projects/website-audit-tool &amp;&amp; caffeinate -i /usr/bin/python3 worker.py</string>
+    </array>
+
+    <key>WorkingDirectory</key>
+    <string>/Users/shavigoyal/Projects/website-audit-tool</string>
+
+    <key>RunAtLoad</key>
+    <true/>
+
+    <key>KeepAlive</key>
+    <true/>
+
+    <key>StandardOutPath</key>
+    <string>/tmp/audit-worker.out.log</string>
+
+    <key>StandardErrorPath</key>
+    <string>/tmp/audit-worker.err.log</string>
+</dict>
+</plist>
