@@ -115,7 +115,18 @@ _CONN_ID_CACHE = {}
 
 
 def _find_connection_id(toolkit):
-    """Return an ACTIVE connected_account_id for `toolkit` or None."""
+    """Return an ACTIVE connected_account_id for `toolkit` or None.
+
+    Env override: COMPOSIO_<TOOLKIT>_CONNECTION_ID (e.g.
+    COMPOSIO_GOOGLESHEETS_CONNECTION_ID=ca_...) pins the exact connection
+    to use, bypassing the ACTIVE lookup. Useful when several connections
+    exist on the same auth config and only one has the scopes you need.
+    """
+    forced = os.environ.get(
+        f"COMPOSIO_{toolkit.upper()}_CONNECTION_ID", ""
+    ).strip()
+    if forced:
+        return forced
     cached = _CONN_ID_CACHE.get(toolkit)
     if cached:
         return cached
