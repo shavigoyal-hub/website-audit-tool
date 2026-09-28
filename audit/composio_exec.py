@@ -28,10 +28,19 @@ def _api_key():
     return os.environ.get("COMPOSIO_API_KEY", "").strip() or None
 
 
+# Baked-in defaults so the tool works on Vercel without needing every env
+# var configured (the API key stays required — that's the only secret).
+_DEFAULT_ENTITY_ID = "pg-test-afd06217-dac9-4c51-9b4f-eb33a211aec8"
+_DEFAULT_CONN_IDS = {
+    "googlesheets": "ca_oa9LRo81KEjq",
+}
+
+
 def _entity_user_id():
     return (
         os.environ.get("COMPOSIO_ENTITY_ID")
         or os.environ.get("entity_id")
+        or _DEFAULT_ENTITY_ID
         or ""
     ).strip() or None
 
@@ -124,7 +133,7 @@ def _find_connection_id(toolkit):
     """
     forced = os.environ.get(
         f"COMPOSIO_{toolkit.upper()}_CONNECTION_ID", ""
-    ).strip()
+    ).strip() or _DEFAULT_CONN_IDS.get(toolkit.lower(), "")
     if forced:
         return forced
     cached = _CONN_ID_CACHE.get(toolkit)

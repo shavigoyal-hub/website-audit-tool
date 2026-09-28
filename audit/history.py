@@ -17,6 +17,11 @@ from audit.composio_exec import execute as _cx
 HISTORY_TITLE = "Gushwork Website Audit Tool — History"
 HISTORY_TAB   = "History"
 
+# Baked-in default so the tool works on Vercel without needing the
+# HISTORY_SHEET_ID env var to be set. This is the sheet the Composio
+# connection ca_oa9LRo81KEjq can actually read+write. Env var still wins.
+DEFAULT_HISTORY_SHEET_ID = "1jvOZDxco-kf85UbqQOOoPFV5QwL0JGSPmZMViOtG7E4"
+
 _HEADER = ["Timestamp (UTC)", "Client", "Live URL",
            "Sheet URL", "Deck URL", "PDF URL",
            "Pages", "Composio Calls", "PSI Calls", "Est Cost USD"]
@@ -35,6 +40,10 @@ def _find_history_sheet():
     if env_id:
         _CACHED_ID = env_id
         return env_id
+    # Baked-in default (works on Vercel without needing env var configured).
+    if DEFAULT_HISTORY_SHEET_ID:
+        _CACHED_ID = DEFAULT_HISTORY_SHEET_ID
+        return DEFAULT_HISTORY_SHEET_ID
     # Search Drive
     try:
         resp = _cx("GOOGLEDRIVE_FIND_FILE", {
