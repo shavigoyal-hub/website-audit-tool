@@ -217,51 +217,65 @@ def build_deck():
 
 @app.route("/append-finding", methods=["POST"])
 def append_finding_route():
-    """Append a manual finding to the reviewed sheet.
+    """Append manual findings to the reviewed sheet.
 
-    Body: sheet_url + prompt ("<url> <label>"), or explicit url/label/priority.
-    Fills the next blank row above the Ending row.
+    Body: sheet_url + prompt (one finding per line, each "<url> <label>" or
+    just "<label>"). Each line is audited independently via live_check and
+    inserted into the next blank row above the Ending row.
     """
     try:
         sheet_url = request.form.get("sheet_url", "").strip()
         prompt = request.form.get("prompt", "").strip()
-        url = request.form.get("url", "").strip()
-        label = request.form.get("label", "").strip()
         priority = request.form.get("priority", "Medium").strip() or "Medium"
         category = request.form.get("category", "").strip() or None
 
         if not sheet_url:
             return jsonify({"error": "sheet_url required"}), 400
-
-        hint = ""
-        if prompt and not (url and label):
-            m = re.match(r"(https?://\S+)\s+(.*)", prompt)
-            if m:
-                url = url or m.group(1).strip().rstrip(".,;")
-                hint = m.group(2).strip()
-            else:
-                hint = prompt
-
-        if not (url or label or hint):
-            return jsonify({"error": "Need at least a URL, label, or prompt"}), 400
+        if not prompt:
+            return jsonify({"error": "prompt required"}), 400
 
         from audit.live_check import audit_url
-        analysis = audit_url(url, hint) if url else {
-            "key": "", "label": label or hint, "url": url,
-            "evidence": "no URL to fetch", "detected": [],
-        }
-        finding_key = analysis["key"]
-        row_label   = label or analysis["label"]
 
-        row, err = report_sheets.append_finding(
-            sheet_url, url, row_label, priority=priority,
-            category=category, finding_key=finding_key)
-        if err:
-            return jsonify({"ok": False, "error": err,
-                            "analysis": analysis}), 400
-        return jsonify({"ok": True, "row": row,
-                        "message": f"Added row {row} — {row_label} ({analysis['evidence']})",
-                        "analysis": analysis})
+        results = []
+        errors = []
+        # Process each non-empty line as its own finding
+        for line in [l.strip() for l in prompt.splitlines() if l.strip()]:
+            m = re.match(r"(https?://\S+)\s+(.*)", line)
+            if m:
+                url = m.group(1).strip().rstrip(".,;")
+                hint = m.group(2).strip()
+            else:
+                url = ""
+                hint = line
+
+            analysis = audit_url(url, hint) if url else {
+                "key": "", "label": hint or "Custom", "url": "",
+                "evidence": "no URL to audit", "detected": [],
+            }
+            row_label = analysis["label"]
+
+            row, err = report_sheets.append_finding(
+                sheet_url, url, row_label, priority=priority,
+                category=category, finding_key=analysis["key"])
+            if err:
+                errors.append({"line": line, "error": err,
+                                "analysis": analysis})
+            else:
+                results.append({"line": line, "row": row,
+                                 "analysis": analysis})
+
+        if not results and errors:
+            return jsonify({"ok": False, "errors": errors,
+                            "message": errors[0]["error"]}), 400
+        msg_bits = [f"row {r['row']}: {r['analysis']['label']} ({r['analysis']['evidence']})"
+                    for r in results]
+        return jsonify({
+            "ok": True,
+            "added": len(results),
+            "results": results,
+            "errors": errors,
+            "message": f"Added {len(results)} finding(s). " + "; ".join(msg_bits),
+        })
     except Exception:
         return jsonify({"error": traceback.format_exc()}), 500
 

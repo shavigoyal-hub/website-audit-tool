@@ -146,9 +146,9 @@
     <div id="result"></div>
 
     <div id="appendBox" style="display:none; margin-top:24px; padding-top:20px; border-top:1px dashed #e5e7eb;">
-      <label>Add another finding (chatbot)</label>
-      <p class="hint">Paste one per row like <code>https://site.com/page/ flat architecture</code>. Fills the next blank row above the Ending slide (4 slots).</p>
-      <input type="text" id="appendPrompt" placeholder="https://clearwaterprocessing.com/our-services/ flat architecture" />
+      <label>Add findings (chatbot)</label>
+      <p class="hint">One per line. Format: <code>&lt;url&gt; &lt;description&gt;</code>. Each line is audited independently — the chatbot verifies the finding against the URL and picks the right hook copy.</p>
+      <textarea id="appendPrompt" rows="4" style="width:100%;padding:11px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fafafa;margin-bottom:14px;font-family:inherit;resize:vertical" placeholder="https://clearwaterprocessing.com/our-services/ flat architecture&#10;https://clearwaterprocessing.com/ no top menu&#10;https://clearwaterprocessing.com/ no about page"></textarea>
       <div style="display:flex; gap:8px; align-items:center; margin-top:-10px; margin-bottom:12px;">
         <select id="appendPriority" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fafafa;">
           <option>Critical</option><option>High</option><option selected>Medium</option><option>Low</option>
@@ -294,8 +294,8 @@
       const priority = document.getElementById("appendPriority").value;
       const sheetUrl = document.getElementById("sheet_url").value.trim();
       const out = document.getElementById("appendResult");
-      if (!prompt) { out.style.color = "#991b1b"; out.textContent = "Enter a URL + label."; return; }
-      out.style.color = "#6b7280"; out.textContent = "Adding…";
+      if (!prompt) { out.style.color = "#991b1b"; out.textContent = "Enter at least one line."; return; }
+      out.style.color = "#6b7280"; out.textContent = "Auditing and appending…";
       try {
         const fd = new FormData();
         fd.append("sheet_url", sheetUrl);
@@ -305,20 +305,18 @@
         const data = await res.json();
         if (data.ok) {
           out.style.color = "#166534";
-          let detail = "✓ " + data.message;
-          if (data.analysis) {
-            const a = data.analysis;
-            detail += `<br><span style="font-size:11px;color:#475569">matched key: <b>${a.key || "(none — added as raw label)"}</b> · ${a.evidence || ""}</span>`;
-            if (a.detected && a.detected.length) {
-              detail += `<br><span style="font-size:11px;color:#475569">on-page issues detected: ${a.detected.map(d=>d.key).join(", ")}</span>`;
-            }
-          }
-          out.innerHTML = detail;
+          const lines = (data.results || []).map(r => {
+            const a = r.analysis;
+            const key = a.key || "(no rule matched — raw label)";
+            const det = (a.detected && a.detected.length)
+              ? ` · also detected: ${a.detected.map(d=>d.key).join(", ")}` : "";
+            return `<div style="margin-top:4px"><b>row ${r.row}</b> → <b>${a.label}</b> <span style="color:#475569;font-size:11px">[${key}] ${a.evidence}${det}</span></div>`;
+          }).join("");
+          out.innerHTML = `✓ Added ${data.added} finding(s):${lines}`;
           document.getElementById("appendPrompt").value = "";
         } else {
           out.style.color = "#991b1b";
-          out.innerHTML = "✗ " + (data.error || "failed") +
-            (data.analysis ? `<br><span style="font-size:11px">${data.analysis.evidence}</span>` : "");
+          out.innerHTML = "✗ " + (data.error || data.message || "failed");
         }
       } catch (err) {
         out.style.color = "#991b1b";
