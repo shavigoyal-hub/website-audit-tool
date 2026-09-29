@@ -1020,8 +1020,11 @@ def _write_slide_review_tab(spreadsheet_id, header, intro_row, ending_row):
 
 
 # Master parameter set that feeds the deck cover +N% lead-sum.
-# Keep this in ONE place so the Parameters tab and the sum reconcile.
-_LEAD_KEYS_MASTER = {
+# If parameters_data.json (from the master sheet sync) is present, prefer
+# LEAD_KEYS_FROM_SHEET — otherwise fall back to this baked-in default.
+from audit.hook_copy import LEAD_KEYS_FROM_SHEET as _SHEET_LEADS, PRIMARY_SIGNAL as _SHEET_PRIMARY
+
+_LEAD_KEYS_DEFAULT = {
     "h1_missing", "title_missing", "meta_missing",
     "structured_data", "schema_product_missing",
     "schema_article_missing", "thin_content",
@@ -1030,10 +1033,13 @@ _LEAD_KEYS_MASTER = {
     "lcp_high", "lcp_medium", "cls_high", "perf_low", "perf_moderate",
     "sitemap_missing", "cta_missing",
 }
+_LEAD_KEYS_MASTER = set(_SHEET_LEADS) if _SHEET_LEADS else _LEAD_KEYS_DEFAULT
 
 
 def _primary_signal(key, hook_ctx):
-    """Derive Lead / CTR / Rank from LEAD_KEYS membership + ctx keywords."""
+    """Sheet-driven if available, else derived from LEAD_KEYS + ctx keywords."""
+    if key in _SHEET_PRIMARY:
+        return _SHEET_PRIMARY[key]
     if key in _LEAD_KEYS_MASTER:
         return "Lead"
     ctx = (hook_ctx or "").lower()

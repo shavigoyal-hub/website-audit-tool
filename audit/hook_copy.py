@@ -646,6 +646,50 @@ def _short_hook(obs):
     return s
 
 
+# ── Sheet-driven overrides ────────────────────────────────────────────────
+# When present, parameters_data.json (written by scripts/sync_parameters_from_sheet.py)
+# overrides HOOK_COPY + STATUS_LABEL + populates LEAD_KEYS_FROM_SHEET, so a
+# non-engineer can edit the master Google Sheet and re-sync without touching
+# Python. Missing file is fine — code defaults stand.
+PRIMARY_SIGNAL = {}      # key → "Lead"/"CTR"/"Rank"/"—"
+LEAD_KEYS_FROM_SHEET = set()
+
+def _load_overrides():
+    import json as _j, os as _o
+    path = _o.path.join(_o.path.dirname(_o.path.dirname(_o.path.abspath(__file__))),
+                        "parameters_data.json")
+    if not _o.path.exists(path):
+        return
+    try:
+        with open(path, "r", encoding="utf-8") as f:
+            data = _j.load(f)
+    except Exception as exc:
+        print(f"[hook_copy] overrides load failed: {exc}")
+        return
+    for key, row in (data or {}).items():
+        # Merge into HOOK_COPY (only non-empty fields override)
+        current = HOOK_COPY.setdefault(key, {"hook_stat": "", "hook_ctx": "",
+                                             "costs": "", "support": ""})
+        for f in ("hook_stat", "hook_ctx", "costs", "support"):
+            v = (row.get(f) or "").strip()
+            if v:
+                current[f] = v
+        # STATUS_LABEL
+        lbl = (row.get("label") or "").strip()
+        prio = (row.get("priority") or "").strip().lower()
+        if lbl or prio:
+            existing = STATUS_LABEL.get(key) or (key, "medium")
+            STATUS_LABEL[key] = (lbl or existing[0], prio or existing[1])
+        # Primary signal + lead-sum membership
+        prim = (row.get("primary_signal") or "").strip().title()
+        if prim:
+            PRIMARY_SIGNAL[key] = prim
+        if str(row.get("in_lead_sum", "")).strip().upper() in {"YES", "TRUE", "1"}:
+            LEAD_KEYS_FROM_SHEET.add(key)
+
+_load_overrides()
+
+
 def for_row(key, default_obs="", default_costs="", priority=""):
     """Return dict for a given observation key, or best-effort defaults."""
     if key and key in HOOK_COPY:
