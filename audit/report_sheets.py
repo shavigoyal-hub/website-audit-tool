@@ -527,15 +527,25 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         obs_rows = _drop_og_findings(obs_rows)
         obs_rows = _merge_findings_by_category(obs_rows)
 
-        # Dynamic intro formula: sum ALL positive-lift stats across the
-        # findings in this audit (arithmetic sum, one per unique category).
-        # 'Fix h1 gets +32.3%, fix meta gets +5.8%, fix schema gets +5%,
-        #  fix FAQ gets +15% — total lift = +58.1%'.
+        # Dynamic intro formula: sum LEAD-focused positive-lift stats only.
+        # CTR / rich-result / click-through lifts (like faq_missing at +15%
+        # click-through) don't directly convert to leads, so they aren't
+        # in the sum. Total is also capped at 35% — the realistic ceiling
+        # for a same-pages, same-website lift.
         from audit.hook_copy import HOOK_COPY as _HOOK
+        _LEAD_KEYS = {
+            "h1_missing", "meta_missing", "title_missing",
+            "structured_data", "thin_content", "cta_missing",
+            "about_missing", "nav_missing",
+        }
+        _MAX_LIFT_PCT = 35.0
+
         _picks = []
         _seen = set()
         for r in obs_rows:
             key = r.get("key", "")
+            if key not in _LEAD_KEYS:
+                continue
             spec = _HOOK.get(key) if key else None
             stat = (spec or {}).get("hook_stat", "")
             import re as _sr
@@ -551,19 +561,19 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             _picks.append((pct, label, stat))
 
         if _picks:
-            # Arithmetic sum of all positive-lift stats (per user request).
-            total_pct = round(sum(p for p, _, _ in _picks), 1)
-            # Show the top 3 by size in the formula chain (the deck card
-            # only fits a few boxes); the total reflects ALL positives.
             _picks.sort(key=lambda t: -t[0])
+            raw_sum = sum(p for p, _, _ in _picks)
+            # Realistic ceiling — we never claim more than 35% lead lift.
+            total_pct = round(min(raw_sum, _MAX_LIFT_PCT), 1)
             top = _picks[:3]
             more_n = len(_picks) - len(top)
             terms = "  +  ".join(f"{s} {l}" for _p, l, s in top)
             if more_n > 0:
                 terms += f"  +  ({more_n} more)"
+            capped_note = " (capped)" if raw_sum > _MAX_LIFT_PCT else ""
             intro_stat = f"+{total_pct:g}%"
             intro_heading = f"Increase your leads by {total_pct:g}%"
-            intro_formula = f"{terms}  =  +{total_pct:g}% More leads"
+            intro_formula = f"{terms}  =  +{total_pct:g}% More leads{capped_note}"
         else:
             intro_stat = "+33%"
             intro_heading = "Increase your leads by 33%"

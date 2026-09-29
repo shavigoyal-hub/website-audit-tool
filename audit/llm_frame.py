@@ -72,10 +72,12 @@ def frame(url, hint):
 
     Prefers OpenAI (GPT) when OPENAI_API_KEY is set, else falls back to
     Anthropic. Override which model to use with CHATBOT_MODEL env.
+    Logs the reason on failure so we can debug from Vercel logs.
     """
     openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
     anth_key   = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if not (openai_key or anth_key):
+        print("[llm_frame] no OPENAI_API_KEY or ANTHROPIC_API_KEY set — skipping LLM framing")
         return None
     html = _fetch_html(url)
     snippet = _snippet(html)
@@ -104,6 +106,7 @@ def frame(url, hint):
                 timeout=30,
             )
             if not r.ok:
+                print(f"[llm_frame] OpenAI HTTP {r.status_code}: {r.text[:200]}")
                 return None
             text = (r.json().get("choices") or [{}])[0].get("message", {}).get("content", "")
         else:
@@ -119,12 +122,15 @@ def frame(url, hint):
                 timeout=30,
             )
             if not r.ok:
+                print(f"[llm_frame] Anthropic HTTP {r.status_code}: {r.text[:200]}")
                 return None
             text = "".join(b.get("text", "") for b in r.json().get("content", []))
         start = text.find("{")
         end = text.rfind("}")
         if start < 0 or end <= start:
+            print(f"[llm_frame] no JSON in response: {text[:200]}")
             return None
         return json.loads(text[start:end + 1])
-    except Exception:
+    except Exception as exc:
+        print(f"[llm_frame] exception: {exc}")
         return None

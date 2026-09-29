@@ -395,6 +395,18 @@ def _render_finding(row, page_no, total_pages, client_display):
         img_urls = _re_img.findall(r"IMG:\s*(https?://\S+)", support)
         if img_urls:
             support = _re_img.sub(r"IMG:\s*https?://\S+\s*", "", support).strip()
+        # Normalise older Drive URLs written by v.15-.20 uploader. The
+        # ?export=view endpoint doesn't reliably serve inline images to
+        # third-party <img>; the thumbnail endpoint does.
+        def _fix_drive(u):
+            m = _re_img.search(r"drive\.google\.com/(?:uc\?[^ ]*id|d)/([A-Za-z0-9_-]+)", u)
+            if m:
+                return f"https://drive.google.com/thumbnail?id={m.group(1)}&sz=w1200"
+            m = _re_img.search(r"lh3\.googleusercontent\.com/d/([A-Za-z0-9_-]+)", u)
+            if m:
+                return f"https://drive.google.com/thumbnail?id={m.group(1)}&sz=w1200"
+            return u
+        img_urls = [_fix_drive(u) for u in img_urls]
 
     # Supporting stat — big blue number, first sentence dark bold, rest muted
     sup_html = ""

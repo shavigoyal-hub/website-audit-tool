@@ -144,7 +144,8 @@ def upload_image(filename, content_bytes, mime_type="image/png"):
             )
         except Exception as exc:
             print(f"[drive] proxy permissions fallback failed: {exc}")
-    # drive.google.com/uc?export=view is the most reliable public inline
-    # URL for third-party <img src=…> loading; lh3.googleusercontent.com
-    # has been intermittently 403-ing for anon requests.
-    return f"https://drive.google.com/uc?export=view&id={file_id}"
+    # drive.google.com/thumbnail is the endpoint Drive itself uses for
+    # inline previews. It respects file sharing, works from any origin,
+    # and reliably serves an image (unlike ?export=view which sometimes
+    # 302s to a Drive viewer page for logged-out clients).
+    return f"https://drive.google.com/thumbnail?id={file_id}&sz=w1200"
