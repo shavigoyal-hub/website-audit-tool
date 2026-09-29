@@ -31,23 +31,36 @@ using the HTML evidence provided.
 Return ONLY valid JSON matching this schema, no explanation:
 
 {
-  "category":  "H1 Tags | Meta Description | Title Tags | Schema | Content | Site Architecture | Indexability | Errors | Page Speed | LLM Citation | Trust | Custom",
+  "category":  "clean noun phrase, NO numbers/counts (bad: 'Meta Descriptions Missing on 3 Pages'; good: 'Meta Descriptions Missing'). Say it in client language, not SEO jargon.",
   "label":     "2-4 word status pill for the per-URL badge (eg 'No H1', 'Truncated title', 'Slow LCP')",
   "priority":  "Critical | High | Medium | Low — judge based on business impact for THIS site, not templated",
   "hook_stat": "specific number tied to what you found ('-32%', '+15%', '0%', '7.0s LCP'). No generic '-15%' when you can be specific.",
   "hook_ctx":  "one sentence, starts lowercase, ends with period. Says what the number means in leads/ranking/LLM terms.",
-  "observation": "2-3 sentences of what you actually found on the page, quoting specific evidence. No template phrases like 'Multiple pages found with X'.",
-  "costs":     "1-2 sentences of business consequence. Direct, no fluff, no em-dashes.",
+  "observation": "EXACT format: 'Multiple pages have <5-8 word issue>\\neg:\\n<url>\\n<url>'. If single page: 'The homepage has <issue>\\neg: <url>'. No paragraphs, no benchmarks, no prescriptive fixes, no mechanism explanations.",
+  "costs":     "1-2 short sentences of business consequence. Direct, no em-dashes.",
   "support":   "one line: a supporting stat or citation. Empty string if none.",
-  "insight":   "one extra insight you noticed while reading the HTML that the original finding missed. Empty string if none."
+  "insight":   "one extra insight you noticed while reading the HTML that the original finding missed. Empty string if none.",
+  "impact":    "2-10 words, ONE consequence. Approved patterns: 'Impacts Ranking', 'Impacts leads', 'Wastes crawl budget', 'Splits ranking signals', 'May impact rich results / LLM citation', 'Hurts local pack', 'Kills brand credibility', 'Breaks SERP snippet', 'Slow LCP demotes rankings', 'Thin pages can't rank'."
 }
 
 STYLE (hard rules):
 - No em dashes anywhere. Use commas.
 - No markdown. No bullets.
-- Speak to a business owner.
+- Speak to a business owner, not a developer.
 - Prefer 'leads', 'ranking', 'LLM citation', 'trust' framing over jargon.
-- If the HTML disproves the finding, still return JSON but set priority=Low and mark observation with a note that you could not verify.
+- Category avoids internal SEO jargon: not 'money pages', 'SERP snippet', 'orphan pages', 'index bloat' — use 'Pages', 'Google search result', 'pages not linked from anywhere', 'extra pages Google is crawling'.
+- If the HTML disproves the finding, still return JSON but set priority=Low.
+- Vendor product names → generic: ChatGPT/Perplexity/Claude/AI Overviews → 'LLM citation'; Local Pack/GBP → 'local pack'; GPTBot/ClaudeBot → 'LLM crawlers'.
+
+NEVER FLAG (return category='SKIP' and priority='Low' if forced to answer):
+- /llms.txt missing (not an SEO parameter)
+- og:image missing (social preview, not SEO)
+- LCP / thin content / meta / H1 issues on /contact, /apply, /book, /schedule, /demo pages — these are CRO, not SEO
+- www vs non-www or trailing-slash duplicates when canonical is set correctly
+- Flat URL structure (unless there are collisions or duplicate content at multiple paths)
+- 'Rendering not verified' on WordPress/Squarespace/Wix/Shopify/Webflow/Ghost/Craft/Kirby — those are server-rendered
+
+If the finding hits one of the NEVER FLAG rules, set category='SKIP' and the pipeline will drop it.
 """
 
 
@@ -219,17 +232,26 @@ def enrich(rows, live_url):
             except Exception:
                 results[i] = None
 
-    out = [None] * len(rows)
+    out = []
     enriched = 0
+    skipped = 0
+    kept_map = {}  # original index -> final row
     for i, r in to_judge:
         j = results.get(i)
         if j:
-            out[i] = _apply_judgement(r, j)
+            # Drop findings the LLM marked as SKIP per Direct-chat never-flag rules
+            if isinstance(j.get("category"), str) and j["category"].strip().upper() == "SKIP":
+                skipped += 1
+                continue
+            kept_map[i] = _apply_judgement(r, j)
             enriched += 1
         else:
-            out[i] = r
+            kept_map[i] = r
     for i, r in passthrough:
-        out[i] = r
-    if enriched:
-        print(f"[judge] enriched {enriched}/{len(rows)} findings via {mode}:{model}")
+        kept_map[i] = r
+    # Preserve original order
+    for i in sorted(kept_map.keys()):
+        out.append(kept_map[i])
+    if enriched or skipped:
+        print(f"[judge] enriched {enriched}, skipped {skipped}, kept {len(out)}/{len(rows)} findings via {mode}:{model}")
     return out

@@ -235,6 +235,75 @@ def _get_dataframe_with_tag(live_url):
     return pd.DataFrame(rows), "python"
 
 
+# Always-skip URL patterns — Direct-chat audit rules copied over. Never
+# report findings whose sample URLs are only these (junk to Google, or CRO
+# assets that don't compete for organic traffic).
+DEFAULT_EXCLUDE_URL_PATTERNS = [
+    r"/feeds?/",              # /feed/, /feeds/
+    r"/tags?/",               # /tag/, /tags/
+    r"/categor(y|ies)/",      # /category/, /categories/
+    r"/page/\d+",             # WordPress paged archives
+    r"[?&]paged?=",           # ?paged=2, ?page=2
+    r"/author/",              # WordPress author archives
+    r"/attachment/",          # WordPress attachment pages
+    r"/wp-json/",             # WordPress REST endpoints
+    r"/wp-admin/",
+    r"/xmlrpc\.php",
+    r"/wp-content/uploads/",
+    r"/\?replytocom=",        # WordPress reply comment URLs
+]
+
+# Conversion-path pages — LCP/thin-content/meta/title/H1 gaps on THESE
+# pages are CRO concerns, not organic SEO issues, so we don't flag them.
+CONVERSION_PATH_PATTERNS = [
+    r"/contact",
+    r"/apply",
+    r"/book",
+    r"/schedule",
+    r"/demo",
+    r"/get-in-touch",
+    r"/get-started",
+    r"/free-consultation",
+    r"/request-quote",
+    r"/thank-you",
+    r"/thankyou",
+]
+
+# Findings where a conversion-page URL should be dropped from the sample list.
+_CONVERSION_SKIP_KEYS = {
+    "lcp_high", "lcp_medium", "thin_content",
+    "meta_missing", "meta_long", "meta_short",
+    "title_missing", "title_long", "title_short",
+    "h1_missing", "h1_short",
+}
+
+
+def _apply_url_rules(findings):
+    """Filter finding-URL evidence per Direct-chat audit rules."""
+    import re as _re
+    exclude_re = _re.compile("|".join(DEFAULT_EXCLUDE_URL_PATTERNS), _re.I)
+    conv_re = _re.compile("|".join(CONVERSION_PATH_PATTERNS), _re.I)
+    kept = []
+    for f in findings:
+        exs = f.get("examples") or []
+        # Drop always-junk URL patterns
+        exs = [u for u in exs if not exclude_re.search(u)]
+        # Drop conversion-page URLs from the finding types where those pages
+        # are CRO assets, not SEO targets.
+        if f.get("key") in _CONVERSION_SKIP_KEYS:
+            exs = [u for u in exs if not conv_re.search(u)]
+        if not exs:
+            # Nothing left after filtering — drop the whole finding.
+            continue
+        new = dict(f)
+        new["examples"] = exs
+        # Refresh count so downstream text-building stays honest.
+        if "count" in new:
+            new["count"] = len(exs)
+        kept.append(new)
+    return kept
+
+
 def run(live_url):
     """Full audit pipeline. Returns dict with sheet_url + metrics."""
     metrics.reset()
@@ -262,6 +331,7 @@ def run(live_url):
     metrics.set_value("pages_crawled", total_pages)
 
     findings = sf_csv.run_checks(df, df, has_images_csv=False)
+    findings = _apply_url_rules(findings)
     reps = sf_csv.representative_pages(df, custom_patterns=page_type_patterns)
 
     psi_live = manual_psi or pagespeed.fetch_many(reps, "mobile", psi_key)
