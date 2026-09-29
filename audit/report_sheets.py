@@ -18,6 +18,24 @@ from audit.hook_copy import STATUS_LABEL as _STATUS_LABEL
 
 _PRIO_RANK = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 
+
+def _clean_stat_row(s):
+    """Sanitise a hook_stat so Sheets USER_ENTERED never trips into #ERROR.
+
+    Accepts:  '-15%', '+32.3%', '5%', '9x', '0'   (parsed cleanly)
+    Anything else gets an apostrophe prefix which forces Sheets to
+    render it verbatim as text.
+    """
+    import re as _rss
+    s = (s or "").strip()
+    m = _rss.match(r"^([+\-]?\d+(?:\.\d+)?%)$", s)
+    if m:
+        return m.group(1)
+    m = _rss.match(r"^(\d+x|\d+)$", s)
+    if m:
+        return m.group(1)
+    return ("'" + s) if s and not s.startswith("'") else s
+
 # Findings intentionally NOT reported in the sheet / deck.
 # User rule: never surface these as observations.
 SKIP_KEYS = {"h1_long", "h1_duplicate",
@@ -655,7 +673,15 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                     labelled.append((u, label))
             found_with_labels = "\n".join(f"{u} | {lb}" for u, lb in labelled[:8])
             sheet_row = len(obs_data) + 1
-            ctx_body = copy["hook_ctx"].replace('"', '""')
+            # Sanitise ctx for embedding in a formula string:
+            #   - collapse newlines / CR to spaces (would end the formula)
+            #   - escape double quotes
+            #   - collapse consecutive whitespace, strip.
+            import re as _srr
+            _raw_ctx = copy["hook_ctx"] or ""
+            _raw_ctx = _srr.sub(r"[\r\n]+", " ", _raw_ctx)
+            _raw_ctx = _srr.sub(r"\s+", " ", _raw_ctx).strip()
+            ctx_body = _raw_ctx.replace('"', '""')
             # Formula rules:
             #   - Empty stat → just the context (no leading "0%").
             #   - Numeric stat (Sheets auto-parses "-15%" as -0.15)
@@ -673,7 +699,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 r.get("observation", ""),
                 r.get("priority", ""),
                 r.get("impact", ""),
-                copy["hook_stat"],
+                _clean_stat_row(copy["hook_stat"]),
                 hook_ctx_formula,
                 found_with_labels,      # URL | STATUS per line
                 copy["costs"],
@@ -1079,7 +1105,23 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
     from audit.hook_copy import for_row as _hf
     copy = _hf(finding_key, default_obs=label, default_costs="", priority=priority)
     overrides = overrides or {}
-    hook_stat = overrides.get("hook_stat") or copy["hook_stat"]
+    def _clean_stat(s):
+        """Strip any trailing text after the %. Sheets can then parse as %.
+
+        LLM sometimes returns 'hook_stat: -24% conversions' which USER_ENTERED
+        parses as arithmetic and fails with #ERROR!."""
+        import re as _rss
+        s = (s or "").strip()
+        m = _rss.match(r"^([+\-]?\d+(?:\.\d+)?%)", s)
+        if m:
+            return m.group(1)
+        m = _rss.match(r"^(\d+x)$", s)
+        if m:
+            return m.group(1)
+        # Non-parseable → force text mode with a leading apostrophe.
+        return "'" + s if s and not s.startswith("'") else s
+
+    hook_stat = _clean_stat(overrides.get("hook_stat") or copy["hook_stat"])
     hook_ctx  = overrides.get("hook_ctx")  or copy["hook_ctx"]
     costs     = overrides.get("costs")     or copy["costs"] \
                 or f"{label}, flagged manually during review."
@@ -1124,7 +1166,10 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
         pill = "Issue"
     else:
         pill = pill_raw
-    ctx_body = hook_ctx.replace('"', '""')
+    import re as _srr2
+    _rc = _srr2.sub(r"[\r\n]+", " ", hook_ctx or "")
+    _rc = _srr2.sub(r"\s+", " ", _rc).strip()
+    ctx_body = _rc.replace('"', '""')
     formula = (
         f'=IF(E{target_row}="","{ctx_body}",'
         f'IFERROR(TEXT(E{target_row},"+#.#%;-#.#%;0%")&" "&"{ctx_body}",'
