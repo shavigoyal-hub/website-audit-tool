@@ -1,0 +1,742 @@
+{
+  "about_missing": {
+    "costs": "No About page hurts E-E-A-T and stops LLMs from citing the brand as a source.",
+    "hook_ctx": "SERP click-through and LLM citation rate when there is no About page.",
+    "hook_stat": "-25%",
+    "in_lead_sum": "",
+    "label": "No About page",
+    "primary_signal": "CTR",
+    "priority": "High",
+    "support": "About pages are the strongest single signal LLMs use to decide who to quote."
+  },
+  "canonical_missing": {
+    "costs": "Google may index the wrong URL variant and split link equity across duplicates.",
+    "hook_ctx": "authority leaked when there is no canonical tag.",
+    "hook_stat": "-25%",
+    "in_lead_sum": "",
+    "label": "No canonical",
+    "primary_signal": "Rank",
+    "priority": "Medium",
+    "support": ""
+  },
+  "canonical_not_self": {
+    "costs": "Incorrect canonicals point Google at the wrong page for the topic.",
+    "hook_ctx": "risk of ranking the wrong URL when canonicals don't self-reference.",
+    "hook_stat": "-8%",
+    "in_lead_sum": "",
+    "label": "Wrong canonical",
+    "primary_signal": "Rank",
+    "priority": "Medium",
+    "support": ""
+  },
+  "cls_high": {
+    "costs": "Layout shift causes mis-clicks + bounce, and Google demotes pages with CLS above 0.25.",
+    "hook_ctx": "leads lost when layout shifts move buttons under the click.",
+    "hook_stat": "-14%",
+    "in_lead_sum": "YES",
+    "label": "CLS high",
+    "primary_signal": "Lead",
+    "priority": "High",
+    "support": "Web.dev CLS study: CLS >0.25 correlates with ~14% higher bounce."
+  },
+  "contact_missing": {
+    "costs": "No contact page kills the direct lead path and weakens E-E-A-T.",
+    "hook_ctx": "SERP click-through and LLM citation rate when there is no clear contact or booking page.",
+    "hook_stat": "-10%",
+    "in_lead_sum": "",
+    "label": "No contact page",
+    "primary_signal": "CTR",
+    "priority": "Medium",
+    "support": "Google helpful content: contact info is a core E-E-A-T signal."
+  },
+  "crawl_budget_wasted": {
+    "costs": "Wasted crawl budget delays discovery of new money pages.",
+    "hook_ctx": "index efficiency wasted on redirect, error and noindex URLs.",
+    "hook_stat": "-3%",
+    "in_lead_sum": "",
+    "label": "Crawl budget wasted",
+    "primary_signal": "Rank",
+    "priority": "Low",
+    "support": "Google crawl budget guide."
+  },
+  "cta_missing": {
+    "costs": "Visitors arrive but there's nothing for them to do, so traffic doesn't turn into leads.",
+    "hook_ctx": "more leads when pages get a clear CTA. Right now visitors have nothing to click.",
+    "hook_stat": "0.35",
+    "in_lead_sum": "YES",
+    "label": "No CTA",
+    "primary_signal": "Lead",
+    "priority": "High",
+    "support": ""
+  },
+  "dead_nav_links": {
+    "costs": "Dead nav links break the money-page crawl path and hurt UX.",
+    "hook_ctx": "conversion path broken when primary-nav links point at '#' instead of a real page.",
+    "hook_stat": "-15%",
+    "in_lead_sum": "",
+    "label": "Dead nav link",
+    "primary_signal": "—",
+    "priority": "High",
+    "support": "Google Search Central: navigation links pass topical authority to key pages."
+  },
+  "duplicate_homepage": {
+    "costs": "Duplicate homepage variants split link equity and confuse Google's canonical choice.",
+    "hook_ctx": "rank loss when /home and / serve identical content.",
+    "hook_stat": "-30%",
+    "in_lead_sum": "",
+    "label": "Duplicate homepage",
+    "primary_signal": "Rank",
+    "priority": "High",
+    "support": "Google canonical docs."
+  },
+  "duplicate_page": {
+    "costs": "Duplicate pages split link equity so neither ranks well.",
+    "hook_ctx": "rank loss when two versions of the same page coexist.",
+    "hook_stat": "-30%",
+    "in_lead_sum": "",
+    "label": "Duplicate page",
+    "primary_signal": "Rank",
+    "priority": "High",
+    "support": "Google canonical docs."
+  },
+  "error_404": {
+    "costs": "Dead links lose traffic and dilute site authority.",
+    "hook_ctx": "authority lost through dead links and 404s.",
+    "hook_stat": "-12%",
+    "in_lead_sum": "",
+    "label": "404",
+    "primary_signal": "Rank",
+    "priority": "High",
+    "support": ""
+  },
+  "error_404_money": {
+    "costs": "Broken product, service, or checkout pages kill conversions and let Google demote the URL.",
+    "hook_ctx": "leads lost when money pages 404. Visitors bounce, Google drops the URL.",
+    "hook_stat": "-40%",
+    "in_lead_sum": "YES",
+    "label": "404 (money page)",
+    "primary_signal": "Lead",
+    "priority": "Critical",
+    "support": "Ahrefs 2023 broken-links study: 4xx on commercial URLs correlates with a ~40% traffic drop."
+  },
+  "error_5xx": {
+    "costs": "Server errors block indexing and break the user experience.",
+    "hook_ctx": "indexability on pages returning server errors.",
+    "hook_stat": "-100%",
+    "in_lead_sum": "",
+    "label": "5xx",
+    "primary_signal": "Rank",
+    "priority": "Critical",
+    "support": ""
+  },
+  "faceted_canonical_wrong": {
+    "costs": "?product_cat= URLs canonicalising to a generic collection hide filtered pages from Google.",
+    "hook_ctx": "ranking risk when faceted URLs canonicalise to the wrong parent.",
+    "hook_stat": "-15%",
+    "in_lead_sum": "",
+    "label": "Wrong faceted canonical",
+    "primary_signal": "Rank",
+    "priority": "High",
+    "support": "Google canonicalization docs."
+  },
+  "faq_missing": {
+    "costs": "You lose People-Also-Ask real estate to competitors who mark up their answers.",
+    "hook_ctx": "click-through when FAQ answers show under your listing.",
+    "hook_stat": "0.05",
+    "in_lead_sum": "",
+    "label": "No FAQ",
+    "primary_signal": "CTR",
+    "priority": "Medium",
+    "support": "Google PAA carousel drives approx 5% CTR uplift on match; source: Semrush 2024 SERP study."
+  },
+  "favicon_default": {
+    "costs": "Default favicons signal an unbranded, generic site in the tab and in Google search.",
+    "hook_ctx": "SERP click-through when the favicon is the platform default.",
+    "hook_stat": "-3%",
+    "in_lead_sum": "",
+    "label": "Default favicon",
+    "primary_signal": "CTR",
+    "priority": "Low",
+    "support": "Google 2019 SERP redesign: favicon shows next to every mobile organic result."
+  },
+  "favicon_missing": {
+    "costs": "Favicons in tabs and SERP drive brand recall and repeat visits.",
+    "hook_ctx": "SERP click-through and repeat visits when tabs and search show no brand icon.",
+    "hook_stat": "-15%",
+    "in_lead_sum": "",
+    "label": "No favicon",
+    "primary_signal": "CTR",
+    "priority": "Low",
+    "support": "Google 2019 SERP redesign: favicon shows next to every mobile organic result."
+  },
+  "flat_architecture": {
+    "costs": "A flat structure gives every page the same weight, so Google can't tell which ones matter.",
+    "hook_ctx": "PageRank flow when every page sits at the same depth from the homepage.",
+    "hook_stat": "-18%",
+    "in_lead_sum": "",
+    "label": "Flat structure",
+    "primary_signal": "Rank",
+    "priority": "Critical",
+    "support": "Deep-link hierarchies concentrate authority on money pages."
+  },
+  "h1_missing": {
+    "costs": "Missing H1s give Google no topic to rank the page for, directly hurting rankings and leads.",
+    "hook_ctx": "more leads when key pages have a proper H1. Pages with no H1 give Google no topic to rank for.",
+    "hook_stat": "0.15",
+    "in_lead_sum": "YES",
+    "label": "No H1",
+    "primary_signal": "Lead",
+    "priority": "Critical",
+    "support": "Backlinko on-page correlation study: pages with a keyword-rich H1 rank higher."
+  },
+  "h1_multiple": {
+    "costs": "Competing H1s blur which topic the page is about, and Google picks the weaker one.",
+    "hook_ctx": "ranking dilution when multiple H1s compete on one page.",
+    "hook_stat": "-15%",
+    "in_lead_sum": "",
+    "label": "Competing H1s",
+    "primary_signal": "Rank",
+    "priority": "High",
+    "support": ""
+  },
+  "h1_short": {
+    "costs": "Short H1s under-describe the page and weaken Google's ranking signal for it.",
+    "hook_ctx": "Google ranking impact when H1s are too short to describe the page.",
+    "hook_stat": "-8%",
+    "in_lead_sum": "",
+    "label": "Short H1",
+    "primary_signal": "Rank",
+    "priority": "Low",
+    "support": ""
+  },
+  "high_carbon": {
+    "costs": "Heavy pages fail Core Web Vitals and lose mobile ranking.",
+    "hook_ctx": "page weight vs the mobile median. Slow to load, slow to rank.",
+    "hook_stat": "0.4",
+    "in_lead_sum": "",
+    "label": "Heavy page",
+    "primary_signal": "Rank",
+    "priority": "Medium",
+    "support": ""
+  },
+  "homepage_h1_whitespace": {
+    "costs": "Large whitespace runs in the homepage H1 read as unprofessional and weaken the topic signal.",
+    "hook_ctx": "on-page relevance when the homepage H1 has broken layout.",
+    "hook_stat": "-8%",
+    "in_lead_sum": "",
+    "label": "H1 layout broken",
+    "primary_signal": "—",
+    "priority": "High",
+    "support": ""
+  },
+  "homepage_images_broken": {
+    "costs": "Broken images increase first-visit bounce and cost image-search entries.",
+    "hook_ctx": "bounce and lost Google Image traffic when homepage images render as broken.",
+    "hook_stat": "-10%",
+    "in_lead_sum": "",
+    "label": "Homepage images broken",
+    "primary_signal": "—",
+    "priority": "High",
+    "support": ""
+  },
+  "homepage_media_broken": {
+    "costs": "A broken hero banner hurts engagement and bounce.",
+    "hook_ctx": "engagement lost when the homepage video / banner does not render.",
+    "hook_stat": "-8%",
+    "in_lead_sum": "",
+    "label": "Homepage media broken",
+    "primary_signal": "—",
+    "priority": "Medium",
+    "support": ""
+  },
+  "homepage_title_weak": {
+    "costs": "A weak homepage title costs Google's #1 on-page signal on the site's most-linked page.",
+    "hook_ctx": "ranking loss when the homepage title is just 'Home - Brand' with no keyword.",
+    "hook_stat": "-35%",
+    "in_lead_sum": "",
+    "label": "Homepage title weak",
+    "primary_signal": "Rank",
+    "priority": "Critical",
+    "support": "Moz on-page factors: title is the strongest on-page ranking signal."
+  },
+  "hreflang_missing": {
+    "costs": "Wrong-language pages show up for wrong-country searchers.",
+    "hook_ctx": "international traffic when Google can't map language variants.",
+    "hook_stat": "-25%",
+    "in_lead_sum": "",
+    "label": "No hreflang",
+    "primary_signal": "—",
+    "priority": "High",
+    "support": ""
+  },
+  "http_www_redirect_missing": {
+    "costs": "Both variants resolving with 200 splits ranking signals across duplicate URLs.",
+    "hook_ctx": "ranking loss when http and non-canonical www variants don't 301 to the canonical host.",
+    "hook_stat": "-25%",
+    "in_lead_sum": "",
+    "label": "No canonical redirect",
+    "primary_signal": "Rank",
+    "priority": "High",
+    "support": "Google canonicalization docs: consolidate to a single canonical host."
+  },
+  "hub_linking_weak": {
+    "costs": "Hero products get few contextual internal links, so Google can't tell what to rank.",
+    "hook_ctx": "rank loss on hero pages when there is no hub-to-sub-to-PDP link flow.",
+    "hook_stat": "-10%",
+    "in_lead_sum": "",
+    "label": "Weak hub linking",
+    "primary_signal": "Rank",
+    "priority": "Medium",
+    "support": "Google Search Central: internal links pass topical authority to key pages."
+  },
+  "hub_subdomain": {
+    "costs": "A subdomain hub splits authority — the money site loses the topical strength the blog builds.",
+    "hook_ctx": "domain authority when the content hub lives on a separate subdomain.",
+    "hook_stat": "-30%",
+    "in_lead_sum": "",
+    "label": "Hub on subdomain",
+    "primary_signal": "Rank",
+    "priority": "High",
+    "support": "Moving blog.example.com to example.com/blog concentrates PageRank on one domain."
+  },
+  "image_large": {
+    "costs": "Oversized images dominate page weight and slow first paint.",
+    "hook_ctx": "load speed when images ship at full resolution.",
+    "hook_stat": "-15%",
+    "in_lead_sum": "",
+    "label": "Oversized",
+    "primary_signal": "—",
+    "priority": "Medium",
+    "support": ""
+  },
+  "lcp_high": {
+    "costs": "Slow load kills the click before the page loads, and Google pushes slow pages down on mobile.",
+    "hook_ctx": "leads and rankings lost when LCP is above 4 seconds.",
+    "hook_stat": "-24%",
+    "in_lead_sum": "YES",
+    "label": "LCP > 4s",
+    "primary_signal": "Lead",
+    "priority": "Critical",
+    "support": "Google 2020 field study: 53% of mobile visits leave if a page takes over 3s."
+  },
+  "lcp_medium": {
+    "costs": "Borderline speed puts you behind faster competitors in Google's mobile SERP.",
+    "hook_ctx": "leads and rankings when LCP sits between 2.5s and 4s.",
+    "hook_stat": "-8%",
+    "in_lead_sum": "YES",
+    "label": "LCP 2.5-4s",
+    "primary_signal": "Lead",
+    "priority": "Medium",
+    "support": "Deloitte/Google Milliseconds Make Millions: every 0.1s faster lifts conv 8%."
+  },
+  "low_inlinks": {
+    "costs": "Google under-values pages nothing else on the site links to.",
+    "hook_ctx": "crawl priority for pages with very few internal links.",
+    "hook_stat": "-20%",
+    "in_lead_sum": "",
+    "label": "Few inlinks",
+    "primary_signal": "—",
+    "priority": "Medium",
+    "support": ""
+  },
+  "meta_duplicate": {
+    "costs": "Duplicate descriptions weaken snippet relevance across pages.",
+    "hook_ctx": "snippet dilution from duplicate descriptions.",
+    "hook_stat": "-4%",
+    "in_lead_sum": "",
+    "label": "Duplicate",
+    "primary_signal": "—",
+    "priority": "Medium",
+    "support": ""
+  },
+  "meta_fragment": {
+    "costs": "Fragment meta descriptions leave the snippet essentially empty and Google auto-generates a poor one.",
+    "hook_ctx": "SERP CTR when the meta description is a 1-30 char stub.",
+    "hook_stat": "-4%",
+    "in_lead_sum": "",
+    "label": "Fragment meta",
+    "primary_signal": "CTR",
+    "priority": "Medium",
+    "support": "Portent CTR study: hand-written meta descriptions lift SERP CTR by 5.8%."
+  },
+  "meta_long": {
+    "costs": "Over-length descriptions get cut mid-sentence, hurting click-through.",
+    "hook_ctx": "CTR loss from truncated descriptions in search.",
+    "hook_stat": "-3%",
+    "in_lead_sum": "",
+    "label": "Too long",
+    "primary_signal": "CTR",
+    "priority": "Medium",
+    "support": ""
+  },
+  "meta_missing": {
+    "costs": "Google writes your snippet — and picks the wrong sentence. On a decision-heavy site, that snippet decides who trusts you enough to click.",
+    "hook_ctx": "more leads with a meta description. You have none on the pages that matter.",
+    "hook_stat": "0.058",
+    "in_lead_sum": "YES",
+    "label": "Missing",
+    "primary_signal": "Lead",
+    "priority": "High",
+    "support": ""
+  },
+  "meta_short": {
+    "costs": "Short descriptions under-use the snippet and lower click-through.",
+    "hook_ctx": "snippet space wasted on descriptions under 70 chars.",
+    "hook_stat": "-2%",
+    "in_lead_sum": "",
+    "label": "Too short",
+    "primary_signal": "—",
+    "priority": "Low",
+    "support": ""
+  },
+  "nav_missing": {
+    "costs": "No top menu means Google (and users) can't reach the money pages in one click.",
+    "hook_ctx": "crawl coverage without a persistent top navigation.",
+    "hook_stat": "-20%",
+    "in_lead_sum": "",
+    "label": "No top menu",
+    "primary_signal": "—",
+    "priority": "High",
+    "support": "Every page needs a stable primary nav for internal PageRank to flow."
+  },
+  "near_duplicate": {
+    "costs": "Duplicate pages cannibalise each other — none of them ranks strongly.",
+    "hook_ctx": "traffic loss when Google collapses duplicate content into one URL.",
+    "hook_stat": "-30%",
+    "in_lead_sum": "",
+    "label": "Near-duplicate",
+    "primary_signal": "—",
+    "priority": "High",
+    "support": ""
+  },
+  "non_indexable": {
+    "costs": "Pages with noindex cannot rank and are invisible to organic traffic.",
+    "hook_ctx": "chance to rank — noindex pages are invisible to Google.",
+    "hook_stat": "0%",
+    "in_lead_sum": "",
+    "label": "Noindex",
+    "primary_signal": "Rank",
+    "priority": "Critical",
+    "support": ""
+  },
+  "orphan_page": {
+    "costs": "Orphan pages are hard for Google to find and easy for users to miss.",
+    "hook_ctx": "discoverability for orphan pages that no other page links to.",
+    "hook_stat": "-30%",
+    "in_lead_sum": "",
+    "label": "Orphan",
+    "primary_signal": "—",
+    "priority": "High",
+    "support": ""
+  },
+  "pagination_no_rel": {
+    "costs": "Without pagination signals, page 2 competes with page 1 for the same query.",
+    "hook_ctx": "cannibalisation risk on paginated content.",
+    "hook_stat": "-10%",
+    "in_lead_sum": "",
+    "label": "No rel pagination",
+    "primary_signal": "—",
+    "priority": "Low",
+    "support": ""
+  },
+  "perf_low": {
+    "costs": "Poor performance is a direct Google mobile ranking signal — and users bounce before conversion.",
+    "hook_ctx": "leads and rankings when Lighthouse perf is under 50.",
+    "hook_stat": "-30%",
+    "in_lead_sum": "YES",
+    "label": "Perf < 50",
+    "primary_signal": "Lead",
+    "priority": "Critical",
+    "support": "Google page experience update 2021: performance is a confirmed ranking factor."
+  },
+  "perf_moderate": {
+    "costs": "Passable is not competitive — the top-3 competitors all score 90+.",
+    "hook_ctx": "leads and rankings when performance sits in the 50-89 band.",
+    "hook_stat": "-10%",
+    "in_lead_sum": "YES",
+    "label": "Perf 50-89",
+    "primary_signal": "Lead",
+    "priority": "Medium",
+    "support": "HTTPArchive Web Almanac: top-ranking pages average 92 Lighthouse perf on mobile."
+  },
+  "placeholder_urls": {
+    "costs": "Placeholder URLs (/21977-2/, /sample-page/, /uncategorized/) live in the sitemap and dilute topical authority.",
+    "hook_ctx": "crawl efficiency drained by unedited WordPress auto-slugs.",
+    "hook_stat": "-12%",
+    "in_lead_sum": "",
+    "label": "Placeholder URL",
+    "primary_signal": "—",
+    "priority": "Medium",
+    "support": "Google crawl budget guide: keep low-value URLs out of the index."
+  },
+  "render_blocked": {
+    "costs": "Blocked resources stop Google from seeing the full page, dropping rankings and leads.",
+    "hook_ctx": "leads lost when critical resources are blocked from crawl.",
+    "hook_stat": "-35%",
+    "in_lead_sum": "YES",
+    "label": "Blocked resource",
+    "primary_signal": "Lead",
+    "priority": "High",
+    "support": "Google Search Central: sites blocking CSS/JS in robots.txt lose visibility."
+  },
+  "render_blocking": {
+    "costs": "Render-blocking resources delay the first meaningful paint, hurting rankings and leads.",
+    "hook_ctx": "leads lost when render-blocking scripts delay first paint.",
+    "hook_stat": "-35%",
+    "in_lead_sum": "YES",
+    "label": "Render blocking",
+    "primary_signal": "Lead",
+    "priority": "Medium",
+    "support": "Web.dev render-blocking audit: eliminating them typically saves 200-500ms LCP."
+  },
+  "render_error": {
+    "costs": "Rendering / JS errors mean affected pages may not be indexed and produce zero leads.",
+    "hook_ctx": "chance of leads from pages Google can't render at all.",
+    "hook_stat": "0%",
+    "in_lead_sum": "YES",
+    "label": "Render error",
+    "primary_signal": "Lead",
+    "priority": "Critical",
+    "support": "Google JavaScript SEO docs: pages with hydration errors get dropped from the index."
+  },
+  "render_js_dependent": {
+    "costs": "JS-dependent content is indexed slower — and sometimes not at all, so leads never arrive.",
+    "hook_ctx": "leads lost when the page needs JS to become useful content.",
+    "hook_stat": "-35%",
+    "in_lead_sum": "YES",
+    "label": "JS-only",
+    "primary_signal": "Lead",
+    "priority": "High",
+    "support": "Onely 2023: JS-only content is indexed up to 9x slower than server-rendered HTML."
+  },
+  "robots_block": {
+    "costs": "A site-wide robots block prevents crawling and ranking entirely.",
+    "hook_ctx": "of the site is blocked from Google when robots.txt has Disallow: /.",
+    "hook_stat": "-100%",
+    "in_lead_sum": "",
+    "label": "robots blocks site",
+    "primary_signal": "—",
+    "priority": "Critical",
+    "support": "Google robots.txt spec."
+  },
+  "robots_missing": {
+    "costs": "No robots.txt removes crawl control and hides the sitemap reference.",
+    "hook_ctx": "SERP visibility risk when robots.txt is missing or empty.",
+    "hook_stat": "-3%",
+    "in_lead_sum": "",
+    "label": "No / empty robots",
+    "primary_signal": "CTR",
+    "priority": "Low",
+    "support": "Google robots.txt spec: robots.txt should always be served, even if empty."
+  },
+  "schema_article_missing": {
+    "costs": "Missing Article schema hides author, publish date and rich snippets in search and news.",
+    "hook_ctx": "more organic traffic on articles with Article / BlogPosting schema.",
+    "hook_stat": "0.05",
+    "in_lead_sum": "YES",
+    "label": "No Article schema",
+    "primary_signal": "Lead",
+    "priority": "Medium",
+    "support": "Google structured data docs: Article markup is required for Top Stories eligibility."
+  },
+  "schema_breadcrumb_missing": {
+    "costs": "Without BreadcrumbList, SERP shows raw URL instead of a readable hierarchy.",
+    "hook_ctx": "SERP CTR when product/category pages ship BreadcrumbList schema.",
+    "hook_stat": "0.03",
+    "in_lead_sum": "",
+    "label": "No Breadcrumb schema",
+    "primary_signal": "CTR",
+    "priority": "Medium",
+    "support": "Google Breadcrumb rich result docs."
+  },
+  "schema_local_missing": {
+    "costs": "Without LocalBusiness schema, Google may not attach your business to map pack results.",
+    "hook_ctx": "more local visibility with LocalBusiness schema on the contact and location pages.",
+    "hook_stat": "0.05",
+    "in_lead_sum": "",
+    "label": "No LocalBusiness schema",
+    "primary_signal": "—",
+    "priority": "High",
+    "support": "Google Business Profile ranking factors 2024: LocalBusiness JSON-LD strengthens local pack."
+  },
+  "schema_organization_missing": {
+    "costs": "Without entity schema, Google and LLMs can't tie the site to a real business.",
+    "hook_ctx": "richer SERP results with Organization / LocalBusiness / WebSite schema on the homepage.",
+    "hook_stat": "0.05",
+    "in_lead_sum": "",
+    "label": "No Organization schema",
+    "primary_signal": "CTR",
+    "priority": "High",
+    "support": "Google Knowledge Graph docs: Organization schema is required for brand SERP treatment."
+  },
+  "schema_product_missing": {
+    "costs": "Without schema on product/service pages, Google can't render rich results and LLMs miss key context.",
+    "hook_ctx": "more leads on money pages with Product / Service / SoftwareApplication schema.",
+    "hook_stat": "0.05",
+    "in_lead_sum": "YES",
+    "label": "No product schema",
+    "primary_signal": "Lead",
+    "priority": "High",
+    "support": "Milestone Research: sites with Product/Service schema saw ~5% more organic sessions."
+  },
+  "sitemap_missing": {
+    "costs": "No sitemap slows indexation and hides new pages from Google for weeks.",
+    "hook_ctx": "leads lost when Google discovers pages 2x slower without a sitemap.",
+    "hook_stat": "-20%",
+    "in_lead_sum": "YES",
+    "label": "No sitemap",
+    "primary_signal": "Lead",
+    "priority": "High",
+    "support": "Google docs: XML sitemap is required for large sites and news / video content."
+  },
+  "spelling_grammar": {
+    "costs": "Errors in customer-facing copy read as inattention and cost the sale.",
+    "hook_ctx": "conversion loss from copy with spelling or grammar issues.",
+    "hook_stat": "-10%",
+    "in_lead_sum": "",
+    "label": "Errors",
+    "primary_signal": "—",
+    "priority": "Low",
+    "support": "Global Lingo B2B survey 2023: 59% of buyers won't purchase after grammar issues."
+  },
+  "structured_data": {
+    "costs": "No rich results on Google and no signal for LLMs like ChatGPT or Perplexity. Searchers pick someone else.",
+    "hook_ctx": "more leads with structured data. You have none.",
+    "hook_stat": "0.05",
+    "in_lead_sum": "YES",
+    "label": "No schema",
+    "primary_signal": "Lead",
+    "priority": "High",
+    "support": "#ERROR!"
+  },
+  "tag_pages_indexable": {
+    "costs": "Low-value tag pages waste crawl budget and dilute topical authority.",
+    "hook_ctx": "crawl budget and topical authority drained by indexable tag pages.",
+    "hook_stat": "-10%",
+    "in_lead_sum": "",
+    "label": "Tag pages indexable",
+    "primary_signal": "Rank",
+    "priority": "Medium",
+    "support": "Google crawl budget guide: keep low-value pages out of the index."
+  },
+  "thin_content": {
+    "costs": "Money-decision pages don't earn enough trust to rank if they're thin, so they don't drive leads.",
+    "hook_ctx": "more leads once thin pages get real depth. Top-3 clicks go to pages with substance.",
+    "hook_stat": "0.25",
+    "in_lead_sum": "YES",
+    "label": "Thin",
+    "primary_signal": "Lead",
+    "priority": "High",
+    "support": "AWR 2024: 54.4% of Google clicks go to top-3 — thin pages rarely reach top-3."
+  },
+  "title_all_caps": {
+    "costs": "All-caps titles look spammy in Google search results and drop click-through.",
+    "hook_ctx": "SERP CTR when the title tag is in shouting caps.",
+    "hook_stat": "-12%",
+    "in_lead_sum": "",
+    "label": "ALL CAPS title",
+    "primary_signal": "CTR",
+    "priority": "High",
+    "support": "Portent CTR study: sentence-case titles outperform all-caps by ~12%."
+  },
+  "title_duplicate": {
+    "costs": "Duplicate titles confuse Google about which page to rank, so none of them rank well.",
+    "hook_ctx": "ranking risk from duplicate titles. Google picks one page and hides the rest.",
+    "hook_stat": "-5%",
+    "in_lead_sum": "",
+    "label": "Duplicate title",
+    "primary_signal": "Rank",
+    "priority": "Medium",
+    "support": "Google Search Central: duplicate titles cause Google to pick a non-optimal one."
+  },
+  "title_long": {
+    "costs": "Truncated titles in search reduce click-through and rankings.",
+    "hook_ctx": "CTR loss when titles get truncated in the SERP.",
+    "hook_stat": "-3%",
+    "in_lead_sum": "",
+    "label": "Truncated",
+    "primary_signal": "CTR",
+    "priority": "High",
+    "support": "Portent CTR study (2024): truncated titles lose about 3% CTR at same position."
+  },
+  "title_missing": {
+    "costs": "Missing titles severely weaken relevance signals, rankings and leads.",
+    "hook_ctx": "leads lost when the title tag is missing.",
+    "hook_stat": "-35%",
+    "in_lead_sum": "YES",
+    "label": "Missing title",
+    "primary_signal": "Lead",
+    "priority": "Critical",
+    "support": "Moz on-page factors: title tag is the #1 on-page ranking signal (secondary: pages without titles rank ~35% lower on average)."
+  },
+  "title_short": {
+    "costs": "Short titles under-describe the page and waste SERP space.",
+    "hook_ctx": "SERP space wasted on titles under 30 chars.",
+    "hook_stat": "-3%",
+    "in_lead_sum": "",
+    "label": "Too short",
+    "primary_signal": "CTR",
+    "priority": "Low",
+    "support": "Directional benchmark based on SERP-CTR studies."
+  },
+  "title_stuffed": {
+    "costs": "Keyword stuffing looks spammy and can hurt rankings.",
+    "hook_ctx": "ranking risk from keyword-stuffed titles that Google flags as spam.",
+    "hook_stat": "-5%",
+    "in_lead_sum": "",
+    "label": "Keyword stuffed",
+    "primary_signal": "Rank",
+    "priority": "High",
+    "support": "Google spam policies flag keyword stuffing as a violation."
+  },
+  "unoptimized_images": {
+    "costs": "Heavy images push LCP over the limit and hurt Core Web Vitals.",
+    "hook_ctx": "load speed lost to unoptimised images.",
+    "hook_stat": "-15%",
+    "in_lead_sum": "",
+    "label": "Heavy images",
+    "primary_signal": "—",
+    "priority": "Medium",
+    "support": ""
+  },
+  "url_long": {
+    "costs": "Long URLs are harder to share and look less clickable in the SERP.",
+    "hook_ctx": "SERP click-through on URLs above 115 characters.",
+    "hook_stat": "-3%",
+    "in_lead_sum": "",
+    "label": "Long URL",
+    "primary_signal": "CTR",
+    "priority": "Low",
+    "support": "Backlinko URL study: URLs over 115 chars underperform on CTR."
+  },
+  "viewport_pinch_zoom_blocked": {
+    "costs": "Blocking pinch zoom fails Google's mobile-friendly test and hurts accessibility.",
+    "hook_ctx": "mobile usability score when the viewport blocks pinch zoom.",
+    "hook_stat": "-10%",
+    "in_lead_sum": "",
+    "label": "Pinch zoom blocked",
+    "primary_signal": "—",
+    "priority": "Medium",
+    "support": "Google mobile-friendly test rejects pages that disable user scaling."
+  },
+  "wwwredir_missing": {
+    "costs": "Both www and non-www resolving splits ranking signals.",
+    "hook_ctx": "ranking loss when www and non-www both resolve.",
+    "hook_stat": "-25%",
+    "in_lead_sum": "",
+    "label": "www + non-www both live",
+    "primary_signal": "Rank",
+    "priority": "Medium",
+    "support": "Google canonicalization docs."
+  },
+  "wwwredir_temp": {
+    "costs": "Temporary redirects do not consolidate link equity to the canonical host.",
+    "hook_ctx": "link equity loss from 302 instead of 301 on the www redirect.",
+    "hook_stat": "-5%",
+    "in_lead_sum": "",
+    "label": "302 www redirect",
+    "primary_signal": "—",
+    "priority": "Low",
+    "support": "Google canonicalization docs: prefer 301 for permanent host consolidation."
+  }
+}
