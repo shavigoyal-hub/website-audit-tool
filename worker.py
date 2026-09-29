@@ -7,19 +7,23 @@ Auto-start:       load com.gushwork.audit-worker.plist into launchd
 Env: COMPOSIO_API_KEY, optional PAGESPEED_API_KEY (same as Flask app).
 """
 import argparse
+import json
 import os
 import signal
 import socket
+import subprocess
+import sys
 import time
 import traceback
 
 from audit import jobs
-from audit.pipeline import SF_AVAILABLE, run as _run
+from audit.pipeline import SF_AVAILABLE
 
 
-# Per-job timeout. 0 = no timeout (run until pipeline returns or crashes).
-# Default is 0 now — SF crawls on big e-commerce sites (Shopify + JS render)
-# routinely take 20-30 min and the artificial cap was killing legit runs.
+# Per-job wall-clock cap. 0 = no cap. Enforced by killing the pipeline
+# SUBPROCESS with SIGKILL when it exceeds this — the OS kernel enforces it,
+# so a hung HTTP read cannot survive it (unlike the old SIGALRM path,
+# which couldn't interrupt native socket blocks).
 _JOB_TIMEOUT_SEC = int(os.environ.get("WORKER_JOB_TIMEOUT_SEC", "0"))
 
 
@@ -27,27 +31,51 @@ class _JobTimeout(Exception):
     pass
 
 
-def _run_with_timeout(fn, args, timeout):
-    """Run `fn(*args)` in-process; enforce `timeout` seconds if > 0.
+def _run_pipeline_subprocess(live_url, timeout=0):
+    """Run pipeline.run in a real subprocess. Parent kills it if it hangs.
 
-    timeout=0 disables the SIGALRM cap entirely — pipeline runs to
-    completion however long it takes. Big Shopify audits with JS
-    rendering routinely exceed 15 min and the timeout was killing
-    legit runs.
+    Returns the pipeline result dict on success, raises RuntimeError or
+    _JobTimeout on failure. Because the pipeline runs in a separate OS
+    process, SIGKILL from the parent is guaranteed to end it no matter
+    what the child was blocked on (Composio HTTP, SF subprocess, PSI,
+    even native OpenSSL).
     """
-    if not timeout or int(timeout) <= 0:
-        return fn(*args)
-
-    def _handler(signum, frame):
-        raise _JobTimeout(f"job exceeded {timeout}s")
-
-    prev = signal.signal(signal.SIGALRM, _handler)
-    signal.alarm(int(timeout))
+    cmd = [sys.executable, "-m", "audit.pipeline_cli", live_url]
+    # Inherit the parent's env (COMPOSIO_API_KEY / OPENAI_API_KEY / etc.)
+    proc = subprocess.Popen(
+        cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE,
+        text=True, env=os.environ.copy(),
+    )
     try:
-        return fn(*args)
-    finally:
-        signal.alarm(0)
-        signal.signal(signal.SIGALRM, prev)
+        stdout, stderr = proc.communicate(timeout=(timeout or None))
+    except subprocess.TimeoutExpired:
+        # Escalate: SIGTERM (5s grace) then SIGKILL — kernel-enforced.
+        proc.terminate()
+        try:
+            proc.communicate(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            proc.communicate()
+        raise _JobTimeout(f"pipeline subprocess exceeded {timeout}s and was killed")
+
+    if proc.returncode != 0 and not stdout.strip():
+        raise RuntimeError(f"pipeline subprocess exit {proc.returncode}\n"
+                            f"stderr:\n{stderr[-2000:]}")
+    # Parse the last JSON line the subprocess printed. Its own log lines
+    # from pipeline / judge / worker also go to stdout, so pick the last
+    # complete JSON object.
+    for line in reversed(stdout.strip().splitlines()):
+        line = line.strip()
+        if line.startswith("{") and line.endswith("}"):
+            try:
+                payload = json.loads(line)
+            except json.JSONDecodeError:
+                continue
+            if not payload.get("ok"):
+                raise RuntimeError(payload.get("error", "unknown subprocess error"))
+            return payload["res"]
+    raise RuntimeError(f"pipeline subprocess produced no JSON result\n"
+                        f"stderr:\n{stderr[-2000:]}")
 
 
 def _reset_ghost_jobs(worker_id):
@@ -77,9 +105,10 @@ def main():
     args = p.parse_args()
 
     worker_id = socket.gethostname()
-    to_str = f"{args.timeout}s" if args.timeout > 0 else "off"
+    to_str = f"{args.timeout}s (SIGKILL if exceeded)" if args.timeout > 0 else "off"
     print(f"[worker] {worker_id} — SF={'yes' if SF_AVAILABLE else 'no'} "
-          f"— poll every {args.poll}s, per-job timeout {to_str}")
+          f"— poll every {args.poll}s, per-job timeout {to_str}, "
+          f"pipeline runs in subprocess (kill-safe)")
     _reset_ghost_jobs(worker_id)
 
     while True:
@@ -99,7 +128,7 @@ def main():
 
         print(f"[worker] claimed {job['id']} → {job['live_url']}")
         try:
-            res = _run_with_timeout(_run, (job["live_url"],), args.timeout)
+            res = _run_pipeline_subprocess(job["live_url"], timeout=args.timeout)
             sheet = res.get("sheet_url") or ""
             crawler = res.get("crawler", "")
             counts = res["metrics"]["counts"]
