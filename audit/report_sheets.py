@@ -487,9 +487,10 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         ]
         obs_data = [header]
 
-        # Intro row (Sheets row 2 → Hook Stat cell = E2). Heading uses
-        # "33%" (no leading +) so it wraps into 2 lines like the reference.
-        obs_data.append([
+        # Intro + ending slides now live on the separate 'Slide Review' tab
+        # so the Observations tab is findings-only (CS review of findings is
+        # the common case; slide-copy review is separate).
+        intro_row = [
             "Intro — cover slide",
             "Same pages. Same website.",
             "", "",
@@ -498,7 +499,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             "+5.8% Meta descriptions  ×  +25% Structured data  =  +33% More leads",
             "If you get 10 leads a month today 10 leads → 14 leads. Same pages, same website. Before any ranking gains.",
             "",
-        ])
+        ]
 
         # Merge findings by category — all H1 rows collapse into one, all
         # Meta / Title rows too — so the deck doesn't show 4 near-identical
@@ -565,9 +566,8 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         for _ in range(4):
             obs_data.append(["", "", "", "", "", "", "", "", ""])
 
-        # Ending row — Observation is the subline shown under the hero.
-        # Wording mirrors the reference PDF's final page.
-        obs_data.append([
+        # Ending row lives on 'Slide Review' too — see intro_row above.
+        ending_row = [
             "Ending — CTA slide",
             "The searchers are already there. Let's make sure they land with you.",
             "", "",
@@ -576,7 +576,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             "",
             "Approve the audit fixes",
             "",
-        ])
+        ]
         # 4) Import the styled HTML into the sheet — Drive converts HTML with
         #    inline CSS into a Sheet with colours, weights, and preserves
         #    =formulas. This is the only reliable Composio-native path for
@@ -625,13 +625,21 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         except Exception as exc:
             print(f"[sheets] dimensions (non-fatal): {exc}")
 
-        # 6) Sources tab (hidden by default — reviewer can un-hide from Sheets)
+        # 6) Slide Review tab — intro + ending copy live here, not in
+        #    Observations. Findings review and slide-copy review are
+        #    separate workflows for CS.
+        try:
+            _write_slide_review_tab(sid, header, intro_row, ending_row)
+        except Exception as exc:
+            print(f"[sheets] slide review tab (non-fatal): {exc}")
+
+        # 7) Sources tab (hidden by default — reviewer can un-hide from Sheets)
         try:
             _write_sources_tab(sid)
         except Exception as exc:
             print(f"[sheets] sources tab (non-fatal): {exc}")
 
-        # 7) Share with the org (non-fatal if it fails)
+        # 8) Share with the org (non-fatal if it fails)
         _share(sid)
 
         return f"https://docs.google.com/spreadsheets/d/{sid}"
@@ -702,19 +710,49 @@ def read_for_deck(sheet_url_or_id):
             return None
     obs_values = _extract_first_range(obs_resp) or []
     data_rows = [r for r in obs_values[1:] if r and any(str(c).strip() for c in r)]
+
+    # Try to fetch Slide Review tab for intro + ending; fall back to legacy
+    # single-tab layout (first/last row in Observations) if it isn't there.
+    intro_row_data = None
+    ending_row_data = None
+    try:
+        sr = _composio_execute("GOOGLESHEETS_BATCH_GET", {
+            "spreadsheet_id": sid, "ranges": ["Slide Review!A1:I"],
+        })
+        sr_rows = _extract_first_range(sr) or []
+        sr_data = [r for r in sr_rows[1:] if r and any(str(c).strip() for c in r)]
+        if len(sr_data) >= 1:
+            intro_row_data = sr_data[0]
+        if len(sr_data) >= 2:
+            ending_row_data = sr_data[1]
+    except Exception:
+        pass
+
     obs_rows = []
     def _g(row, i):
         return row[i].strip() if i < len(row) and row[i] is not None else ""
-    # Need at least 3 rows for both intro and ending to be distinct;
-    # otherwise treat all rows as findings so we don't silently drop content.
+
+    # Assemble slides: intro (from Slide Review or first Observations row)
+    # + findings (all Observations rows, except first/last in legacy mode)
+    # + ending (from Slide Review or last Observations row).
+    combined = []
     n = len(data_rows)
-    for i, row in enumerate(data_rows):
-        if n >= 2 and i == 0:
-            stype = "intro"
-        elif n >= 3 and i == n - 1:
-            stype = "ending"
-        else:
-            stype = "finding"
+    if intro_row_data is not None:
+        combined.append((intro_row_data, "intro"))
+        findings = data_rows
+    else:
+        # Legacy: first data row was intro, last was ending
+        if n >= 2:
+            combined.append((data_rows[0], "intro"))
+        findings = data_rows[1:-1] if n >= 3 else (data_rows[1:] if n >= 2 else [])
+    for f in findings:
+        combined.append((f, "finding"))
+    if ending_row_data is not None:
+        combined.append((ending_row_data, "ending"))
+    elif intro_row_data is None and n >= 3:
+        combined.append((data_rows[-1], "ending"))
+
+    for i, (row, stype) in enumerate(combined):
         obs_rows.append({
             "slide_no":    i + 1,
             "slide_type":  stype,
@@ -731,6 +769,18 @@ def read_for_deck(sheet_url_or_id):
             "reference":   "",
         })
     return {"meta": {}, "obs_rows": obs_rows}
+
+
+def _write_slide_review_tab(spreadsheet_id, header, intro_row, ending_row):
+    """Create/populate 'Slide Review' tab with just the intro + ending rows."""
+    _add_sheet_tab(spreadsheet_id, "Slide Review")
+    _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
+        "spreadsheet_id": spreadsheet_id,
+        "sheet_name": "Slide Review",
+        "first_cell_location": "A1",
+        "valueInputOption": "USER_ENTERED",
+        "values": [header, intro_row, ending_row],
+    })
 
 
 def _write_sources_tab(spreadsheet_id):
@@ -808,21 +858,21 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
     except Exception as exc:
         return None, f"read failed: {exc}"
     rows = _extract_first_range(resp) or []
-    ending_row_idx = None
+    # Find first blank row after the header (row 1). Ending row no longer
+    # lives in Observations — it's on 'Slide Review' — so we scan from the
+    # end downwards for the last non-blank row and append after it.
+    last_content = 1  # header on row 1
     for i, r in enumerate(rows, start=1):
-        if r and str(r[0] if r else "").strip().startswith("Ending"):
-            ending_row_idx = i
-            break
-    if ending_row_idx is None:
-        return None, "Could not find Ending row"
-    target_row = None
-    for i in range(ending_row_idx - 1, 1, -1):
-        r = rows[i - 1] if i - 1 < len(rows) else []
-        if not r or all(not str(c).strip() for c in r):
+        if r and any(str(c).strip() for c in r):
+            last_content = i
+    # Insert right after the last content row
+    target_row = last_content + 1
+    # If any row between last_content and end already looked ending-like
+    # from a legacy sheet, land before it.
+    for i, r in enumerate(rows, start=1):
+        if r and str(r[0] if r else "").strip().startswith("Ending") and i <= target_row:
             target_row = i
             break
-    if target_row is None:
-        return None, "No blank row left — all 4 slots used."
     from audit.hook_copy import for_row as _hf
     copy = _hf(finding_key, default_obs=label, default_costs="", priority=priority)
     overrides = overrides or {}

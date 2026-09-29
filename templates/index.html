@@ -148,13 +148,8 @@
     <div id="appendBox" style="display:none; margin-top:24px; padding-top:20px; border-top:1px dashed #e5e7eb;">
       <label>Add findings (chatbot)</label>
       <p class="hint">One per line. Format: <code>&lt;url&gt; &lt;description&gt;</code>. Each line is audited independently — the chatbot verifies the finding against the URL and picks the right hook copy.</p>
-      <textarea id="appendPrompt" rows="4" style="width:100%;padding:11px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fafafa;margin-bottom:14px;font-family:inherit;resize:vertical" placeholder="https://clearwaterprocessing.com/our-services/ flat architecture&#10;https://clearwaterprocessing.com/ no top menu&#10;https://clearwaterprocessing.com/ no about page"></textarea>
-      <div style="display:flex; gap:8px; align-items:center; margin-top:-10px; margin-bottom:12px;">
-        <select id="appendPriority" style="padding:8px 10px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fafafa;">
-          <option>Critical</option><option>High</option><option selected>Medium</option><option>Low</option>
-        </select>
-        <button type="button" id="appendBtn" style="flex:1;padding:11px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer">Add to sheet</button>
-      </div>
+      <textarea id="appendPrompt" rows="4" style="width:100%;padding:11px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fafafa;margin-bottom:12px;font-family:inherit;resize:vertical" placeholder="https://clearwaterprocessing.com/our-services/ flat architecture&#10;https://clearwaterprocessing.com/ no top menu&#10;https://clearwaterprocessing.com/ no about page"></textarea>
+      <button type="button" id="appendBtn" style="width:100%;padding:11px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;margin-bottom:12px">Add to sheet</button>
       <div id="appendResult" style="font-size:13px;color:#166534;"></div>
     </div>
 
@@ -264,7 +259,14 @@
                 ok: true, version: j.version,
                 sheet_url: j.sheet_url,
                 message: `Audit complete for ${j.live_url} in ${totalElapsed}.`,
-                metrics: {counts: {pages_crawled: Number(j.pages)||0, composio_calls: 0, psi_calls: 0}, est_cost_usd: 0},
+                metrics: {
+                  counts: {
+                    pages_crawled:  Number(j.pages) || 0,
+                    composio_calls: Number(j.composio_calls) || 0,
+                    psi_calls:      Number(j.psi_calls) || 0,
+                  },
+                  est_cost_usd: Number(j.cost_usd) || 0,
+                },
                 crawler: j.crawler || "",
               });
               return;
@@ -305,7 +307,6 @@
 
     document.getElementById("appendBtn").addEventListener("click", async function () {
       const prompt = document.getElementById("appendPrompt").value.trim();
-      const priority = document.getElementById("appendPriority").value;
       const sheetUrl = document.getElementById("sheet_url").value.trim();
       const out = document.getElementById("appendResult");
       if (!prompt) { out.style.color = "#991b1b"; out.textContent = "Enter at least one line."; return; }
@@ -314,7 +315,6 @@
         const fd = new FormData();
         fd.append("sheet_url", sheetUrl);
         fd.append("prompt", prompt);
-        fd.append("priority", priority);
         const res = await fetch("/append-finding", { method: "POST", body: fd });
         const data = await res.json();
         if (data.ok) {

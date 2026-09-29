@@ -16,7 +16,8 @@ from audit.history import _find_history_sheet as _find_sheet
 JOBS_TAB = "Jobs"
 JOB_HEADER = ["id", "created_utc", "client", "live_url",
               "status", "worker", "started_utc", "finished_utc",
-              "sheet_url", "error", "crawler", "pages"]
+              "sheet_url", "error", "crawler", "pages",
+              "composio_calls", "psi_calls", "cost_usd"]
 
 
 def _ensure_tab(sid):
@@ -57,7 +58,7 @@ def _ensure_tab(sid):
 def _read_rows(sid):
     try:
         resp = _cx("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": [f"{JOBS_TAB}!A1:L"]})
+            "spreadsheet_id": sid, "ranges": [f"{JOBS_TAB}!A1:O"]})
     except Exception as exc:
         print(f"[jobs] read: {exc}")
         return []
@@ -90,7 +91,8 @@ def enqueue(client, live_url):
             "first_cell_location": f"A{row_num}",
             "valueInputOption": "USER_ENTERED",
             "values": [[jid, _now(), client, live_url,
-                        "pending", "", "", "", "", "", "", ""]],
+                        "pending", "", "", "", "", "",
+                        "", "", "", "", ""]],
         })
         return jid
     except Exception as exc:
@@ -156,7 +158,8 @@ def claim_next(worker_id):
     return None
 
 
-def mark_done(job_id, sheet_url, crawler="", pages=""):
+def mark_done(job_id, sheet_url, crawler="", pages="",
+              composio_calls="", psi_calls="", cost_usd=""):
     sid = _find_sheet()
     row = _find_row(sid, job_id) if sid else None
     if not row:
@@ -166,7 +169,11 @@ def mark_done(job_id, sheet_url, crawler="", pages=""):
         "first_cell_location": f"E{row}",
         "valueInputOption": "USER_ENTERED",
         "values": [["done", "", "", _now(), sheet_url or "", "",
-                    crawler or "", pages if pages != "" else ""]],
+                    crawler or "",
+                    pages if pages != "" else "",
+                    composio_calls if composio_calls != "" else "",
+                    psi_calls if psi_calls != "" else "",
+                    cost_usd if cost_usd != "" else ""]],
     })
     return True
 

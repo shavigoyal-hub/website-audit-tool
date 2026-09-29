@@ -95,11 +95,20 @@ def main():
             res = _run_with_timeout(_run, (job["live_url"],), args.timeout)
             sheet = res.get("sheet_url") or ""
             crawler = res.get("crawler", "")
-            pages = res["metrics"]["counts"].get("pages_crawled", 0)
-            jobs.mark_done(job["id"], sheet, crawler=crawler, pages=pages)
+            counts = res["metrics"]["counts"]
+            pages = counts.get("pages_crawled", 0)
+            composio_calls = counts.get("composio_calls", 0)
+            psi_calls = counts.get("psi_calls", 0)
+            cost_usd = res["metrics"].get("est_cost_usd", 0)
+            jobs.mark_done(job["id"], sheet,
+                            crawler=crawler, pages=pages,
+                            composio_calls=composio_calls,
+                            psi_calls=psi_calls,
+                            cost_usd=cost_usd)
             print(f"[worker] done {job['id']} → {sheet}  "
                   f"(crawler={crawler}, pages={pages}, "
-                  f"cost=${res['metrics']['est_cost_usd']})")
+                  f"composio={composio_calls}, psi={psi_calls}, "
+                  f"cost=${cost_usd})")
         except _JobTimeout as exc:
             print(f"[worker] timeout {job['id']}: {exc}")
             jobs.mark_error(job["id"], str(exc))
