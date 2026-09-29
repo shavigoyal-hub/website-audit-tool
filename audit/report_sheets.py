@@ -131,7 +131,14 @@ def _merge_findings_by_category(rows):
                 u = u.strip()
                 if not u or u == "-":
                     continue
-                combined_refs.append(f"{u}||LABEL={label}")
+                # If the URL already carries a specific label (e.g.
+                # observations.py stamped 'LCP 7.0s' onto the LCP finding),
+                # keep that specific label — do NOT overwrite it with the
+                # generic status-label pill.
+                if "||LABEL=" in u:
+                    combined_refs.append(u)
+                else:
+                    combined_refs.append(f"{u}||LABEL={label}")
         base["reference"]      = "\n".join(combined_refs)
         base["_merged_labels"] = True
         merged.append(base)
@@ -569,8 +576,10 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             scaled_picks = _picks
             if raw_sum > _MAX_LIFT_PCT:
                 scale = _MAX_LIFT_PCT / raw_sum
-                scaled_picks = [(round(p * scale, 1), lbl, f"+{p * scale:g}%")
-                                for p, lbl, _stat in _picks]
+                scaled_picks = [
+                    (round(p * scale, 1), lbl, f"+{round(p * scale, 1):g}%")
+                    for p, lbl, _stat in _picks
+                ]
             total_pct = round(sum(p for p, _, _ in scaled_picks), 1)
             top = scaled_picks[:3]
             more_n = len(scaled_picks) - len(top)
@@ -1100,9 +1109,17 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
         f'IFERROR(TEXT(E{target_row},"+#.#%;-#.#%;0%")&" "&"{ctx_body}",'
         f'E{target_row}&" "&"{ctx_body}"))'
     )
+    # Observation cell is the CS-readable summary sentence, NOT the pill
+    # label. LLM may return an 'observation' override; if not, use the
+    # note verbatim, then the label as final fallback.
+    row_observation = (
+        (overrides or {}).get("observation")
+        or label
+        or row_label
+    )
     values = [[
         row_category,
-        row_label,
+        row_observation,
         row_priority,
         "",
         hook_stat,

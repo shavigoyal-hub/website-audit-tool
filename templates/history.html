@@ -1,0 +1,124 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Gushwork Audit — Run History</title>
+  <style>
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+           background: #f7f8fa; color: #1a1a2e; margin: 0; padding: 32px 16px; }
+    .wrap { max-width: 1100px; margin: 0 auto; }
+    h1 { font-size: 22px; margin: 0 0 6px; }
+    .sub { color: #6b7280; font-size: 13px; margin-bottom: 22px; }
+    .sub a { color: #4f46e5; text-decoration: none; margin-left: 12px; }
+    .card { background: #fff; border: 1px solid #e5e7eb; border-radius: 12px;
+            box-shadow: 0 2px 12px rgba(0,0,0,0.04); overflow: hidden; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    thead th { text-align: left; font-size: 11px; font-weight: 700;
+               color: #6b7280; text-transform: uppercase; letter-spacing: 0.06em;
+               padding: 12px 14px; background: #f9fafb; border-bottom: 1px solid #e5e7eb; }
+    tbody td { padding: 12px 14px; border-bottom: 1px solid #f3f4f6;
+               vertical-align: top; }
+    tbody tr:last-child td { border-bottom: none; }
+    .status { display: inline-block; padding: 2px 8px; border-radius: 999px;
+              font-size: 11px; font-weight: 600; }
+    .st-done    { background: #dcfce7; color: #166534; }
+    .st-running { background: #dbeafe; color: #1e40af; }
+    .st-pending { background: #fef3c7; color: #92400e; }
+    .st-error   { background: #fee2e2; color: #991b1b; }
+    a.link { color: #4f46e5; text-decoration: none; font-weight: 600; }
+    .muted { color: #9ca3af; }
+    .search { padding: 8px 12px; border: 1px solid #d1d5db; border-radius: 8px;
+              font-size: 13px; width: 260px; margin-bottom: 14px; background: #fff; }
+    .kv { color: #6b7280; font-size: 11px; }
+    .cost { color: #059669; font-size: 11px; font-weight: 600; }
+    tbody tr:hover { background: #fafafa; }
+    .empty { text-align: center; padding: 40px 20px; color: #9ca3af; }
+    .top { display: flex; justify-content: space-between; align-items: center;
+           margin-bottom: 14px; }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <h1>Audit Run History</h1>
+    <p class="sub">
+      Every audit ever queued, with status, sheet + deck links, page count and cost.
+      <a href="/">← back to audit tool</a>
+      {% if jobs_sheet_url %}<a href="{{ jobs_sheet_url }}" target="_blank">open jobs sheet →</a>{% endif %}
+    </p>
+
+    <div class="top">
+      <input class="search" id="search" placeholder="Filter by URL / status / client…" />
+      <span class="kv"><span id="visible">{{ runs|length }}</span> of {{ runs|length }} runs</span>
+    </div>
+
+    <div class="card">
+      {% if runs %}
+      <table id="runs">
+        <thead>
+          <tr>
+            <th>When</th>
+            <th>Site</th>
+            <th>Status</th>
+            <th>Pages</th>
+            <th>Cost</th>
+            <th>Sheet</th>
+            <th>Deck</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in runs %}
+          <tr data-search="{{ (r.live_url or '') + ' ' + (r.client or '') + ' ' + (r.status or '') }}">
+            <td>
+              <div>{{ (r.created_utc or '')[:10] }}</div>
+              <div class="kv">{{ (r.created_utc or '')[11:19] }}</div>
+            </td>
+            <td>
+              <a class="link" href="{{ r.live_url }}" target="_blank">{{ r.live_url }}</a>
+              {% if r.crawler %}<div class="kv">{{ r.crawler }}</div>{% endif %}
+            </td>
+            <td>
+              <span class="status st-{{ r.status or 'pending' }}">{{ (r.status or 'pending')|upper }}</span>
+              {% if r.worker %}<div class="kv">{{ r.worker }}</div>{% endif %}
+            </td>
+            <td>{{ r.pages or '—' }}</td>
+            <td>
+              {% if r.cost_usd %}
+              <span class="cost">${{ '%.4f'|format(r.cost_usd|float) }}</span>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td>
+              {% if r.sheet_url %}<a class="link" href="{{ r.sheet_url }}" target="_blank">Open →</a>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+            <td>
+              {% if r.deck_url %}<a class="link" href="{{ r.deck_url }}" target="_blank">Open →</a>
+              {% elif r.sheet_url %}<a class="link" href="/deck?sheet={{ r.sheet_url }}" target="_blank">Build →</a>
+              {% else %}<span class="muted">—</span>{% endif %}
+            </td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% else %}
+      <div class="empty">No runs yet. Submit an audit from the home page.</div>
+      {% endif %}
+    </div>
+  </div>
+  <script>
+    const s = document.getElementById("search");
+    const rows = document.querySelectorAll("#runs tbody tr");
+    const vis = document.getElementById("visible");
+    s && s.addEventListener("input", () => {
+      const q = s.value.trim().toLowerCase();
+      let shown = 0;
+      rows.forEach(r => {
+        const hit = !q || r.getAttribute("data-search").toLowerCase().includes(q);
+        r.style.display = hit ? "" : "none";
+        if (hit) shown++;
+      });
+      vis.textContent = shown;
+    });
+  </script>
+</body>
+</html>

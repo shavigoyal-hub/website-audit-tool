@@ -378,6 +378,25 @@ def append_finding_route():
         return jsonify({"error": traceback.format_exc()}), 500
 
 
+@app.route("/img/<file_id>")
+def drive_image_proxy(file_id):
+    """Serve a Drive-hosted image (uploaded via chatbot) as raw bytes.
+
+    Fixes the 'broken screenshot in deck' — Drive's public inline URLs
+    have been flaky; proxying through Flask makes it always work.
+    """
+    import re as _re
+    if not _re.fullmatch(r"[A-Za-z0-9_-]{10,64}", file_id):
+        return "bad file id", 400
+    from audit.drive_upload import fetch_bytes
+    body, mime = fetch_bytes(file_id)
+    if not body:
+        return "not found", 404
+    from flask import Response
+    return Response(body, mimetype=(mime or "image/png"),
+                    headers={"Cache-Control": "public, max-age=86400"})
+
+
 @app.route("/history")
 def history_route():
     """Return recent audit runs + the history sheet URL."""
@@ -389,6 +408,45 @@ def history_route():
         "sheet_url": history.get_url(),
         "runs": history.list_recent(n),
     })
+
+
+@app.route("/history-ui")
+def history_ui():
+    """Human-friendly history page. Combines Jobs (queue state) and
+    History (past audits) into one sortable table so CS can find and
+    reopen any past run without hunting through the Google Sheet."""
+    from audit import jobs as _jobs_mod
+    jobs_rows = _jobs_mod.list_recent(50)
+    hist_rows = history.list_recent(50)
+    # Merge on sheet_url so a completed job also carries its deck URL.
+    by_sheet = {r.get("sheet_url", ""): r for r in hist_rows if r.get("sheet_url")}
+    merged = []
+    seen_sheets = set()
+    for j in jobs_rows:
+        row = dict(j)
+        sheet_url = j.get("sheet_url", "")
+        if sheet_url and sheet_url in by_sheet:
+            row["deck_url"] = by_sheet[sheet_url].get("deck_url", "")
+            seen_sheets.add(sheet_url)
+        merged.append(row)
+    for h in hist_rows:
+        if h.get("sheet_url") in seen_sheets:
+            continue
+        merged.append({
+            "id": "",
+            "created_utc": h.get("timestamp") or "",
+            "client": h.get("client") or "",
+            "live_url": h.get("live_url") or "",
+            "status": "done",
+            "worker": "",
+            "sheet_url": h.get("sheet_url") or "",
+            "deck_url": h.get("deck_url") or "",
+            "pages": h.get("pages") or "",
+            "crawler": "",
+            "cost_usd": h.get("cost_usd") or "",
+        })
+    return render_template("history.html", runs=merged,
+                           jobs_sheet_url=_jobs_mod.get_url() if hasattr(_jobs_mod, "get_url") else "")
 
 
 @app.route("/health")

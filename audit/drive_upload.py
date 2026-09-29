@@ -144,8 +144,52 @@ def upload_image(filename, content_bytes, mime_type="image/png"):
             )
         except Exception as exc:
             print(f"[drive] proxy permissions fallback failed: {exc}")
-    # drive.google.com/thumbnail is the endpoint Drive itself uses for
-    # inline previews. It respects file sharing, works from any origin,
-    # and reliably serves an image (unlike ?export=view which sometimes
-    # 302s to a Drive viewer page for logged-out clients).
-    return f"https://drive.google.com/thumbnail?id={file_id}&sz=w1200"
+    # Return a marker URL that the app proxies through /img/<file_id>.
+    # This is the ONLY endpoint we control end-to-end — no more relying on
+    # Drive's shifting inline-image URL rules. The app fetches the file
+    # authenticated (via Composio) and streams the bytes back.
+    return f"GDRIVE_IMG:{file_id}"
+
+
+def fetch_bytes(file_id):
+    """Fetch a Drive file's binary content via Composio.
+
+    Returns (bytes, mime_type) or (None, None) on failure. Used by the
+    /img/<file_id> proxy so deck screenshots always render regardless of
+    Drive's public-sharing propagation delay.
+    """
+    import base64
+    try:
+        from audit.composio_exec import proxy as _proxy
+        # Get metadata first for the mime type
+        meta = _proxy(
+            endpoint=f"https://www.googleapis.com/drive/v3/files/{file_id}?fields=mimeType",
+            method="GET",
+            toolkit="googledrive",
+        )
+        mime = (meta or {}).get("mimeType") if isinstance(meta, dict) else None
+        # alt=media returns the raw bytes; Composio proxy will pass them back
+        body = _proxy(
+            endpoint=f"https://www.googleapis.com/drive/v3/files/{file_id}?alt=media",
+            method="GET",
+            toolkit="googledrive",
+        )
+        # Composio's proxy sometimes returns the body as base64 or as a
+        # bytes-like blob depending on content-type handling.
+        if isinstance(body, dict):
+            raw = body.get("_raw_body") or body.get("data") or body.get("content")
+            if isinstance(raw, str):
+                try:
+                    return base64.b64decode(raw), mime or "image/png"
+                except Exception:
+                    return raw.encode(), mime or "image/png"
+        if isinstance(body, (bytes, bytearray)):
+            return bytes(body), mime or "image/png"
+        if isinstance(body, str):
+            try:
+                return base64.b64decode(body), mime or "image/png"
+            except Exception:
+                return body.encode(), mime or "image/png"
+    except Exception as exc:
+        print(f"[drive] fetch_bytes failed for {file_id}: {exc}")
+    return None, None
