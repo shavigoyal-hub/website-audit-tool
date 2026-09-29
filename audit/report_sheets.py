@@ -583,8 +583,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             "error_404_money", "render_error", "render_blocked",
             "render_js_dependent", "render_blocking",
             "lcp_high", "lcp_medium", "cls_high", "perf_low", "perf_moderate",
-            "sitemap_missing", "favicon_missing", "about_missing",
-            "cta_missing",
+            "sitemap_missing", "cta_missing",
         }
         _MAX_LIFT_PCT = 35.0
 
