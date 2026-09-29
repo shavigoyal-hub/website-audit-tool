@@ -7,7 +7,7 @@ Auto-start:       load com.gushwork.audit-worker.plist into launchd
 Env: COMPOSIO_API_KEY, optional PAGESPEED_API_KEY (same as Flask app).
 """
 import argparse
-import multiprocessing as _mp
+import signal
 import socket
 import time
 import traceback
@@ -21,11 +21,27 @@ from audit.pipeline import SF_AVAILABLE, run as _run
 _JOB_TIMEOUT_SEC = 15 * 60
 
 
-def _run_in_subprocess(live_url, out_q):
+class _JobTimeout(Exception):
+    pass
+
+
+def _run_with_timeout(fn, args, timeout):
+    """Run `fn(*args)` in-process, raise _JobTimeout after `timeout` seconds.
+
+    Uses signal.SIGALRM (POSIX only, fine for macOS/Linux worker). Blocking
+    syscalls (subprocess.run for SF, requests.get for PSI, Composio HTTP)
+    all get interrupted by the alarm.
+    """
+    def _handler(signum, frame):
+        raise _JobTimeout(f"job exceeded {timeout}s")
+
+    prev = signal.signal(signal.SIGALRM, _handler)
+    signal.alarm(int(timeout))
     try:
-        out_q.put({"ok": True, "res": _run(live_url)})
-    except Exception:
-        out_q.put({"ok": False, "err": traceback.format_exc()})
+        return fn(*args)
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, prev)
 
 
 def _reset_ghost_jobs(worker_id):
@@ -76,26 +92,7 @@ def main():
 
         print(f"[worker] claimed {job['id']} → {job['live_url']}")
         try:
-            # Run the pipeline in a subprocess so we can kill it if it
-            # hangs (Composio/PSI calls have blocked for 1h+ in the past).
-            ctx = _mp.get_context("spawn")
-            q = ctx.Queue()
-            proc = ctx.Process(target=_run_in_subprocess,
-                                args=(job["live_url"], q))
-            proc.start()
-            proc.join(timeout=args.timeout)
-            if proc.is_alive():
-                proc.terminate()
-                proc.join(5)
-                if proc.is_alive():
-                    proc.kill()
-                raise TimeoutError(
-                    f"pipeline exceeded {args.timeout}s and was killed")
-            payload = q.get(timeout=5) if not q.empty() else \
-                      {"ok": False, "err": "subprocess exited with no result"}
-            if not payload.get("ok"):
-                raise RuntimeError(payload.get("err", "unknown subprocess error"))
-            res = payload["res"]
+            res = _run_with_timeout(_run, (job["live_url"],), args.timeout)
             sheet = res.get("sheet_url") or ""
             crawler = res.get("crawler", "")
             pages = res["metrics"]["counts"].get("pages_crawled", 0)
@@ -103,6 +100,9 @@ def main():
             print(f"[worker] done {job['id']} → {sheet}  "
                   f"(crawler={crawler}, pages={pages}, "
                   f"cost=${res['metrics']['est_cost_usd']})")
+        except _JobTimeout as exc:
+            print(f"[worker] timeout {job['id']}: {exc}")
+            jobs.mark_error(job["id"], str(exc))
         except KeyboardInterrupt:
             jobs.mark_error(job["id"], "worker interrupted")
             print("[worker] interrupted; job marked error")

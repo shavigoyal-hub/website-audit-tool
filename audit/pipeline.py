@@ -91,6 +91,15 @@ def run(live_url):
 
     rows, _notes = observations.build_rows(findings, psi_rows, site_obs)
 
+    # LLM judgement pass — rewrites each finding in Gushwork's voice using
+    # the actual HTML of the affected page. No-op if OPENAI_API_KEY /
+    # ANTHROPIC_API_KEY aren't set.
+    try:
+        from audit import llm_judge
+        rows = llm_judge.enrich(rows, live_url)
+    except Exception as exc:
+        print(f"[pipeline] LLM judgement skipped: {exc}")
+
     friendly = client_name.replace("_", " ").replace("-", " ").title()
     sheet_title = f"{friendly} — SEO Audit ({datetime.date.today()})"
     meta = {
