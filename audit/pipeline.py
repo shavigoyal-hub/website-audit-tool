@@ -12,8 +12,10 @@ import re
 import shutil
 import subprocess
 import tempfile
+import xml.etree.ElementTree as _ET
 
 import pandas as pd
+import requests
 
 from audit import (crawler, history, metrics, observations, pagespeed,
                    parameters, report_sheets, sf_csv)
@@ -97,20 +99,139 @@ def _sf_crawl(url, max_urls=None):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def _get_dataframe_with_tag(live_url):
-    """SF first; fall back to Python crawler on any failure.
+def _probe_site(url):
+    """One HEAD-like GET to learn canonical URL + whether the site is JS-rendered.
 
-    Returns (df, crawler_used) so the caller can record which crawler
-    actually produced the data.
+    Returns dict with:
+      final_url:  URL after redirects (feed THIS to SF, not the raw input)
+      js_hint:    True if body suggests SPA (Next.js/React/Vue root, tiny HTML)
+      html_ok:    True if we got a 2xx with non-empty HTML
+      sitemap:    URL of the sitemap if we can detect it (from robots.txt), else ""
+    """
+    out = {"final_url": url, "js_hint": False, "html_ok": False, "sitemap": ""}
+    try:
+        r = requests.get(url, headers={"User-Agent": "Mozilla/5.0 Gushwork-Audit"},
+                         timeout=15, allow_redirects=True)
+    except Exception:
+        return out
+    out["final_url"] = str(r.url) or url
+    if r.status_code // 100 == 2 and r.text:
+        out["html_ok"] = True
+        body = r.text
+        m = re.search(r"<body[^>]*>(.*?)</body>", body, re.I | re.S)
+        body_only = m.group(1).strip() if m else body
+        # SPA heuristic — tiny body OR obvious SPA markers
+        markers = ("__NEXT_DATA__", "id=\"__next\"", "id='__next'",
+                   "data-reactroot", "<div id=\"root\"", "id=\"app\"",
+                   "id='app'", "ng-app", "data-v-app")
+        if len(body_only) < 2500 or any(mk in body for mk in markers):
+            out["js_hint"] = True
+    # Sitemap discovery via robots.txt
+    from urllib.parse import urlparse, urljoin
+    origin = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
+    try:
+        rob = requests.get(urljoin(origin, "/robots.txt"), timeout=5)
+        if rob.ok:
+            for line in rob.text.splitlines():
+                m2 = re.match(r"^\s*sitemap\s*:\s*(\S+)", line, re.I)
+                if m2:
+                    out["sitemap"] = m2.group(1).strip()
+                    break
+    except Exception:
+        pass
+    if not out["sitemap"]:
+        # Try well-known locations
+        for path in ("/sitemap.xml", "/sitemap_index.xml"):
+            try:
+                sm = requests.head(urljoin(origin, path), timeout=5,
+                                    allow_redirects=True)
+                if sm.ok:
+                    out["sitemap"] = urljoin(origin, path)
+                    break
+            except Exception:
+                continue
+    return out
+
+
+def _sitemap_urls(sitemap_url, cap=2000):
+    """Fetch a sitemap (or sitemap index) and return a flat list of page URLs."""
+    seen = set()
+    def _walk(url, depth=0):
+        if depth > 3 or len(seen) >= cap or not url:
+            return
+        try:
+            r = requests.get(url, timeout=15)
+            if not r.ok:
+                return
+        except Exception:
+            return
+        # Strip default namespace so ET matching is easy
+        text = re.sub(r'xmlns="[^"]+"', "", r.text, count=1)
+        try:
+            root = _ET.fromstring(text)
+        except Exception:
+            return
+        # Sitemap index → recurse into each <sitemap>/<loc>
+        for sm in root.findall(".//sitemap/loc"):
+            _walk((sm.text or "").strip(), depth + 1)
+        # Leaf sitemap → collect <url>/<loc>
+        for u in root.findall(".//url/loc"):
+            v = (u.text or "").strip()
+            if v.startswith("http"):
+                seen.add(v)
+                if len(seen) >= cap:
+                    return
+    _walk(sitemap_url)
+    return list(seen)
+
+
+def _get_dataframe_with_tag(live_url):
+    """SF first with smart auto-detection; fall back to Python crawler on failure.
+
+    Fallback chain:
+      1. Probe homepage — get canonical (post-redirect) URL, detect SPA, find sitemap.
+      2. SF crawl of the canonical URL. Auto-enables JS rendering if the
+         probe detected an SPA. Retries once with JS rendering if the first
+         attempt returned 0 pages.
+      3. Sitemap fallback: if SF still returns nothing but the site has a
+         sitemap, seed the built-in crawler with sitemap URLs.
+      4. Plain Python crawl as last resort.
+
+    Returns (df, crawler_used).
     """
     max_urls = os.environ.get("SF_MAX_URLS", "").strip()
     max_urls = int(max_urls) if max_urls.isdigit() else None
+    js_env = os.environ.get("SF_JS_RENDER", "").strip() in ("1", "true", "yes")
+
+    probe = _probe_site(live_url)
+    target = probe["final_url"] or live_url
+    if probe["js_hint"] and not js_env:
+        print(f"[pipeline] SPA markers detected — enabling JS rendering for SF")
+        os.environ["SF_JS_RENDER"] = "1"
+
     if SF_AVAILABLE:
         try:
-            return _sf_crawl(live_url, max_urls=max_urls), "screaming-frog"
+            df = _sf_crawl(target, max_urls=max_urls)
+            if len(df) <= 1 and not js_env:
+                print(f"[pipeline] SF returned {len(df)} rows — retrying with JS rendering")
+                os.environ["SF_JS_RENDER"] = "1"
+                df = _sf_crawl(target, max_urls=max_urls)
+            if len(df) >= 1:
+                return df, "screaming-frog"
+            print(f"[pipeline] SF crawl came back empty on {target}")
         except Exception as exc:
-            print(f"[pipeline] SF failed, falling back to Python crawler: {exc}")
-    rows = crawler.crawl(live_url)
+            print(f"[pipeline] SF failed: {exc}")
+
+    # Sitemap fallback
+    if probe["sitemap"]:
+        urls = _sitemap_urls(probe["sitemap"])
+        if urls:
+            print(f"[pipeline] sitemap fallback — {len(urls)} URLs from {probe['sitemap']}")
+            rows = crawler.crawl_urls(urls) if hasattr(crawler, "crawl_urls") else crawler.crawl(target)
+            return pd.DataFrame(rows), "sitemap"
+
+    print(f"[pipeline] falling back to Python crawler for {target}")
+    rows = crawler.crawl(target)
     return pd.DataFrame(rows), "python"
 
 
