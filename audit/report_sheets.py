@@ -518,6 +518,18 @@ def _apply_dimensions(sid, sheet_id, obs_data):
             "showCustomUi": True,
             "strict": False,
         }}})
+    # Hide the 4 catalog-owned columns (E Hook Stat, F Hook Context,
+    # H What It Costs You, I Supporting Stats). Data stays in the sheet so
+    # the deck renderer can still read it, but reviewers only see the
+    # editable audit-specific columns: Category, Observation, Priority,
+    # Impact, What We Found. Copy for the hidden fields is edited in the
+    # master Parameters sheet.
+    for col_idx in (4, 5, 7, 8):
+        requests_.append({"updateDimensionProperties": {
+            "range": {"sheetId": sheet_id, "dimension": "COLUMNS",
+                      "startIndex": col_idx, "endIndex": col_idx + 1},
+            "properties": {"hiddenByUser": True},
+            "fields": "hiddenByUser"}})
     try:
         _composio_proxy(
             endpoint=f"https://sheets.googleapis.com/v4/spreadsheets/{sid}:batchUpdate",
@@ -1265,7 +1277,8 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
         row_category,
         row_observation,
         row_priority,
-        "",
+        costs,  # Impact col — same source as What It Costs You so the
+                # reviewer always sees a filled Impact even for manual finds.
         hook_stat,
         formula,
         f"{url} | {pill}" if url else f"Site-wide | {pill}",
