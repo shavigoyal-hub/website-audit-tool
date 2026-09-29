@@ -45,7 +45,7 @@ def evaluate(df, live_url):
     has_about = bool(addr_l.str.contains(r"/about|who-we-serve|our-process|meet-the-team|/team").any())
     (passed if has_about else issues).append(
         "About / company page present" if has_about else _issue(
-            "about_missing", "About / Company Page", "Medium",
+            "about_missing", "About / Company Page", "High",
             "No clear About / company page found in the crawl",
             "A missing About page weakens brand trust signals."))
     has_contact = bool(addr_l.str.contains(r"/contact|book-meeting|/get-in-touch|/schedule").any())
@@ -99,9 +99,9 @@ def evaluate(df, live_url):
     if sm2 is not None and sm2.status_code == 200 and ("<urlset" in sm2.text or "<sitemapindex" in sm2.text):
         passed.append("XML sitemap found and valid")
     else:
-        issues.append(_issue("sitemap_missing", "XML Sitemap", "Medium",
-                             "No XML sitemap found at /sitemap.xml",
-                             "Without a sitemap, pages are discovered and indexed slower."))
+        issues.append(_issue("sitemap_missing", "XML Sitemap", "Critical",
+                             "No XML sitemap served at any standard path and robots.txt declares none",
+                             "Without a sitemap, Google discovers new pages up to 2x slower."))
 
     # --- Favicon ---
     # Detection is broad: any <link rel="...icon..."> in the homepage HTML, OR
@@ -230,8 +230,34 @@ def evaluate(df, live_url):
     else:
         na.append("HTTP→HTTPS redirect : http:// URLs not in SF crawl scope — verify manually: curl -sI http://" + host + "/")
 
-    # --- Open Graph tags (fetch homepage) ---
+    # --- Homepage-level probes: schema, CTA, conversion path ---
     og_req = _get(origin + "/")
+    if og_req is not None and og_req.status_code == 200:
+        home_html = og_req.text or ""
+        home_html_lower = home_html.lower()
+
+        # Structured data — chat consistently flags 'no ld+json anywhere'.
+        # If the homepage has zero ld+json blocks, most likely so does the
+        # rest of the site.
+        if "application/ld+json" not in home_html_lower:
+            issues.append(_issue("structured_data", "Schema", "High",
+                                 "Homepage has no ld+json structured data (no Organization / Product / Service / FAQPage)",
+                                 "Without any schema, Google can't render rich results and LLMs miss key business context.",
+                                 reference=origin + "/"))
+        # Conversion path (form / mailto / tel / clear CTA button link).
+        has_form   = bool(re.search(r"<form[\s>]", home_html, re.I))
+        has_mailto = "mailto:" in home_html_lower
+        has_tel    = "tel:" in home_html_lower
+        has_cta_link = bool(re.search(
+            r'<a[^>]+href=["\'][^"\']*(?:contact|book|schedule|demo|get-started|get-in-touch|apply|request|consultation)',
+            home_html, re.I))
+        if not (has_form or has_mailto or has_tel or has_cta_link):
+            issues.append(_issue("cta_missing", "Conversion Path", "Critical",
+                                 "No form, no mailto, no tel link, and no clear CTA button on the homepage",
+                                 "Visitors ready to buy have no way to make contact.",
+                                 reference=origin + "/"))
+
+    # --- Open Graph tags (fetch homepage) ---
     if og_req is not None and og_req.status_code == 200:
         html = og_req.text
         has_og_title = bool(re.search(r'property=["\']og:title["\']', html, re.I))
