@@ -563,17 +563,23 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         if _picks:
             _picks.sort(key=lambda t: -t[0])
             raw_sum = sum(p for p, _, _ in _picks)
-            # Realistic ceiling — we never claim more than 35% lead lift.
-            total_pct = round(min(raw_sum, _MAX_LIFT_PCT), 1)
-            top = _picks[:3]
-            more_n = len(_picks) - len(top)
+            # Scale down proportionally when the raw sum exceeds 35% so
+            # every individual number on the intro formula shrinks
+            # together AND the addition genuinely equals the total.
+            scaled_picks = _picks
+            if raw_sum > _MAX_LIFT_PCT:
+                scale = _MAX_LIFT_PCT / raw_sum
+                scaled_picks = [(round(p * scale, 1), lbl, f"+{p * scale:g}%")
+                                for p, lbl, _stat in _picks]
+            total_pct = round(sum(p for p, _, _ in scaled_picks), 1)
+            top = scaled_picks[:3]
+            more_n = len(scaled_picks) - len(top)
             terms = "  +  ".join(f"{s} {l}" for _p, l, s in top)
             if more_n > 0:
                 terms += f"  +  ({more_n} more)"
-            capped_note = " (capped)" if raw_sum > _MAX_LIFT_PCT else ""
             intro_stat = f"+{total_pct:g}%"
             intro_heading = f"Increase your leads by {total_pct:g}%"
-            intro_formula = f"{terms}  =  +{total_pct:g}% More leads{capped_note}"
+            intro_formula = f"{terms}  =  +{total_pct:g}% More leads"
         else:
             intro_stat = "+33%"
             intro_heading = "Increase your leads by 33%"
