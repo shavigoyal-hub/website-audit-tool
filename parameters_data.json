@@ -179,6 +179,16 @@
     "priority": "Critical",
     "support": "Deep-link hierarchies concentrate authority on money pages."
   },
+  "fragment_only_nav": {
+    "costs": "Fragment-only navigation gives Google one page to rank instead of many — Product, Reports, Integrations, How It Works all lose their own SERP.",
+    "hook_ctx": "ranking coverage when the whole product sits on one page and every nav item is a #fragment instead of a real URL.",
+    "hook_stat": "-30%",
+    "in_lead_sum": "",
+    "label": "Fragment-only nav",
+    "primary_signal": "Rank",
+    "priority": "High",
+    "support": "Distinct indexable pages per topic is the strongest predictor of long-tail search coverage."
+  },
   "h1_missing": {
     "costs": "Missing H1s give Google no topic to rank the page for, directly hurting rankings and leads.",
     "hook_ctx": "more leads when key pages have a proper H1. Pages with no H1 give Google no topic to rank for.",
