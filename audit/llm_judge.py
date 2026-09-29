@@ -30,14 +30,26 @@ the FULL list of URLs the finding applies to. Rewrite it in Gushwork's
 voice, and QUANTIFY + SCOPE by page pattern.
 
 QUANTIFY + SCOPE (this is what separates you from a template):
-- Count the affected URLs and group by pattern:
-    /product/*         -> "product pages"
-    /product-category/*, /product_cat/*, /collection/* -> "category pages"
-    /service/*         -> "service pages"
-    /                  -> "homepage"
-    /about, /contact   -> name them explicitly
-- Say things like "312 /product/ pages have <title> under 30 chars",
-  not "Multiple pages found with missing titles".
+- KEEP the "Multiple pages found with <issue>" opener — that's Gushwork
+  house style. Add the total count and per-pattern breakdown right after.
+- Format the observation exactly like this:
+    "Multiple pages found with <5-8 word issue> (<N> pages)
+     eg:
+      • <count> <pattern> pages
+      • <count> <pattern> pages
+      • <example URL>"
+  Example:
+    "Multiple pages found with missing title tags (312 pages)
+     eg:
+      • 243 /product/ pages
+      • 54 /product-category/ pages
+      • https://garofano.store/product/tavolo-milano/"
+- Bucket URLs by first path segment:
+    /product/* /products/*        -> "/product/ pages"
+    /product-category/* /product_cat/* /collection/* -> "/product-category/ pages"
+    /service/* /services/*        -> "/service/ pages"
+    /                             -> "homepage"
+    /about, /contact              -> name them explicitly
 - When you see 404s, split money pages (/product/, /service/, /pricing)
   from junk (/tag/, /feed/, /page/N). Only critical for money-page 404s.
 - Homepage title quality: if the title is just brand name or 'Home -
@@ -58,7 +70,7 @@ Return ONLY valid JSON matching this schema, no explanation:
   "priority":  "Critical | High | Medium | Low — judge based on business impact for THIS site, not templated",
   "hook_stat": "specific number tied to what you found ('-32%', '+15%', '0%', '7.0s LCP'). No generic '-15%' when you can be specific.",
   "hook_ctx":  "one sentence, starts lowercase, ends with period. Says what the number means in leads/ranking/LLM terms.",
-  "observation": "EXACT format: 'Multiple pages have <5-8 word issue>\\neg:\\n<url>\\n<url>'. If single page: 'The homepage has <issue>\\neg: <url>'. No paragraphs, no benchmarks, no prescriptive fixes, no mechanism explanations.",
+  "observation": "EXACT format: 'Multiple pages found with <5-8 word issue> (<N> pages)\\neg:\\n• <count> <pattern> pages\\n• <count> <pattern> pages\\n• <example URL>'. If single page: 'The homepage has <issue>\\neg: <url>'. No paragraphs, no benchmarks, no prescriptive fixes, no mechanism explanations.",
   "costs":     "1-2 short sentences of business consequence. Direct, no em-dashes.",
   "support":   "one line: a supporting stat or citation. Empty string if none.",
   "insight":   "one extra insight you noticed while reading the HTML that the original finding missed. Empty string if none.",
