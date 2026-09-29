@@ -919,6 +919,14 @@ def render(obs_rows, client_display, meta=None):
 <style>{CSS}</style>
 </head>
 <body>
+<button id="dl-pdf" onclick="window.print()"
+  style="position:fixed;top:16px;right:16px;z-index:9999;
+         background:#111;color:#fff;border:0;border-radius:8px;
+         padding:10px 16px;font:600 13px 'Instrument Sans',sans-serif;
+         cursor:pointer;box-shadow:0 4px 12px rgba(0,0,0,.15);">
+  ↓ Save as PDF
+</button>
+<style>@media print {{ #dl-pdf {{ display: none !important; }} }}</style>
 <div class="deck">
 {''.join(parts)}
 </div>
