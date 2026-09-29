@@ -576,15 +576,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         # Master v4 Lead-sum set. Fixing a Lead-primary finding — whether
         # its hook_stat is displayed as a positive lift (+15%) or a
         # negative loss (-35%) — recovers |stat|% leads for the intro sum.
-        _LEAD_KEYS = {
-            "h1_missing", "title_missing", "meta_missing",
-            "structured_data", "schema_product_missing",
-            "schema_article_missing", "thin_content",
-            "error_404_money", "render_error", "render_blocked",
-            "render_js_dependent", "render_blocking",
-            "lcp_high", "lcp_medium", "cls_high", "perf_low", "perf_moderate",
-            "sitemap_missing", "cta_missing",
-        }
+        _LEAD_KEYS = _LEAD_KEYS_MASTER  # single source of truth
         _MAX_LIFT_PCT = 35.0
 
         _picks = []
@@ -783,6 +775,14 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             _write_slide_review_tab(sid, header, intro_row, ending_row)
         except Exception as exc:
             print(f"[sheets] slide review tab (non-fatal): {exc}")
+
+        # 6b) Parameters tab — canonical parameter list (key, priority,
+        #     primary signal, hook stat + copy). Persisted in every audit so
+        #     the taxonomy source-of-truth travels with the sheet.
+        try:
+            _write_parameters_tab(sid)
+        except Exception as exc:
+            print(f"[sheets] parameters tab (non-fatal): {exc}")
 
         # 7) Sources tab (hidden by default — reviewer can un-hide from Sheets)
         try:
@@ -1017,6 +1017,71 @@ def _write_slide_review_tab(spreadsheet_id, header, intro_row, ending_row):
             )
     except Exception as exc:
         print(f"[sheets] slide-review hide-cols (non-fatal): {exc}")
+
+
+# Master parameter set that feeds the deck cover +N% lead-sum.
+# Keep this in ONE place so the Parameters tab and the sum reconcile.
+_LEAD_KEYS_MASTER = {
+    "h1_missing", "title_missing", "meta_missing",
+    "structured_data", "schema_product_missing",
+    "schema_article_missing", "thin_content",
+    "error_404_money", "render_error", "render_blocked",
+    "render_js_dependent", "render_blocking",
+    "lcp_high", "lcp_medium", "cls_high", "perf_low", "perf_moderate",
+    "sitemap_missing", "cta_missing",
+}
+
+
+def _primary_signal(key, hook_ctx):
+    """Derive Lead / CTR / Rank from LEAD_KEYS membership + ctx keywords."""
+    if key in _LEAD_KEYS_MASTER:
+        return "Lead"
+    ctx = (hook_ctx or "").lower()
+    if "click-through" in ctx or "ctr" in ctx or "serp" in ctx or "citation" in ctx:
+        return "CTR"
+    if "rank" in ctx or "index" in ctx or "authority" in ctx or "pagerank" in ctx:
+        return "Rank"
+    return "—"
+
+
+def _write_parameters_tab(spreadsheet_id):
+    """Dump the full HOOK_COPY parameter catalog to a 'Parameters' tab.
+
+    Columns: Key | Label | Priority | Primary signal | Hook stat |
+             Hook context | Costs | Support | In lead-sum
+
+    This is the taxonomy source-of-truth for every audit — reviewers can
+    open any audit and see exactly which parameters exist and how each one
+    is classified without having to hunt the codebase.
+    """
+    from audit.hook_copy import HOOK_COPY, STATUS_LABEL
+    _add_sheet_tab(spreadsheet_id, "Parameters")
+    header = ["Key", "Label", "Priority", "Primary signal", "Hook stat",
+             "Hook context", "Costs", "Support", "In lead-sum"]
+    rows = [header]
+    for key in sorted(HOOK_COPY.keys()):
+        spec = HOOK_COPY.get(key) or {}
+        label_tuple = STATUS_LABEL.get(key) or (key, "medium")
+        label, prio = label_tuple[0], label_tuple[1].title()
+        ctx = spec.get("hook_ctx", "")
+        rows.append([
+            key,
+            label,
+            prio,
+            _primary_signal(key, ctx),
+            spec.get("hook_stat", ""),
+            ctx,
+            spec.get("costs", ""),
+            spec.get("support", ""),
+            "YES" if key in _LEAD_KEYS_MASTER else "",
+        ])
+    _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
+        "spreadsheet_id": spreadsheet_id,
+        "sheet_name": "Parameters",
+        "first_cell_location": "A1",
+        "valueInputOption": "USER_ENTERED",
+        "values": rows,
+    })
 
 
 def _write_sources_tab(spreadsheet_id):
