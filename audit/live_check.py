@@ -147,20 +147,27 @@ def audit_url(url, hint=""):
     detected = _analyze_html(html)
     result["detected"] = [{"key": k, "evidence": ev} for k, ev in detected]
 
+    # Priority: user's hint > auto-detected page issues
+    # Auto-detected issues are ONLY used when the user didn't supply a hint —
+    # if they wrote a note, respect it. The LLM framer will still turn the
+    # raw note into proper Gushwork-voice copy.
     chosen_key = None
     if hint_key and hint_key in HOOK_COPY:
         chosen_key = hint_key
         result["evidence"] = f"hint matched → {hint_key}"
-    elif detected:
+    elif not hint and detected:
         chosen_key = detected[0][0]
         result["evidence"] = f"auto-detected: {detected[0][1]}"
     if chosen_key:
         result["key"] = chosen_key
         result["label"] = STATUS_LABEL.get(chosen_key, ("Issue", "medium"))[0]
     else:
-        # Fall back: use hint verbatim, no canonical copy
+        # Hint didn't match a rule, or no hint given — record the raw note.
         result["label"] = (hint or "Custom").strip()[:40] or "Custom"
-        result["evidence"] = f"no rule matched; recorded as manual finding"
+        if hint:
+            result["evidence"] = "hint recorded verbatim (LLM will phrase it)"
+        else:
+            result["evidence"] = "no note supplied"
     if r is None:
         result["evidence"] += " (URL not fetched)"
     elif r.status_code != 200:

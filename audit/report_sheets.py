@@ -21,6 +21,9 @@ _PRIO_RANK = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 # Findings intentionally NOT reported in the sheet / deck.
 # User rule: never surface these as observations.
 SKIP_KEYS = {"h1_long", "h1_duplicate",
+             # H1 length is not a real SEO issue — only missing or multiple
+             # H1s hurt ranking. Direct-chat rule.
+             "h1_short",
              # Every og:* / open graph / social preview finding — CRO
              # / social share concern, not SEO. Direct-chat audit rule.
              "og_missing", "og_image_missing", "og_title_missing",
@@ -739,14 +742,31 @@ def read_for_deck(sheet_url_or_id):
     ending_row_data = None
     try:
         sr = _composio_execute("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": ["Slide Review!A1:I"],
+            "spreadsheet_id": sid, "ranges": ["Slide Review!A1:K"],
         })
         sr_rows = _extract_first_range(sr) or []
         sr_data = [r for r in sr_rows[1:] if r and any(str(c).strip() for c in r)]
-        if len(sr_data) >= 1:
-            intro_row_data = sr_data[0]
-        if len(sr_data) >= 2:
-            ending_row_data = sr_data[1]
+        # New layout: col A = kind (Intro/Ending), col B = packed display,
+        # cols C..K = raw 9 fields. Legacy layout: cols A..I = 9 fields.
+        def _unpack(row):
+            # Strip the leading apostrophe that forced text-mode
+            def _clean(v):
+                s = str(v) if v is not None else ""
+                return s[1:] if s.startswith("'") else s
+            if len(row) >= 11:
+                return [_clean(c) for c in row[2:11]]
+            return [_clean(c) for c in row]
+        for r in sr_data:
+            kind = (str(r[0]).strip().lower() if r else "")
+            unpacked = _unpack(r)
+            if kind == "intro":
+                intro_row_data = unpacked
+            elif kind == "ending":
+                ending_row_data = unpacked
+            elif intro_row_data is None:  # legacy: first row is intro
+                intro_row_data = unpacked
+            elif ending_row_data is None:  # legacy: second row is ending
+                ending_row_data = unpacked
     except Exception:
         pass
 
@@ -794,15 +814,76 @@ def read_for_deck(sheet_url_or_id):
 
 
 def _write_slide_review_tab(spreadsheet_id, header, intro_row, ending_row):
-    """Create/populate 'Slide Review' tab with just the intro + ending rows."""
+    """Two-cell layout: A1='Intro' B1=<full intro copy>, A2='Ending' B2=<full ending copy>.
+
+    Each B cell contains the slide's category, headline stat, hook context,
+    what-we-found, costs and support squashed into a readable multi-line
+    string so the CS reviewer sees the whole slide in one glance.
+    """
     _add_sheet_tab(spreadsheet_id, "Slide Review")
+
+    def _pack(row):
+        # 0 Category | 1 Observation | 2 Priority | 3 Impact |
+        # 4 Hook Stat | 5 Hook Context | 6 What We Found |
+        # 7 What It Costs You | 8 Supporting Stats
+        get = lambda i: str(row[i]) if i < len(row) and row[i] is not None else ""
+        lines = []
+        if get(1): lines.append(get(1))
+        stat, ctx = get(4), get(5)
+        if stat or ctx:
+            lines.append(f"{stat} {ctx}".strip())
+        if get(6): lines.append(f"What we found: {get(6)}")
+        if get(7): lines.append(f"What it costs you: {get(7)}")
+        if get(8): lines.append(f"Support: {get(8)}")
+        return "\n\n".join(lines)
+
+    # Leading apostrophe forces text-mode so Sheets doesn't parse '+5.8%'
+    # as arithmetic and blow up with #ERROR.
+    def _text(s):
+        s = str(s or "")
+        return ("'" + s) if s and s[0] in "=+-@" else s
+
+    # Cols C..K hold the raw 9 fields so read_for_deck can still assemble the
+    # deck. They get hidden below so the CS view stays a clean 2-column read.
+    def _row(kind, row):
+        return [kind, _text(_pack(row))] + [_text(str(c) if c is not None else "") for c in row]
+
+    values = [
+        ["Slide", "Full copy"] + list(header),  # A..B labels, C..K = column names
+        _row("Intro",  intro_row),
+        _row("Ending", ending_row),
+    ]
     _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
         "spreadsheet_id": spreadsheet_id,
         "sheet_name": "Slide Review",
         "first_cell_location": "A1",
         "valueInputOption": "USER_ENTERED",
-        "values": [header, intro_row, ending_row],
+        "values": values,
     })
+
+    # Hide C..K so the tab visually shows only the 2 packed columns.
+    try:
+        from audit.composio_exec import proxy as _proxy
+        # Find the sheetId of the Slide Review tab
+        info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                                  {"spreadsheet_id": spreadsheet_id}) or {}
+        sheet_id = None
+        for s in (info.get("sheets") or []):
+            if ((s.get("properties") or {}).get("title") == "Slide Review"):
+                sheet_id = (s.get("properties") or {}).get("sheetId")
+                break
+        if sheet_id is not None:
+            _proxy(
+                endpoint=f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}:batchUpdate",
+                method="POST",
+                body={"requests": [{"updateDimensionProperties": {
+                    "range": {"sheetId": sheet_id, "dimension": "COLUMNS",
+                              "startIndex": 2, "endIndex": 11},
+                    "properties": {"hiddenByUser": True},
+                    "fields": "hiddenByUser"}}]}
+            )
+    except Exception as exc:
+        print(f"[sheets] slide-review hide-cols (non-fatal): {exc}")
 
 
 def _write_sources_tab(spreadsheet_id):
