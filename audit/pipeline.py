@@ -24,12 +24,24 @@ SF_AVAILABLE = os.path.isfile(SF_CLI)
 
 
 def _sf_crawl(url, max_urls=None):
+    """Crawl HTML pages only — skips images / CSS / JS / SWF / externals.
+
+    A default SF crawl visits every asset (~10x URL count) which is what has
+    been causing timeouts + failures on garofano.store etc. Restricting to
+    HTML gives us everything the audit tool actually reads (title, meta,
+    H1, canonical, schema, response codes) 5-10x faster.
+    """
     tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
     try:
         cmd = [SF_CLI, "--headless", "--crawl", url,
                "--output-folder", tmp_dir,
-               "--export-tabs", "Internal:All",
-               "--overwrite"]
+               "--export-tabs", "Internal:HTML",
+               "--overwrite",
+               "--config-option", "crawler.check_images=false",
+               "--config-option", "crawler.check_css=false",
+               "--config-option", "crawler.check_js=false",
+               "--config-option", "crawler.check_swf=false",
+               "--config-option", "crawler.check_external_links=false"]
         if max_urls:
             cmd += ["--config-option", f"crawler.max_urls={int(max_urls)}"]
         # Capture stderr so a failure surfaces something usable in the Jobs row.
@@ -38,9 +50,16 @@ def _sf_crawl(url, max_urls=None):
             raise RuntimeError(
                 f"SF exit {r.returncode}. stderr[:800]: {r.stderr[:800]}"
             )
-        matches = glob.glob(os.path.join(tmp_dir, "internal_all.csv"))
-        if not matches:
-            raise FileNotFoundError("Crawl finished but internal_all.csv missing.")
+        # Newer SF exports as internal_html.csv when the tab is Internal:HTML.
+        for name in ("internal_html.csv", "internal_all.csv"):
+            matches = glob.glob(os.path.join(tmp_dir, name))
+            if matches:
+                break
+        else:
+            raise FileNotFoundError(
+                f"Crawl finished but no internal_*.csv found in {tmp_dir}. "
+                f"Files present: {os.listdir(tmp_dir)[:20]}"
+            )
         df = pd.read_csv(matches[0], dtype=str, keep_default_na=False,
                          low_memory=False)
         df.columns = [c.strip() for c in df.columns]
