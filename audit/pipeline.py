@@ -23,14 +23,35 @@ SF_CLI = "/Applications/Screaming Frog SEO Spider.app/Contents/MacOS/ScreamingFr
 SF_AVAILABLE = os.path.isfile(SF_CLI)
 
 
-def _sf_crawl(url, max_urls=None):
-    """Crawl HTML pages only — skips images / CSS / JS / SWF / externals.
+# Real-Chrome UA so sites that fingerprint SF's default UA still let us in.
+_DEFAULT_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+               "AppleWebKit/537.36 (KHTML, like Gecko) "
+               "Chrome/126.0.0.0 Safari/537.36")
 
-    A default SF crawl visits every asset (~10x URL count) which is what has
-    been causing timeouts + failures on garofano.store etc. Restricting to
-    HTML gives us everything the audit tool actually reads (title, meta,
-    H1, canonical, schema, response codes) 5-10x faster.
+
+def _sf_crawl(url, max_urls=None):
+    """Crawl HTML pages only, with sensible defaults for real sites.
+
+    Fixes we bake in by default:
+      - HTML only (skip images/css/js/swf/externals)
+      - Real Chrome User-Agent (dodges basic bot fingerprinting)
+      - Lower thread count (avoids rate limits)
+      - Full traceback on failure via captured stderr
+
+    Opt-in via env for the trickier fixes:
+      SF_MAX_URLS=1000        — cap the crawl (also stops runaway loops)
+      SF_MAX_THREADS=2        — override concurrency (default 2)
+      SF_USER_AGENT=<string>  — override UA
+      SF_JS_RENDER=1          — enable JS rendering (slower, works on SPAs)
+      SF_RESPECT_ROBOTS=0     — ignore robots.txt (only for authorized audits)
+      SF_EXCLUDE_PARAMS=1     — skip URLs with query strings (faceted nav)
     """
+    ua = os.environ.get("SF_USER_AGENT", "").strip() or _DEFAULT_UA
+    max_threads = os.environ.get("SF_MAX_THREADS", "").strip() or "2"
+    js_render = os.environ.get("SF_JS_RENDER", "").strip() in ("1", "true", "yes")
+    respect_robots = os.environ.get("SF_RESPECT_ROBOTS", "1").strip() not in ("0", "false", "no")
+    exclude_params = os.environ.get("SF_EXCLUDE_PARAMS", "").strip() in ("1", "true", "yes")
+
     tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
     try:
         cmd = [SF_CLI, "--headless", "--crawl", url,
@@ -41,7 +62,15 @@ def _sf_crawl(url, max_urls=None):
                "--config-option", "crawler.check_css=false",
                "--config-option", "crawler.check_js=false",
                "--config-option", "crawler.check_swf=false",
-               "--config-option", "crawler.check_external_links=false"]
+               "--config-option", "crawler.check_external_links=false",
+               "--config-option", f"spider.user_agent={ua}",
+               "--config-option", f"spider.max_threads={int(max_threads)}",
+               "--config-option", f"spider.respect_robots_txt={'true' if respect_robots else 'false'}"]
+        if js_render:
+            cmd += ["--config-option", "spider.js_rendering_enabled=true"]
+        if exclude_params:
+            # Skip URLs with any ?query — kills faceted-nav loops.
+            cmd += ["--config-option", "spider.exclude=.*\\?.*"]
         if max_urls:
             cmd += ["--config-option", f"crawler.max_urls={int(max_urls)}"]
         # Capture stderr so a failure surfaces something usable in the Jobs row.
