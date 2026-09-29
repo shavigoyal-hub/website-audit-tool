@@ -470,7 +470,7 @@ HOOK_COPY = {
     },
     "favicon_missing": {
         "hook_stat": "-15%",
-        "hook_ctx":  "leads and repeat visits lost when tabs and search show no brand icon.",
+        "hook_ctx":  "SERP click-through and repeat visits when tabs and search show no brand icon.",
         "costs":     "Favicons in tabs and SERP drive brand recall and repeat visits.",
         "support":   "Google 2019 SERP redesign: favicon shows next to every mobile organic result.",
     },
@@ -488,7 +488,7 @@ HOOK_COPY = {
     },
     "contact_missing": {
         "hook_stat": "-10%",
-        "hook_ctx":  "leads lost when there is no clear contact or booking page.",
+        "hook_ctx":  "SERP click-through and LLM citation rate when there is no clear contact or booking page.",
         "costs":     "No contact page kills the direct lead path and weakens E-E-A-T.",
         "support":   "Google helpful content: contact info is a core E-E-A-T signal.",
     },
@@ -578,7 +578,7 @@ HOOK_COPY = {
     },
     "dead_nav_links": {
         "hook_stat": "-15%",
-        "hook_ctx":  "leads lost when primary-nav links point at '#' instead of a real page.",
+        "hook_ctx":  "conversion path broken when primary-nav links point at '#' instead of a real page.",
         "costs":     "Dead nav links break the money-page crawl path and hurt UX.",
         "support":   "Google Search Central: navigation links pass topical authority to key pages.",
     },
@@ -602,7 +602,7 @@ HOOK_COPY = {
     },
     "schema_organization_missing": {
         "hook_stat": "+5%",
-        "hook_ctx":  "more leads with Organization / LocalBusiness / WebSite schema on the homepage.",
+        "hook_ctx":  "richer SERP results with Organization / LocalBusiness / WebSite schema on the homepage.",
         "costs":     "Without entity schema, Google and LLMs can't tie the site to a real business.",
         "support":   "Google Knowledge Graph docs: Organization schema is required for brand SERP treatment.",
     },
