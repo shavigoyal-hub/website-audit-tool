@@ -21,6 +21,11 @@ CATEGORY = {
     "meta_long": "Meta Description",
     "meta_missing": "Meta Description",
     "meta_short": "Meta Description",
+    "meta_fragment": "Meta Description",
+    "placeholder_urls": "Indexability",
+    "http_www_redirect_missing": "Site Infrastructure",
+    "viewport_pinch_zoom_blocked": "Mobile UX",
+    "dead_nav_links": "Navigation",
     "meta_duplicate": "Meta Description",
     "h1_missing": "Missing H1",
     "h1_multiple": "Multiple H1",
@@ -92,8 +97,14 @@ CATALOG = {
         "Multiple pages found with very short title tags (under 30 characters)",
         "Short titles under-describe the page and waste SERP space."),
     "meta_short": ("Low",
-        "Multiple pages found with very short meta descriptions (under 70 characters)",
+        "Multiple pages found with short meta descriptions (30-70 characters)",
         "Short descriptions under-use the snippet and can lower click-through."),
+    "meta_fragment": ("Medium",
+        "Multiple pages found with meta description under 30 characters — essentially a stub",
+        "Fragment meta descriptions leave the snippet empty and Google auto-generates a poor one."),
+    "placeholder_urls": ("Medium",
+        "Multiple pages found with placeholder URL slugs (WordPress /12345-2/, /sample-page/, /uncategorized/)",
+        "Placeholder URLs live in the sitemap and dilute topical authority."),
     "meta_duplicate": ("Medium",
         "Multiple pages found sharing duplicate meta descriptions",
         "Duplicate descriptions weaken snippet relevance across pages."),
@@ -314,7 +325,7 @@ def psi_status(psi_live):
             continue
         if r.get("lcp_s") is not None and r["lcp_s"] >= 2.5:
             failed.add("lcp")
-        if r.get("cls") is not None and r["cls"] > 0.25:
+        if r.get("cls") is not None and r["cls"] > 0.1:
             failed.add("cls")
         if r.get("performance_score") is not None and r["performance_score"] < 90:
             failed.add("perf")
@@ -354,7 +365,7 @@ def psi_to_observations(psi_live):
         url = r["url"]
         if r.get("lcp_s") is not None and r["lcp_s"] >= 2.5:
             lcp.append((url, r["lcp_s"]))
-        if r.get("cls") is not None and r["cls"] > 0.25:
+        if r.get("cls") is not None and r["cls"] > 0.1:
             cls.append((url, round(r["cls"], 2)))
         if r.get("performance_score") is not None and r["performance_score"] < 90:
             perf.append((url, r["performance_score"]))

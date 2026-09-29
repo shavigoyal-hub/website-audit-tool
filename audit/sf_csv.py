@@ -295,8 +295,11 @@ def run_checks(df, df_full, has_images_csv):
     mdlen = _num(df, "Meta Description 1 Length").fillna(0)
     findings.append(_finding("meta_long", addr[ok & (mdlen > 200)].tolist()))
     findings.append(_finding("meta_missing", addr[ok & (md.str.strip() == "")].tolist()))
-    # short meta description (<70 chars, excluding empty) on SEO pages
-    findings.append(_finding("meta_short", addr[seo & (mdlen > 0) & (mdlen < 70)].tolist()))
+    # Meta description length: split into two buckets.
+    # 'meta_fragment' — 1-30 chars — those aren't descriptions, they're stubs.
+    # 'meta_short'    — 30-70 chars — under-uses snippet real estate.
+    findings.append(_finding("meta_fragment", addr[seo & (mdlen > 0) & (mdlen <= 30)].tolist()))
+    findings.append(_finding("meta_short",    addr[seo & (mdlen > 30) & (mdlen < 70)].tolist()))
     # duplicate meta descriptions across pages
     mdnorm = md.where(ok & (mdlen > 0), "")
     md_counts = Counter(m for m in mdnorm if m.strip())
@@ -332,6 +335,16 @@ def run_checks(df, df_full, has_images_csv):
     findings.append(_finding("thin_content", addr[thin].tolist(),
                              evidence=("Thin Content", ["Address", "Word Count"],
                                        _safe_loc(df, thin, ["Address", "Word Count"]))))
+
+    # Placeholder URLs — WordPress auto-slugs like /12345-2/, ?p=NN,
+    # /sample-page/, /hello-world/, /uncategorized/. These are unedited
+    # publish artefacts and shouldn't live in the sitemap.
+    _PLACEHOLDER = re.compile(
+        r"/(?:\d{4,}-\d+|sample-page|hello-world|uncategorized|"
+        r"category/uncategorized|test-page|new-page|untitled)"
+        r"(?:/|$)|[?&]p=\d+", re.I)
+    placeholder_mask = seo & addr.str.contains(_PLACEHOLDER, regex=True)
+    findings.append(_finding("placeholder_urls", addr[placeholder_mask].tolist()))
 
     # Near duplicates
     nd = _num(df, "No. Near Duplicates").fillna(0)

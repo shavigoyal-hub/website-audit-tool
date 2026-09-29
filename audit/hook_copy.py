@@ -71,6 +71,13 @@ STATUS_LABEL = {
     "homepage_images_broken":   ("Homepage images broken", "high"),
     "homepage_media_broken":    ("Homepage media broken", "medium"),
     "duplicate_homepage":       ("Duplicate homepage", "high"),
+    "meta_fragment":            ("Fragment meta", "medium"),
+    "placeholder_urls":         ("Placeholder URL", "medium"),
+    "http_www_redirect_missing":("No canonical redirect", "high"),
+    "viewport_pinch_zoom_blocked":("Pinch zoom blocked", "medium"),
+    "dead_nav_links":           ("Dead nav link", "high"),
+    "wwwredir_temp":            ("302 www redirect", "low"),
+    "wwwredir_missing":         ("www + non-www both live", "medium"),
     "pagination_no_rel":("No rel pagination", "low"),
     "hreflang_missing": ("No hreflang", "high"),
     "cta_missing":      ("No CTA", "high"),
@@ -533,6 +540,49 @@ HOOK_COPY = {
         "hook_ctx":  "rank loss when /home and / serve identical content.",
         "costs":     "Duplicate homepage variants split link equity and confuse Google's canonical choice.",
         "support":   "Google canonical docs.",
+    },
+    # ── Direct-chat gap parity ──────────────────────────────────────────
+    "meta_fragment": {
+        "hook_stat": "-4%",
+        "hook_ctx":  "SERP CTR when the meta description is a 1-30 char stub.",
+        "costs":     "Fragment meta descriptions leave the snippet essentially empty and Google auto-generates a poor one.",
+        "support":   "Portent CTR study: hand-written meta descriptions lift SERP CTR by 5.8%.",
+    },
+    "placeholder_urls": {
+        "hook_stat": "-12%",
+        "hook_ctx":  "crawl efficiency drained by unedited WordPress auto-slugs.",
+        "costs":     "Placeholder URLs (/21977-2/, /sample-page/, /uncategorized/) live in the sitemap and dilute topical authority.",
+        "support":   "Google crawl budget guide: keep low-value URLs out of the index.",
+    },
+    "http_www_redirect_missing": {
+        "hook_stat": "-25%",
+        "hook_ctx":  "ranking loss when http and non-canonical www variants don't 301 to the canonical host.",
+        "costs":     "Both variants resolving with 200 splits ranking signals across duplicate URLs.",
+        "support":   "Google canonicalization docs: consolidate to a single canonical host.",
+    },
+    "viewport_pinch_zoom_blocked": {
+        "hook_stat": "-10%",
+        "hook_ctx":  "mobile usability score when the viewport blocks pinch zoom.",
+        "costs":     "Blocking pinch zoom fails Google's mobile-friendly test and hurts accessibility.",
+        "support":   "Google mobile-friendly test rejects pages that disable user scaling.",
+    },
+    "dead_nav_links": {
+        "hook_stat": "-15%",
+        "hook_ctx":  "leads lost when primary-nav links point at '#' instead of a real page.",
+        "costs":     "Dead nav links break the money-page crawl path and hurt UX.",
+        "support":   "Google Search Central: navigation links pass topical authority to key pages.",
+    },
+    "wwwredir_temp": {
+        "hook_stat": "-5%",
+        "hook_ctx":  "link equity loss from 302 instead of 301 on the www redirect.",
+        "costs":     "Temporary redirects do not consolidate link equity to the canonical host.",
+        "support":   "Google canonicalization docs: prefer 301 for permanent host consolidation.",
+    },
+    "wwwredir_missing": {
+        "hook_stat": "-25%",
+        "hook_ctx":  "ranking loss when www and non-www both resolve.",
+        "costs":     "Both www and non-www resolving splits ranking signals.",
+        "support":   "Google canonicalization docs.",
     },
 }
 

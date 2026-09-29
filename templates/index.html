@@ -110,7 +110,8 @@
     }).catch(()=>{});
 
     fetch(BASE + "/history?n=15").then(r=>r.json()).then(d=>{
-      if (d.sheet_url) document.getElementById("historyAll").href = d.sheet_url;
+      // Link the header to the /history-ui page rather than the raw Google Sheet.
+      document.getElementById("historyAll").href = "/history-ui";
       const list = document.getElementById("historyList");
       if (!d.runs || !d.runs.length) return;
       d.runs.forEach(run => {
@@ -174,7 +175,7 @@
     <div id="deckResult"></div>
 
     <div id="historyBox" style="display:block;margin-top:28px;padding-top:24px;border-top:1px solid #f3f4f6;">
-      <h3 style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;">Recent Audits <a id="historyAll" style="float:right;font-size:11px;font-weight:600;color:#6366f1;text-decoration:none">Open history sheet →</a></h3>
+      <h3 style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;">Recent Audits <a id="historyAll" style="float:right;font-size:11px;font-weight:600;color:#6366f1;text-decoration:none">Open full history →</a></h3>
       <div id="historyList" style="display:flex;flex-direction:column;gap:8px;"></div>
     </div>
 

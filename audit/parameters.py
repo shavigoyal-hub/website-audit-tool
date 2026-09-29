@@ -70,20 +70,28 @@ def evaluate(df, live_url):
     # --- robots.txt ---
     rb = _get(f"{origin}/robots.txt")
     if rb is not None and rb.status_code == 200:
-        body = rb.text
-        blocked = re.search(r"(?im)^\s*user-agent:\s*\*\s*[\s\S]*?^\s*disallow:\s*/\s*$", body)
-        has_sitemap_ref = bool(re.search(r"(?im)^\s*sitemap:\s*http", body))
-        if blocked:
-            issues.append(_issue("robots_block", "Robots.txt", "Critical",
-                                 "Site appears blocked by robots.txt (Disallow: / for all agents)",
-                                 "A site-wide robots block prevents crawling and ranking."))
+        body = rb.text or ""
+        # 'Empty robots' (0-byte body or whitespace-only) is functionally
+        # identical to 'no robots' — carries no crawl directives, no sitemap
+        # reference. Roll both into one finding.
+        if not body.strip():
+            issues.append(_issue("robots_missing", "Robots.txt", "Low",
+                                 "robots.txt returns 200 but is empty — carries no crawl directives",
+                                 "A missing / empty robots.txt removes control over crawler access."))
         else:
-            passed.append("robots.txt present and not blocking the site")
-        passed.append("Sitemap referenced in robots.txt" if has_sitemap_ref else "robots.txt present")
+            blocked = re.search(r"(?im)^\s*user-agent:\s*\*\s*[\s\S]*?^\s*disallow:\s*/\s*$", body)
+            has_sitemap_ref = bool(re.search(r"(?im)^\s*sitemap:\s*http", body))
+            if blocked:
+                issues.append(_issue("robots_block", "Robots.txt", "Critical",
+                                     "Site appears blocked by robots.txt (Disallow: / for all agents)",
+                                     "A site-wide robots block prevents crawling and ranking."))
+            else:
+                passed.append("robots.txt present and not blocking the site")
+            passed.append("Sitemap referenced in robots.txt" if has_sitemap_ref else "robots.txt present")
     else:
         issues.append(_issue("robots_missing", "Robots.txt", "Low",
                              "No accessible robots.txt found",
-                             "A missing robots.txt removes control over crawler access."))
+                             "A missing / empty robots.txt removes control over crawler access."))
 
     # --- XML sitemap ---
     sm = _get(f"{origin}/sitemap.xml")
@@ -122,6 +130,67 @@ def evaluate(df, live_url):
         issues.append(_issue("favicon_missing", "Favicon", "Low",
                              "No favicon detected",
                              "A missing favicon weakens brand recognition in tabs and search."))
+
+    # ── HTTP + www variants active-probe ────────────────────────────
+    # Chat audits catch 'http and www both return 200 instead of 301'
+    # which the SF-crawl-data check misses when the alt variant never
+    # made it into the crawl. Probe them directly.
+    from urllib.parse import urlparse as _urlparse
+    p = _urlparse(origin)
+    canonical_scheme = p.scheme  # 'https'
+    naked_host = re.sub(r"^www\.", "", p.netloc)
+    canonical_has_www = p.netloc.startswith("www.")
+    variants_to_probe = []
+    # http:// canonical → should 301 to https
+    variants_to_probe.append(("http://" + p.netloc + "/", "http-to-https"))
+    # www/non-www alt → should 301 to canonical host
+    if canonical_has_www:
+        variants_to_probe.append((f"{canonical_scheme}://{naked_host}/", "non-www-to-www"))
+    else:
+        variants_to_probe.append((f"{canonical_scheme}://www.{naked_host}/", "www-to-non-www"))
+    bad_variants = []
+    for probe_url, kind in variants_to_probe:
+        try:
+            r = requests.get(probe_url, headers=UA, timeout=10, allow_redirects=False)
+        except Exception:
+            continue
+        if r.status_code not in (301, 308):
+            bad_variants.append(f"{probe_url} → HTTP {r.status_code}")
+    if bad_variants:
+        issues.append(_issue("http_www_redirect_missing", "HTTP + www redirect", "High",
+                             "http:// and non-canonical www variants do not 301 to the canonical host",
+                             "Both variants resolving with 200 split ranking signals across duplicate URLs.",
+                             reference=bad_variants))
+    else:
+        passed.append("http:// and www variants 301 to the canonical host")
+
+    # ── Viewport / pinch-zoom accessibility ──────────────────────────
+    if home is not None and (home.text or "") and not homepage_blocked:
+        vm = re.search(r'<meta[^>]+name=["\']viewport["\'][^>]+content=["\']([^"\']+)["\']',
+                       home.text, re.I)
+        if vm:
+            vc = vm.group(1).lower()
+            if "user-scalable=no" in vc or "user-scalable=0" in vc or "maximum-scale=1" in vc:
+                issues.append(_issue("viewport_pinch_zoom_blocked", "Viewport", "Medium",
+                                     "Viewport meta blocks pinch-to-zoom on mobile",
+                                     "Blocking pinch zoom fails Google's mobile-friendly test and hurts accessibility.",
+                                     reference=[f"viewport content: {vc}"]))
+            else:
+                passed.append("Viewport allows pinch zoom")
+
+    # ── Dead nav links (href='#' inside site header) ─────────────────
+    if home is not None and (home.text or "") and not homepage_blocked:
+        nav_m = re.search(r'<(?:nav|header)[^>]*>(.*?)</(?:nav|header)>',
+                          home.text, re.I | re.S)
+        nav_html = nav_m.group(1) if nav_m else ""
+        dead = re.findall(r'<a[^>]+href=["\'](#|javascript:void\(0\))["\']', nav_html, re.I)
+        if len(dead) >= 1:
+            issues.append(_issue("dead_nav_links", "Navigation", "High",
+                                 f"{len(dead)} dead link(s) in the primary navigation (href='#' or javascript:void)",
+                                 "Dead nav links break the money-page crawl path and hurt UX.",
+                                 reference=[f"{len(dead)} dead nav anchor(s) on homepage"]))
+        elif nav_html:
+            passed.append("Navigation links resolve to real pages")
 
     # --- www / non-www redirect (from SF crawl data) ---
     # SF will include www. or non-www variants in the crawl if it encountered them.
