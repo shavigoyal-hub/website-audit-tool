@@ -416,6 +416,18 @@ def run(live_url):
 
     live_url_norm = live_url if live_url.endswith("/") else live_url + "/"
     site = parameters.evaluate(df, live_url_norm)
+    # Chat-style deep audit on the homepage + key pages. Runs regardless
+    # of which crawler produced df, so even sitemap-fallback runs get
+    # the same homepage findings a chat audit would surface.
+    try:
+        from audit import deep_analyzer as _deep
+        deep_issues = _deep.evaluate(live_url_norm)
+        if deep_issues:
+            print(f"[pipeline] deep_analyzer emitted {len(deep_issues)} findings")
+        site["issues"].extend(deep_issues)
+    except Exception as exc:
+        print(f"[pipeline] deep_analyzer skipped: {exc}")
+
     site_obs = [{"key": i.get("key", ""),
                  "category": i["category"], "observation": i["observation"],
                  "priority": i["priority"], "impact": i["impact"],
