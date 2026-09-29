@@ -220,7 +220,7 @@ HOOK_COPY = {
     },
     "title_stuffed": {
         "hook_stat": "-5%",
-        "hook_ctx":  "trust loss from keyword-stuffed titles.",
+        "hook_ctx":  "ranking risk from keyword-stuffed titles that Google flags as spam.",
         "costs":     "Keyword stuffing looks spammy and can hurt rankings.",
         "support":   "Google spam policies flag keyword stuffing as a violation.",
     },
@@ -382,9 +382,9 @@ HOOK_COPY = {
     # ── URL / internal linking ────────────────────────────────────────────
     "url_long": {
         "hook_stat": "-3%",
-        "hook_ctx":  "trust from URLs above 115 characters.",
-        "costs":     "Long URLs are harder to share and look less trustworthy in the SERP.",
-        "support":   "",
+        "hook_ctx":  "SERP click-through on URLs above 115 characters.",
+        "costs":     "Long URLs are harder to share and look less clickable in the SERP.",
+        "support":   "Backlinko URL study: URLs over 115 chars underperform on CTR.",
     },
     "low_inlinks": {
         "hook_stat": "-20%",
@@ -406,7 +406,7 @@ HOOK_COPY = {
     },
     "about_missing": {
         "hook_stat": "-25%",
-        "hook_ctx":  "trust and LLM citation when there is no About page.",
+        "hook_ctx":  "leads lost when there is no About page for Google and LLMs to cite.",
         "costs":     "No About page hurts E-E-A-T and stops LLMs from citing the brand as a source.",
         "support":   "About pages are the strongest single signal LLMs use to decide who to quote.",
     },
@@ -444,8 +444,8 @@ HOOK_COPY = {
     # ── Spelling / grammar ───────────────────────────────────────────────
     "spelling_grammar": {
         "hook_stat": "-10%",
-        "hook_ctx":  "trust loss from copy with spelling or grammar issues.",
-        "costs":     "Errors in customer-facing copy read as inattention.",
+        "hook_ctx":  "conversion loss from copy with spelling or grammar issues.",
+        "costs":     "Errors in customer-facing copy read as inattention and cost the sale.",
         "support":   "Global Lingo B2B survey 2023: 59% of buyers won't purchase after grammar issues.",
     },
     # ── Site infrastructure ──────────────────────────────────────────────
@@ -469,9 +469,9 @@ HOOK_COPY = {
     },
     "favicon_default": {
         "hook_stat": "-3%",
-        "hook_ctx":  "trust loss when the favicon is the platform default (GoHighLevel / Wix / etc.).",
-        "costs":     "Default favicons signal an unbranded, generic site.",
-        "support":   "",
+        "hook_ctx":  "SERP click-through when the favicon is the platform default.",
+        "costs":     "Default favicons signal an unbranded, generic site in the tab and in Google search.",
+        "support":   "Google 2019 SERP redesign: favicon shows next to every mobile organic result.",
     },
     "crawl_budget_wasted": {
         "hook_stat": "-3%",
@@ -481,8 +481,8 @@ HOOK_COPY = {
     },
     "contact_missing": {
         "hook_stat": "-10%",
-        "hook_ctx":  "trust loss when there is no clear contact / booking page.",
-        "costs":     "No contact page hurts E-E-A-T and kills the direct lead path.",
+        "hook_ctx":  "leads lost when there is no clear contact or booking page.",
+        "costs":     "No contact page kills the direct lead path and weakens E-E-A-T.",
         "support":   "Google helpful content: contact info is a core E-E-A-T signal.",
     },
     # ── Site architecture (extras) ───────────────────────────────────────
@@ -528,8 +528,8 @@ HOOK_COPY = {
     },
     "homepage_images_broken": {
         "hook_stat": "-10%",
-        "hook_ctx":  "trust loss when homepage images render as broken.",
-        "costs":     "Broken images on the homepage kill first-impression trust.",
+        "hook_ctx":  "bounce and lost Google Image traffic when homepage images render as broken.",
+        "costs":     "Broken images increase first-visit bounce and cost image-search entries.",
         "support":   "",
     },
     "homepage_media_broken": {

@@ -320,6 +320,12 @@
       const files = imgInput && imgInput.files ? Array.from(imgInput.files) : [];
       const out = document.getElementById("appendResult");
       if (!prompt && files.length === 0) { out.style.color = "#991b1b"; out.textContent = "Enter at least one line or attach an image."; return; }
+      // Preview how many findings will land — each non-empty line is one finding.
+      const previewLines = prompt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+      if (previewLines.length > 1) {
+        const ok = confirm(`This will add ${previewLines.length} separate findings (one per line):\n\n${previewLines.map((l,i)=>` ${i+1}. ${l.slice(0,80)}`).join("\n")}\n\nContinue?`);
+        if (!ok) { out.style.color = "#475569"; out.textContent = "Cancelled."; return; }
+      }
       out.style.color = "#6b7280"; out.textContent = files.length ? `Uploading ${files.length} image(s) + auditing…` : "Auditing and appending…";
       try {
         const fd = new FormData();
