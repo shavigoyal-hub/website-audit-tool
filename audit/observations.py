@@ -10,6 +10,7 @@ PRIORITY_ORDER = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 CATEGORY = {
     "render_error": "Rendering",
     "error_404": "Broken Links",
+    "error_404_money": "404s on Money Pages",
     "error_5xx": "Server Errors",
     "non_indexable": "Indexability",
     "title_long": "Title Length",
@@ -63,6 +64,9 @@ CATALOG = {
     "error_404": ("High",
         "Multiple pages found with 404 errors",
         "Dead links lose traffic and dilute site authority."),
+    "error_404_money": ("Critical",
+        "Live commercial URLs return 404, visitors hitting these bounce",
+        "Broken money pages kill conversions and organic traffic."),
     "error_5xx": ("High",
         "Multiple pages found returning server (5xx) errors",
         "Server errors block indexing and break the user experience."),

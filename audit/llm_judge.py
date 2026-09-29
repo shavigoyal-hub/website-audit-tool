@@ -24,9 +24,31 @@ import re
 import requests
 
 
-_SYSTEM_PROMPT = """You are Gushwork's SEO audit copywriter. You receive one
-finding at a time from a technical audit tool. Rewrite it in Gushwork's voice
-using the HTML evidence provided.
+_SYSTEM_PROMPT = """You are Gushwork's SEO audit copywriter and auditor.
+You receive one finding at a time from a technical audit tool along with
+the FULL list of URLs the finding applies to. Rewrite it in Gushwork's
+voice, and QUANTIFY + SCOPE by page pattern.
+
+QUANTIFY + SCOPE (this is what separates you from a template):
+- Count the affected URLs and group by pattern:
+    /product/*         -> "product pages"
+    /product-category/*, /product_cat/*, /collection/* -> "category pages"
+    /service/*         -> "service pages"
+    /                  -> "homepage"
+    /about, /contact   -> name them explicitly
+- Say things like "312 /product/ pages have <title> under 30 chars",
+  not "Multiple pages found with missing titles".
+- When you see 404s, split money pages (/product/, /service/, /pricing)
+  from junk (/tag/, /feed/, /page/N). Only critical for money-page 404s.
+- Homepage title quality: if the title is just brand name or 'Home -
+  Brand', flag it as Critical — Google has no keyword signal.
+- Faceted / query-string canonicals: if URLs like ?product_cat=foo
+  canonicalise to the wrong target (not the generic collection page),
+  flag as High.
+- Specific schema types: check the HTML for LD+JSON blocks. If the site
+  is e-commerce and product pages have no BreadcrumbList schema, flag
+  it — that's a rich-result loss. Same for Product / LocalBusiness /
+  Organization / FAQPage on the relevant page types.
 
 Return ONLY valid JSON matching this schema, no explanation:
 
@@ -158,9 +180,62 @@ def _parse_json(text):
         return None
 
 
+def _all_urls_from(row):
+    """Extract every http(s) URL from the finding's reference/examples/etc."""
+    urls = []
+    for candidate in (row.get("reference"), row.get("examples"),
+                       row.get("found"), row.get("observation")):
+        if not candidate:
+            continue
+        if isinstance(candidate, list):
+            for c in candidate:
+                urls.extend(re.findall(r"https?://\S+", str(c)))
+        else:
+            urls.extend(re.findall(r"https?://\S+", str(candidate)))
+    # Dedupe preserving order, strip trailing punctuation
+    seen = set()
+    out = []
+    for u in urls:
+        u = u.rstrip(".,;)|]")
+        if u not in seen:
+            seen.add(u)
+            out.append(u)
+    return out
+
+
+def _url_pattern_breakdown(urls, cap=20):
+    """Group URLs by first path segment so the LLM can count by pattern.
+
+    /product/foo, /product/bar    -> /product/*  (2)
+    /product-category/x           -> /product-category/*
+    /discover, /inspiration       -> counted as themselves
+    /                             -> homepage
+    """
+    from urllib.parse import urlparse
+    from collections import Counter
+    buckets = Counter()
+    for u in urls:
+        try:
+            path = urlparse(u).path
+        except Exception:
+            continue
+        parts = [p for p in path.split("/") if p]
+        if not parts:
+            key = "/"
+        elif len(parts) == 1:
+            key = f"/{parts[0]}/"
+        else:
+            key = f"/{parts[0]}/*"
+        buckets[key] += 1
+    return buckets.most_common(cap)
+
+
 def _enrich_row(row, live_url, mode, model, key):
     target_url = _first_url_from(row, live_url)
     snippet = _fetch_snippet(target_url)
+    all_urls = _all_urls_from(row)
+    breakdown = _url_pattern_breakdown(all_urls)
+    breakdown_str = "\n".join(f"  {pat:40s} {n}" for pat, n in breakdown) or "  (no URLs supplied)"
     prompt = (
         f"Site homepage: {live_url}\n"
         f"URL under review: {target_url}\n\n"
@@ -169,7 +244,10 @@ def _enrich_row(row, live_url, mode, model, key):
         f"  observation: {row.get('observation', '')}\n"
         f"  priority (tool guess): {row.get('priority', '')}\n"
         f"  impact (tool guess): {row.get('impact', '')}\n\n"
-        f"HTML evidence (head + body sample):\n{snippet}\n"
+        f"Total affected URLs: {len(all_urls)}\n"
+        f"Breakdown by path pattern (URL count per bucket):\n{breakdown_str}\n"
+        f"First 5 URLs: {all_urls[:5]}\n\n"
+        f"HTML evidence for the URL under review (head + body sample):\n{snippet}\n"
     )
     if mode == "openai":
         return _call_openai(prompt, model, key)

@@ -32,6 +32,7 @@ STATUS_LABEL = {
     "canonical_missing":("No canonical", "medium"),
     "canonical_not_self":("Wrong canonical", "medium"),
     "error_404":        ("404", "high"),
+    "error_404_money":  ("404 (money page)", "critical"),
     "error_5xx":        ("5xx", "critical"),
     "render_error":     ("Render error", "critical"),
     "render_blocked":   ("Blocked resource", "high"),
@@ -245,6 +246,12 @@ HOOK_COPY = {
         "hook_stat": "-12%",
         "hook_ctx":  "authority lost through dead links and 404s.",
         "costs":     "Dead links lose traffic and dilute site authority.",
+        "support":   "",
+    },
+    "error_404_money": {
+        "hook_stat": "-40%",
+        "hook_ctx":  "lost leads when money pages 404. Visitors bounce, Google drops the URL.",
+        "costs":     "Broken product, service, or checkout pages kill conversions and let Google demote the URL.",
         "support":   "",
     },
     "error_5xx": {

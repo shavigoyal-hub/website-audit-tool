@@ -188,9 +188,30 @@ def run_checks(df, df_full, has_images_csv):
     )
     is_asset = addr.str.contains(_ASSET_EXT, regex=True)
     broken_html = ~is_asset & status.between(400, 499)
-    findings.append(_finding("error_404", addr[broken_html].tolist(),
-                             evidence=("404 Pages", ["Address", "Status Code"],
-                                       _safe_loc(df, broken_html, ["Address", "Status Code"]))))
+    broken_addrs = addr[broken_html].tolist()
+    # Split money-page 404s from junk-page 404s. Money pages = anything
+    # commercial (product / category / collection / service / pricing).
+    # Junk = /tag/, /feed/, /page/N, /author/, /attachment/ — already
+    # filtered elsewhere but be defensive.
+    _MONEY = re.compile(
+        r"/(product|products|product-category|product_cat|collection|"
+        r"collections|service|services|pricing|shop|checkout|cart|"
+        r"apply|book|schedule|demo)(/|$|\?)", re.I)
+    _JUNK = re.compile(
+        r"/(tag|tags|feed|feeds|category|categories|page/\d+|author|"
+        r"attachment)(/|$)|[?&]paged?=", re.I)
+    money_404 = [u for u in broken_addrs if _MONEY.search(u) and not _JUNK.search(u)]
+    other_404 = [u for u in broken_addrs if u not in money_404 and not _JUNK.search(u)]
+    if money_404:
+        findings.append(_finding("error_404_money", money_404,
+                                 evidence=("404 Money Pages", ["Address", "Status Code"],
+                                           _safe_loc(df, broken_html & addr.isin(money_404),
+                                                       ["Address", "Status Code"]))))
+    if other_404:
+        findings.append(_finding("error_404", other_404,
+                                 evidence=("404 Pages", ["Address", "Status Code"],
+                                           _safe_loc(df, broken_html & addr.isin(other_404),
+                                                       ["Address", "Status Code"]))))
     findings.append(_finding("error_5xx", addr[status.between(500, 599)].tolist()))
 
     # Redirects — captured in evidence tab only, not raised as an observation
