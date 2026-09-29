@@ -132,6 +132,8 @@ def _merge_findings_by_category(rows):
             key = f.get("key", "")
             label, _ = _STATUS_LABEL.get(key, ("Issue", "medium"))
             ref = f.get("reference", "") or ""
+            if isinstance(ref, (list, tuple)):
+                ref = "\n".join(str(x) for x in ref)
             for u in ref.split("\n"):
                 u = u.strip()
                 if not u or u == "-":
@@ -630,6 +632,10 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                               priority=r.get("priority", ""))
             default_label, _ = _STATUS_LABEL.get(key, ("Issue", "medium"))
             ref = r.get("reference", "") or ""
+            # parameters._issue can pass a list of strings for reference;
+            # normalise to a single \n-delimited string before splitting.
+            if isinstance(ref, (list, tuple)):
+                ref = "\n".join(str(x) for x in ref)
             merged = r.get("_merged_labels", False)
             # Only include entries that actually look like URLs or paths —
             # observations.py falls back to the evidence-tab name (e.g. the

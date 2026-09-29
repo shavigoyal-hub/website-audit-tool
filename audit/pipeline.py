@@ -482,6 +482,12 @@ def run(live_url):
                                 metrics=metrics_snap)
         except Exception:
             pass
+    else:
+        # report_sheets.build swallowed an exception into LAST_ERROR.
+        # Surface it so the worker can mark the job with a real error
+        # instead of silently marking done with sheet_url="".
+        err = getattr(report_sheets, "LAST_ERROR", "") or "sheet build failed with no diagnostic"
+        raise RuntimeError(f"Sheet build failed: {err[:1500]}")
     return {
         "sheet_url":    sheet_url,
         "metrics":      metrics_snap,
