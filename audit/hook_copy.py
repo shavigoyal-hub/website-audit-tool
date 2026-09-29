@@ -407,7 +407,7 @@ HOOK_COPY = {
     },
     "about_missing": {
         "hook_stat": "-25%",
-        "hook_ctx":  "leads lost when there is no About page for Google and LLMs to cite.",
+        "hook_ctx":  "SERP click-through and LLM citation rate when there is no About page.",
         "costs":     "No About page hurts E-E-A-T and stops LLMs from citing the brand as a source.",
         "support":   "About pages are the strongest single signal LLMs use to decide who to quote.",
     },
