@@ -332,7 +332,24 @@ CONVERSION_PATH_PATTERNS = [
     r"/request-quote",
     r"/thank-you",
     r"/thankyou",
+    r"/who-we-are",
+    r"/about-us",
+    r"/about",
+    r"/careers",
+    r"/jobs",
+    r"/privacy",
+    r"/terms",
+    r"/legal",
+    r"/cookie",
+    r"/refund",
+    r"/shipping",
+    r"/returns",
 ]
+
+# Additional per-URL exclusion: never quote a parameterized URL as an
+# example (?product_cat=..., ?utm_source=..., etc.). Query strings are
+# junk for SEO and clutter the deck.
+_HAS_QUERY = r"\?"
 
 # Findings where a conversion-page URL should be dropped from the sample list.
 _CONVERSION_SKIP_KEYS = {
@@ -344,25 +361,33 @@ _CONVERSION_SKIP_KEYS = {
 
 
 def _apply_url_rules(findings):
-    """Filter finding-URL evidence per Direct-chat audit rules."""
+    """Filter finding-URL evidence per Direct-chat audit rules.
+
+    Three passes on each finding's example URLs:
+      1. Drop always-junk paths (feeds, tags, categories, wp-admin).
+      2. Drop parameterized URLs (anything with a `?query`) — SEO junk.
+      3. For LCP/thin/meta/title/H1 findings: also drop conversion pages
+         (contact/about/apply/careers/privacy/terms/etc.) since they are
+         CRO assets not organic-traffic targets.
+    Empty finding after filtering → drop the whole finding.
+    """
     import re as _re
     exclude_re = _re.compile("|".join(DEFAULT_EXCLUDE_URL_PATTERNS), _re.I)
     conv_re = _re.compile("|".join(CONVERSION_PATH_PATTERNS), _re.I)
     kept = []
     for f in findings:
         exs = f.get("examples") or []
-        # Drop always-junk URL patterns
+        # Pass 1: always-junk
         exs = [u for u in exs if not exclude_re.search(u)]
-        # Drop conversion-page URLs from the finding types where those pages
-        # are CRO assets, not SEO targets.
+        # Pass 2: query strings — never show ?product_cat=... etc. in examples
+        exs = [u for u in exs if "?" not in u]
+        # Pass 3: conversion pages for the finding types where they don't apply
         if f.get("key") in _CONVERSION_SKIP_KEYS:
             exs = [u for u in exs if not conv_re.search(u)]
         if not exs:
-            # Nothing left after filtering — drop the whole finding.
             continue
         new = dict(f)
         new["examples"] = exs
-        # Refresh count so downstream text-building stays honest.
         if "count" in new:
             new["count"] = len(exs)
         kept.append(new)

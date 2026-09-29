@@ -375,8 +375,11 @@ def psi_to_observations(psi_live):
 
     if lcp:
         u, v = max(lcp, key=lambda x: x[1])
+        # Attach the actual LCP seconds to each URL so the deck pill reads
+        # 'LCP 7.0s' instead of the generic 'LCP > 4s'.
+        urls_with_stat = [f"{url}||LABEL=LCP {sec}s" for url, sec in lcp]
         add("lcp_high" if v >= 4 else "lcp_medium",
-            f"{u} ({v}s)", urls=[x[0] for x in lcp])
+            f"{u} ({v}s)", urls=urls_with_stat)
     if cls:
         u, v = max(cls, key=lambda x: x[1])
         add("cls_high", f"{u} (CLS {v})", urls=[x[0] for x in cls])

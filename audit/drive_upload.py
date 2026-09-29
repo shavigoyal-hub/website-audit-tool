@@ -131,7 +131,20 @@ def upload_image(filename, content_bytes, mime_type="image/png"):
 
     if not file_id:
         return None
-    _make_public(file_id)
-    # This host serves the image inline (unlike drive.google.com/uc which
-    # sometimes 302s to a Google-signin page for logged-out browsers).
-    return f"https://lh3.googleusercontent.com/d/{file_id}=w1000"
+    # Sharing: primary path via Composio action, fallback to raw REST proxy.
+    ok = _make_public(file_id)
+    if not ok:
+        try:
+            from audit.composio_exec import proxy as _proxy
+            _proxy(
+                endpoint=f"https://www.googleapis.com/drive/v3/files/{file_id}/permissions",
+                method="POST",
+                body={"role": "reader", "type": "anyone"},
+                toolkit="googledrive",
+            )
+        except Exception as exc:
+            print(f"[drive] proxy permissions fallback failed: {exc}")
+    # drive.google.com/uc?export=view is the most reliable public inline
+    # URL for third-party <img src=…> loading; lh3.googleusercontent.com
+    # has been intermittently 403-ing for anon requests.
+    return f"https://drive.google.com/uc?export=view&id={file_id}"

@@ -999,13 +999,17 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
     row_priority = overrides.get("priority") or priority
 
     def _derive_category(url, lbl):
-        """Guess a readable category from URL path or the label itself."""
+        """Guess a readable category from URL path.
+
+        Never uses the raw label — a long CS note ('homepage video banner is
+        not getting rendered') should never become the slide's Category
+        header. Falls back to 'Custom Finding' when there is no URL.
+        """
         if url:
             import re as _re
             m = _re.match(r"https?://[^/]+/([^/?#]+)", url)
             first = m.group(1) if m else ""
             if first:
-                pretty = first.replace("-", " ").replace("_", " ").title()
                 if "product-category" in url:
                     return "Product Category Pages"
                 if "/product/" in url or "/products/" in url:
@@ -1014,14 +1018,22 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
                     return "Collection Pages"
                 if "/service" in url:
                     return "Service Pages"
+                pretty = first.replace("-", " ").replace("_", " ").title()
                 return f"{pretty} Pages"
-        return (lbl or "Custom Finding")[:60]
+            return "Homepage"
+        return "Custom Finding"
 
     row_category = (overrides.get("category") or category
                     or _derive_category(url, row_label))
     if row_category.strip().upper() == "SKIP":
         return None, "LLM marked finding as SKIP (violated a never-flag rule)"
-    pill = overrides.get("status_label") or row_label
+    # Pill text should be short (2-4 words). A long CS note like
+    # 'homepage video banner is not getting rendered' isn't a pill.
+    pill_raw = overrides.get("status_label") or row_label or "Issue"
+    if len(pill_raw) > 24:
+        pill = "Issue"
+    else:
+        pill = pill_raw
     ctx_body = hook_ctx.replace('"', '""')
     formula = (
         f'=IF(E{target_row}="","{ctx_body}",'
