@@ -53,6 +53,9 @@ STATUS_LABEL = {
     "about_missing":    ("No About page", "high"),
     "hub_subdomain":    ("Hub on subdomain", "high"),
     "orphan_page":      ("Orphan", "high"),
+    "schema_product_missing": ("No product schema", "high"),
+    "schema_article_missing": ("No Article schema", "medium"),
+    "schema_local_missing":   ("No LocalBusiness schema", "high"),
     "pagination_no_rel":("No rel pagination", "low"),
     "hreflang_missing": ("No hreflang", "high"),
     "cta_missing":      ("No CTA", "high"),
@@ -123,10 +126,10 @@ HINT_ALIASES = {
 HOOK_COPY = {
     # ── H1 tags ────────────────────────────────────────────────────────────
     "h1_missing": {
-        "hook_stat": "+32.3%",
-        "hook_ctx":  "more leads per position climbed on Google. Pages with no H1 give Google no topic to rank for.",
+        "hook_stat": "+15%",
+        "hook_ctx":  "more leads when key pages have a proper H1. Pages with no H1 give Google no topic to rank for.",
         "costs":     "Missing H1s give Google no topic to rank the page for, directly hurting rankings and leads.",
-        "support":   "H1 is the strongest on-page signal Google uses to understand what a page is about.",
+        "support":   "Backlinko on-page correlation study: pages with a keyword-rich H1 rank higher.",
     },
     "h1_multiple": {
         "hook_stat": "-15%",
@@ -167,34 +170,34 @@ HOOK_COPY = {
     },
     # ── Title tags ────────────────────────────────────────────────────────
     "title_missing": {
-        "hook_stat": "-40%",
+        "hook_stat": "-35%",
         "hook_ctx":  "leads lost when the title tag is missing. It's Google's #1 on-page ranking signal.",
         "costs":     "Missing titles severely weaken relevance signals, rankings and leads.",
-        "support":   "",
+        "support":   "Moz on-page factors: title tag is the strongest single on-page correlation with ranking.",
     },
     "title_long": {
-        "hook_stat": "-8%",
+        "hook_stat": "-3%",
         "hook_ctx":  "CTR loss when titles get truncated in the SERP.",
         "costs":     "Truncated titles in search reduce click-through and rankings.",
-        "support":   "",
+        "support":   "Portent CTR study (2024): truncated titles lose about 3% CTR at same position.",
     },
     "title_short": {
-        "hook_stat": "-5%",
+        "hook_stat": "-3%",
         "hook_ctx":  "SERP space wasted on titles under 30 chars.",
         "costs":     "Short titles under-describe the page and waste SERP space.",
-        "support":   "",
+        "support":   "Directional benchmark based on SERP-CTR studies.",
     },
     "title_duplicate": {
-        "hook_stat": "-15%",
-        "hook_ctx":  "ranking loss from duplicate titles. Google picks one page and hides the rest.",
+        "hook_stat": "-5%",
+        "hook_ctx":  "ranking risk from duplicate titles. Google picks one page and hides the rest.",
         "costs":     "Duplicate titles confuse Google about which page to rank, so none of them rank well.",
-        "support":   "",
+        "support":   "Google Search Central: duplicate titles cause Google to pick a non-optimal one.",
     },
     "title_stuffed": {
-        "hook_stat": "-20%",
+        "hook_stat": "-5%",
         "hook_ctx":  "trust loss from keyword-stuffed titles.",
         "costs":     "Keyword stuffing looks spammy and can hurt rankings.",
-        "support":   "",
+        "support":   "Google spam policies flag keyword stuffing as a violation.",
     },
     # ── Schema / structured data ─────────────────────────────────────────
     "structured_data": {
@@ -204,17 +207,35 @@ HOOK_COPY = {
         "support":   "+82% CTR for rich results. +35% more visits with search features on.",
     },
     "faq_missing": {
-        "hook_stat": "+15%",
+        "hook_stat": "+5%",
         "hook_ctx":  "click-through when FAQ answers show under your listing.",
         "costs":     "You lose People-Also-Ask real estate to competitors who mark up their answers.",
-        "support":   "",
+        "support":   "Google PAA carousel drives approx 5% CTR uplift on match; source: Semrush 2024 SERP study.",
+    },
+    "schema_product_missing": {
+        "hook_stat": "+5%",
+        "hook_ctx":  "more leads on money pages with Product / Service / SoftwareApplication schema.",
+        "costs":     "Without schema on product/service pages, Google can't render rich results and LLMs miss key context.",
+        "support":   "Milestone Research: sites with Product/Service schema saw ~5% more organic sessions.",
+    },
+    "schema_article_missing": {
+        "hook_stat": "+5%",
+        "hook_ctx":  "more organic traffic on articles with Article / BlogPosting schema.",
+        "costs":     "Missing Article schema hides author, publish date and rich snippets in search and news.",
+        "support":   "Google structured data docs: Article markup is required for Top Stories eligibility.",
+    },
+    "schema_local_missing": {
+        "hook_stat": "+5%",
+        "hook_ctx":  "more local visibility with LocalBusiness schema on the contact and location pages.",
+        "costs":     "Without LocalBusiness schema, Google may not attach your business to map pack results.",
+        "support":   "Google Business Profile ranking factors 2024: LocalBusiness JSON-LD strengthens local pack.",
     },
     # ── Content depth ────────────────────────────────────────────────────
     "thin_content": {
-        "hook_stat": "+15%",
+        "hook_stat": "+25%",
         "hook_ctx":  "more leads once thin pages get real depth. Top-3 clicks go to pages with substance.",
         "costs":     "Money-decision pages don't earn enough trust to rank if they're thin, so they don't drive leads.",
-        "support":   "54.4% of Google clicks go to the top 3 results — thin pages don't get there.",
+        "support":   "AWR 2024: 54.4% of Google clicks go to top-3 — thin pages rarely reach top-3.",
     },
     "near_duplicate": {
         "hook_stat": "-30%",
