@@ -447,7 +447,8 @@ def run(live_url):
 
     live_url_norm = live_url if live_url.endswith("/") else live_url + "/"
     site = parameters.evaluate(df, live_url_norm)
-    site_obs = [{"category": i["category"], "observation": i["observation"],
+    site_obs = [{"key": i.get("key", ""),
+                 "category": i["category"], "observation": i["observation"],
                  "priority": i["priority"], "impact": i["impact"],
                  "reference": i["reference"]}
                 for i in site["issues"]]

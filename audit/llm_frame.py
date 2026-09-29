@@ -18,15 +18,23 @@ _SYSTEM = """You are Gushwork's SEO audit copywriter. Turn a CS reviewer's
 rough note plus a page's HTML into one finding, in this EXACT JSON shape:
 
 {
-  "label":     "2-4 word status pill (e.g. 'No top menu', 'Flat structure')",
+  "label":     "2-4 word status pill (e.g. 'No top menu', 'Flat structure', 'Video banner broken')",
   "priority":  "Critical | High | Medium | Low",
   "hook_stat": "'-24%', '+15%', '0%', '+3 leads/mo' — the leading number, no context",
   "hook_ctx":  "ONE short sentence, starts lowercase, ends with a period. Says what the number MEANS. Uses 'Google', 'ranking', 'leads', 'crawl', 'LLM' language.",
   "costs":     "1-2 sentences (<40 words) of business consequence. Direct, no fluff.",
   "support":   "One backing stat or citation, <20 words. Empty string if none.",
-  "category":  "H1 Tags | Meta Description | Title Tags | Schema | Content | Site Architecture | LLM Citation | Page Speed | Errors | Custom",
+  "category":  "2-4 WORDS naming the issue TYPE (e.g. 'Homepage Media', 'H1 Tags', 'Faceted URLs', 'Category Page UX'). NEVER echo the raw CS note verbatim — derive a short type name from what they described.",
   "verified":  true if the HTML confirms the issue, false if you couldn't verify from the HTML
 }
+
+Examples of category derivation from CS notes:
+  note='homepage video banner is not getting rendered'
+    -> category='Homepage Media' (NOT 'homepage video banner is not getting rendered')
+  note='filter options missing on category pages'
+    -> category='Category Page UX'
+  note='no top menu, only footer links'
+    -> category='Site Navigation'
 
 STYLE RULES (hard):
 - No em dashes anywhere.

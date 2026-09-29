@@ -521,28 +521,69 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         ]
         obs_data = [header]
 
-        # Intro + ending slides now live on the separate 'Slide Review' tab
-        # so the Observations tab is findings-only (CS review of findings is
-        # the common case; slide-copy review is separate).
+        # Merge findings by category first so we can build a dynamic
+        # intro-slide formula from the actual top-lift findings this run.
+        obs_rows = [r for r in obs_rows if r.get("key", "") not in SKIP_KEYS]
+        obs_rows = _drop_og_findings(obs_rows)
+        obs_rows = _merge_findings_by_category(obs_rows)
+
+        # Dynamic intro formula: pick the top three POSITIVE lifts (things
+        # that lift leads when fixed), compound them, present as a formula
+        # chain. Falls back to the static +33% only if there aren't three
+        # positive-lift findings.
+        from audit.hook_copy import HOOK_COPY as _HOOK
+        _positive = []
+        for r in obs_rows:
+            key = r.get("key", "")
+            spec = _HOOK.get(key) if key else None
+            stat = (spec or {}).get("hook_stat", "")
+            import re as _sr
+            m = _sr.match(r"^\+?(\d+(?:\.\d+)?)%$", str(stat).strip())
+            if not m:
+                continue
+            pct = float(m.group(1))
+            label = (r.get("category") or "").strip()
+            if label and pct > 0:
+                _positive.append((pct, label, stat))
+        # De-dupe by category, sort by lift descending, take top 3
+        _seen = set()
+        _pick = []
+        _positive.sort(key=lambda t: -t[0])
+        for pct, label, stat in _positive:
+            k = label.lower()
+            if k in _seen:
+                continue
+            _seen.add(k)
+            _pick.append((pct, label, stat))
+            if len(_pick) >= 3:
+                break
+
+        if _pick:
+            # Compound lift: (1+a) * (1+b) * (1+c) - 1
+            compound = 1.0
+            for pct, _lab, _st in _pick:
+                compound *= (1 + pct / 100.0)
+            total_pct = round((compound - 1) * 100, 1)
+            terms = "  ×  ".join(f"{s} {l}" for _p, l, s in _pick)
+            intro_stat = f"+{total_pct:g}%"
+            intro_heading = f"Increase your leads by {total_pct:g}%"
+            intro_formula = f"{terms}  =  +{total_pct:g}% More leads"
+        else:
+            intro_stat = "+33%"
+            intro_heading = "Increase your leads by 33%"
+            intro_formula = ("+5.8% Meta descriptions  ×  +25% Structured "
+                             "data  =  +33% More leads")
+
         intro_row = [
             "Intro — cover slide",
             "Same pages. Same website.",
             "", "",
-            "+33%",
-            'Increase your leads by 33%',
-            "+5.8% Meta descriptions  ×  +25% Structured data  =  +33% More leads",
+            intro_stat,
+            intro_heading,
+            intro_formula,
             "If you get 10 leads a month today 10 leads → 14 leads. Same pages, same website. Before any ranking gains.",
             "",
         ]
-
-        # Merge findings by category — all H1 rows collapse into one, all
-        # Meta / Title rows too — so the deck doesn't show 4 near-identical
-        # slides for the same category. Priority ordering keeps the worst
-        # first; URLs from every merged sub-finding are combined with their
-        # specific status labels.
-        obs_rows = [r for r in obs_rows if r.get("key", "") not in SKIP_KEYS]
-        obs_rows = _drop_og_findings(obs_rows)
-        obs_rows = _merge_findings_by_category(obs_rows)
 
         # Finding rows — Hook Context references Hook Stat in column E.
         # "What We Found" is seeded as "URL | STATUS_LABEL" per line so the
@@ -759,12 +800,19 @@ def read_for_deck(sheet_url_or_id):
         # New layout: col A = kind (Intro/Ending), col B = packed display,
         # cols C..K = raw 9 fields. Legacy layout: cols A..I = 9 fields.
         def _unpack(row):
-            # Strip the leading apostrophe that forced text-mode
             def _clean(v):
                 s = str(v) if v is not None else ""
                 return s[1:] if s.startswith("'") else s
-            if len(row) >= 11:
-                return [_clean(c) for c in row[2:11]]
+            # Detect the new layout via the A-column kind marker (Sheets
+            # trims empty trailing cells, so length-based detection was
+            # unreliable and the ending row was rendering as the packed
+            # display string instead of the 9-column data).
+            kind_marker = str(row[0]).strip().lower() if row else ""
+            if kind_marker in ("intro", "ending"):
+                data = row[2:]
+                while len(data) < 9:
+                    data.append("")
+                return [_clean(c) for c in data[:9]]
             return [_clean(c) for c in row]
         for r in sr_data:
             kind = (str(r[0]).strip().lower() if r else "")

@@ -364,15 +364,17 @@ def _render_finding(row, page_no, total_pages, client_display):
         if not label or label.strip().lower() == "issue":
             label = _fallback_label(category, row.get("observation", ""))
         pcls = _pill_class(label)
-        # Canonical / redirect findings often ship as 'src → target'. Split
-        # so both URLs are readable on two lines instead of one truncated one.
+        # Canonical / redirect findings ship as 'src → target'. Both sides
+        # get rendered as paths (not full URLs) since the domain is already
+        # in the deck header — the reader only cares about which path
+        # points to which.
         arrow_m = _ure.match(r"^(.+?)\s*(?:→|->|=>)\s*(https?://\S+)$", url)
         if arrow_m:
             src_path = _to_path(arrow_m.group(1).strip())
-            tgt = arrow_m.group(2).strip()
+            tgt_path = _to_path(arrow_m.group(2).strip())
             display_url = (f"{_html.escape(src_path)}"
                            f"<span class='wf-arrow'>→</span>"
-                           f"<span class='wf-target'>{_html.escape(tgt)}</span>")
+                           f"<span class='wf-target'>{_html.escape(tgt_path)}</span>")
             rows_html.append(
                 f"<li><span class='wf-url wf-2line'>{display_url}</span>"
                 f"<span class='pill {pcls}'>{_html.escape(label)}</span></li>"
@@ -408,11 +410,20 @@ def _render_finding(row, page_no, total_pages, client_display):
         else:
             sup_html = f"<div class='sup-rest'>{_html.escape(support)}</div>"
 
-    # Empty stat → fall back to a priority-based number so the hero stays
-    # visually balanced (matches the reference's every-finding-has-a-stat rule).
+    # Empty stat: if this is a Manual / Custom row, DON'T fabricate a
+    # priority-based percentage — it confuses the reader ('-8% no About
+    # page' is meaningless). Fall back only when the row has category
+    # signal that ties to an actual finding key (H1, Title, Meta, etc.).
+    def _looks_manual(cat):
+        c = (cat or "").lower()
+        return c.startswith("custom") or c.startswith("manual") or c == ""
+
     if not hook_stat:
-        hook_stat = {"Critical": "-25%", "High": "-15%",
-                     "Medium":   "-8%",  "Low":  "-3%"}.get(priority, "!")
+        if _looks_manual(category):
+            hook_stat = "!"
+        else:
+            hook_stat = {"Critical": "-25%", "High": "-15%",
+                         "Medium":   "-8%",  "Low":  "-3%"}.get(priority, "!")
     hook_stat_clean = _fmt_leading_num(hook_stat)
     stat_cls = "hero-stat"
     if hook_stat_clean and (hook_stat_clean.startswith("0")
