@@ -102,17 +102,26 @@ def _merge_findings_by_category(rows):
             groups[family] = []
         groups[family].append(r)
 
+    # Within a family, some sub-findings matter more than others (missing
+    # H1 beats short H1). We show URLs from the most-severe sub-finding first
+    # so the slide's URL list matches the slide's category framing.
+    _KEY_SEVERITY = {
+        "h1_missing": 0, "h1_multiple": 1, "h1_duplicate": 2, "h1_short": 3, "h1_long": 4,
+        "meta_missing": 0, "meta_duplicate": 1, "meta_long": 2, "meta_short": 3,
+        "title_missing": 0, "title_duplicate": 1, "title_stuffed": 2, "title_long": 3, "title_short": 4,
+        "lcp_high": 0, "cls_high": 1, "perf_low": 2, "lcp_medium": 3, "perf_moderate": 4,
+    }
     merged = []
     for family in order:
         group = groups[family]
         if len(group) == 1:
             merged.append(group[0])
             continue
-        # Sort by priority (Critical first)
-        group.sort(key=lambda x: _PRIO_RANK.get(x.get("priority", ""), 9))
+        # Order sub-findings so the base is the most severe (missing beats short)
+        group.sort(key=lambda x: (_KEY_SEVERITY.get(x.get("key", ""), 9),
+                                    _PRIO_RANK.get(x.get("priority", ""), 9)))
         base = dict(group[0])
-        base["category"] = family      # rename to the family label
-        # Combine URL examples across all sub-findings, each with its own pill.
+        base["category"] = family
         combined_refs = []
         for f in group:
             key = f.get("key", "")
@@ -120,7 +129,8 @@ def _merge_findings_by_category(rows):
             ref = f.get("reference", "") or ""
             for u in ref.split("\n"):
                 u = u.strip()
-                if not u or u == "-": continue
+                if not u or u == "-":
+                    continue
                 combined_refs.append(f"{u}||LABEL={label}")
         base["reference"]      = "\n".join(combined_refs)
         base["_merged_labels"] = True
@@ -987,7 +997,30 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
                 else copy["support"]
     row_label = overrides.get("label")    or label
     row_priority = overrides.get("priority") or priority
-    row_category = overrides.get("category") or category or "Manual"
+
+    def _derive_category(url, lbl):
+        """Guess a readable category from URL path or the label itself."""
+        if url:
+            import re as _re
+            m = _re.match(r"https?://[^/]+/([^/?#]+)", url)
+            first = m.group(1) if m else ""
+            if first:
+                pretty = first.replace("-", " ").replace("_", " ").title()
+                if "product-category" in url:
+                    return "Product Category Pages"
+                if "/product/" in url or "/products/" in url:
+                    return "Product Pages"
+                if "/collection" in url:
+                    return "Collection Pages"
+                if "/service" in url:
+                    return "Service Pages"
+                return f"{pretty} Pages"
+        return (lbl or "Custom Finding")[:60]
+
+    row_category = (overrides.get("category") or category
+                    or _derive_category(url, row_label))
+    if row_category.strip().upper() == "SKIP":
+        return None, "LLM marked finding as SKIP (violated a never-flag rule)"
     pill = overrides.get("status_label") or row_label
     ctx_body = hook_ctx.replace('"', '""')
     formula = (

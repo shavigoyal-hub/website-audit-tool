@@ -243,8 +243,23 @@ def append_finding_route():
 
         if not sheet_url:
             return jsonify({"error": "sheet_url required"}), 400
-        if not prompt:
-            return jsonify({"error": "prompt required"}), 400
+        if not prompt and not request.files:
+            return jsonify({"error": "prompt or image required"}), 400
+
+        # Upload any attached screenshots to Drive → public URLs.
+        image_urls = []
+        from audit.drive_upload import upload_image
+        for fs in request.files.getlist("images"):
+            content = fs.read()
+            if not content:
+                continue
+            url = upload_image(fs.filename or "screenshot.png", content,
+                                mime_type=fs.mimetype or "image/png")
+            if url:
+                image_urls.append(url)
+                print(f"[chatbot] uploaded {fs.filename} -> {url}")
+            else:
+                print(f"[chatbot] upload failed for {fs.filename}")
 
         from audit.live_check import audit_url
         from audit.llm_frame import frame as _llm_frame
@@ -255,6 +270,10 @@ def append_finding_route():
         #   "URL" alone at end       -> pair with empty hint (audit_url auto-detects)
         #   "description" alone      -> pair with no url (uses hint verbatim)
         raw_lines = [l.strip() for l in prompt.splitlines() if l.strip()]
+        # If the user only attached images with no text, create a single
+        # placeholder pair so the images actually land on a row.
+        if not raw_lines and image_urls:
+            raw_lines = ["Screenshot attached — reviewer note"]
         pairs = []
         i = 0
         while i < len(raw_lines):
@@ -295,6 +314,15 @@ def append_finding_route():
                 overrides.setdefault("status_label", overrides.get("label"))
                 if overrides.get("verified") is False:
                     analysis["evidence"] = "LLM couldn't verify from HTML — added on your say-so"
+
+            # Attach the uploaded screenshots to the FIRST finding row
+            # (usually there's just one). Stored in overrides["support"]
+            # as an IMG: marker line the deck renderer picks up.
+            if image_urls and not results:
+                marker = "\n".join(f"IMG: {u}" for u in image_urls)
+                if overrides is None:
+                    overrides = {}
+                overrides["support"] = ((overrides.get("support") or "") + "\n" + marker).strip()
 
             row, err = report_sheets.append_finding(
                 sheet_url, url, row_label, priority=row_priority,

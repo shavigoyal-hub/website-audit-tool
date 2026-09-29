@@ -148,7 +148,9 @@
     <div id="appendBox" style="display:none; margin-top:24px; padding-top:20px; border-top:1px dashed #e5e7eb;">
       <label>Add findings (chatbot)</label>
       <p class="hint">One per line. Format: <code>&lt;url&gt; &lt;description&gt;</code>. Each line is audited independently — the chatbot verifies the finding against the URL and picks the right hook copy.</p>
-      <textarea id="appendPrompt" rows="4" style="width:100%;padding:11px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fafafa;margin-bottom:12px;font-family:inherit;resize:vertical" placeholder="https://clearwaterprocessing.com/our-services/ flat architecture&#10;https://clearwaterprocessing.com/ no top menu&#10;https://clearwaterprocessing.com/ no about page"></textarea>
+      <textarea id="appendPrompt" rows="4" style="width:100%;padding:11px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fafafa;margin-bottom:8px;font-family:inherit;resize:vertical" placeholder="https://clearwaterprocessing.com/our-services/ flat architecture&#10;https://clearwaterprocessing.com/ no top menu&#10;https://clearwaterprocessing.com/ no about page"></textarea>
+      <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px">Attach screenshots (optional, shown on the finding's slide)</label>
+      <input type="file" id="appendImages" accept="image/*" multiple style="font-size:12px;margin-bottom:12px" />
       <button type="button" id="appendBtn" style="width:100%;padding:11px;background:#0f172a;color:#fff;border:none;border-radius:8px;font-weight:600;cursor:pointer;margin-bottom:12px">Add to sheet</button>
       <div id="appendResult" style="font-size:13px;color:#166534;"></div>
     </div>
@@ -308,13 +310,16 @@
     document.getElementById("appendBtn").addEventListener("click", async function () {
       const prompt = document.getElementById("appendPrompt").value.trim();
       const sheetUrl = document.getElementById("sheet_url").value.trim();
+      const imgInput = document.getElementById("appendImages");
+      const files = imgInput && imgInput.files ? Array.from(imgInput.files) : [];
       const out = document.getElementById("appendResult");
-      if (!prompt) { out.style.color = "#991b1b"; out.textContent = "Enter at least one line."; return; }
-      out.style.color = "#6b7280"; out.textContent = "Auditing and appending…";
+      if (!prompt && files.length === 0) { out.style.color = "#991b1b"; out.textContent = "Enter at least one line or attach an image."; return; }
+      out.style.color = "#6b7280"; out.textContent = files.length ? `Uploading ${files.length} image(s) + auditing…` : "Auditing and appending…";
       try {
         const fd = new FormData();
         fd.append("sheet_url", sheetUrl);
         fd.append("prompt", prompt);
+        files.forEach(f => fd.append("images", f, f.name));
         const res = await fetch("/append-finding", { method: "POST", body: fd });
         const data = await res.json();
         if (data.ok) {

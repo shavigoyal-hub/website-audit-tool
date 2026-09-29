@@ -383,6 +383,15 @@ def _render_finding(row, page_no, total_pages, client_display):
             f"<span class='pill {pcls}'>{_html.escape(label)}</span></li>"
         )
 
+    # Pull IMG: markers out of support (attached via chatbot) — render them
+    # as thumbnails in a dedicated image card.
+    img_urls = []
+    if support:
+        import re as _re_img
+        img_urls = _re_img.findall(r"IMG:\s*(https?://\S+)", support)
+        if img_urls:
+            support = _re_img.sub(r"IMG:\s*https?://\S+\s*", "", support).strip()
+
     # Supporting stat — big blue number, first sentence dark bold, rest muted
     sup_html = ""
     if support:
@@ -449,6 +458,7 @@ def _render_finding(row, page_no, total_pages, client_display):
             <div class="card-body">{_html.escape(costs)}</div>
           </div>
           {f"<div class='card card-sup'>{sup_html}</div>" if sup_html else ""}
+          {(f"<div class='card card-img'>" + "".join(f"<img src='{u}' alt='screenshot' loading='lazy' />" for u in img_urls[:3]) + "</div>") if img_urls else ""}
         </div>
       </div>
       <div class="footer">
@@ -680,6 +690,14 @@ html, body {
 .card-col { min-width: 0; display: flex; flex-direction: column; gap: 10px; }
 /* The supporting-stat card is WHITE in the reference, border only. */
 .card.card-sup { background: #fff; }
+.card.card-img {
+  background: #fff; padding: 8px; display: flex; flex-direction: column;
+  gap: 8px; align-items: center;
+}
+.card.card-img img {
+  max-width: 100%; max-height: 220px; object-fit: contain;
+  border-radius: 6px; border: 1px solid #e2e8f0;
+}
 .card-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
 .card-label {
   font-size: 9.5pt; font-weight: 500; color: var(--muted); letter-spacing: 0;
