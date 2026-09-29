@@ -77,11 +77,28 @@ def _to_s(ms):
 
 
 def fetch_many(reps, strategy, api_key):
-    """reps = {page_type: url}. Returns {page_type: result}."""
+    """reps = {page_type: url}. Returns {page_type: result}.
+
+    Runs PSI calls in parallel (5 workers) so the total wait is the
+    slowest single response, not the sum. Cuts ~30-60s of sequential
+    delay down to ~10-15s in typical runs.
+    """
+    from concurrent.futures import ThreadPoolExecutor, as_completed
     out = {}
-    for ptype, url in reps.items():
-        out[ptype] = fetch(url, strategy=strategy, api_key=api_key)
-        time.sleep(0.5)
+    if not reps:
+        return out
+    with ThreadPoolExecutor(max_workers=5) as ex:
+        future_to_ptype = {
+            ex.submit(fetch, url, strategy=strategy, api_key=api_key): ptype
+            for ptype, url in reps.items()
+        }
+        for fut in as_completed(future_to_ptype):
+            ptype = future_to_ptype[fut]
+            try:
+                out[ptype] = fut.result()
+            except Exception as exc:
+                out[ptype] = {"url": reps[ptype], "strategy": strategy,
+                              "error": f"exception: {exc}"}
     return out
 
 

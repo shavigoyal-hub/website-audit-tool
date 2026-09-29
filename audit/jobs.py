@@ -180,7 +180,7 @@ def mark_error(job_id, err):
         "spreadsheet_id": sid, "sheet_name": JOBS_TAB,
         "first_cell_location": f"E{row}",
         "valueInputOption": "USER_ENTERED",
-        "values": [["error", "", "", _now(), "", (err or "")[:500]]],
+        "values": [["error", "", "", _now(), "", (err or "")[:3000]]],
     })
     return True
 

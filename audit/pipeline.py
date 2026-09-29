@@ -23,16 +23,21 @@ SF_CLI = "/Applications/Screaming Frog SEO Spider.app/Contents/MacOS/ScreamingFr
 SF_AVAILABLE = os.path.isfile(SF_CLI)
 
 
-def _sf_crawl(url):
+def _sf_crawl(url, max_urls=None):
     tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
     try:
-        subprocess.run(
-            [SF_CLI, "--headless", "--crawl", url,
-             "--output-folder", tmp_dir,
-             "--export-tabs", "Internal:All",
-             "--overwrite"],
-            check=True, timeout=600,
-        )
+        cmd = [SF_CLI, "--headless", "--crawl", url,
+               "--output-folder", tmp_dir,
+               "--export-tabs", "Internal:All",
+               "--overwrite"]
+        if max_urls:
+            cmd += ["--config-option", f"crawler.max_urls={int(max_urls)}"]
+        # Capture stderr so a failure surfaces something usable in the Jobs row.
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
+        if r.returncode != 0:
+            raise RuntimeError(
+                f"SF exit {r.returncode}. stderr[:800]: {r.stderr[:800]}"
+            )
         matches = glob.glob(os.path.join(tmp_dir, "internal_all.csv"))
         if not matches:
             raise FileNotFoundError("Crawl finished but internal_all.csv missing.")
@@ -44,16 +49,27 @@ def _sf_crawl(url):
         shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
-def _get_dataframe(live_url):
+def _get_dataframe_with_tag(live_url):
+    """SF first; fall back to Python crawler on any failure.
+
+    Returns (df, crawler_used) so the caller can record which crawler
+    actually produced the data.
+    """
+    max_urls = os.environ.get("SF_MAX_URLS", "").strip()
+    max_urls = int(max_urls) if max_urls.isdigit() else None
     if SF_AVAILABLE:
-        return _sf_crawl(live_url)
+        try:
+            return _sf_crawl(live_url, max_urls=max_urls), "screaming-frog"
+        except Exception as exc:
+            print(f"[pipeline] SF failed, falling back to Python crawler: {exc}")
     rows = crawler.crawl(live_url)
-    return pd.DataFrame(rows)
+    return pd.DataFrame(rows), "python"
 
 
 def run(live_url):
     """Full audit pipeline. Returns dict with sheet_url + metrics."""
     metrics.reset()
+    _crawler_used = "python"  # updated below if SF succeeds
     m = re.match(r"https?://(?:www\.)?([^/]+)", live_url)
     domain = m.group(1) if m else live_url
     client_name = re.sub(r"\.[^.]+$", "", domain).replace(".", "_").lower()
@@ -68,7 +84,7 @@ def run(live_url):
         page_type_patterns = stored.get("page_type_patterns")
         manual_psi = stored.get("manual_psi")
 
-    df_raw = _get_dataframe(live_url)
+    df_raw, _crawler_used = _get_dataframe_with_tag(live_url)
     df = sf_csv.load_from_df(df_raw, exclude_patterns=exclude_patterns)
     status_num = pd.to_numeric(df.get("Status Code", pd.Series([], dtype=str)),
                                errors="coerce").fillna(0).astype(int)
@@ -123,5 +139,5 @@ def run(live_url):
         "metrics":      metrics_snap,
         "observations": len(rows),
         "client_name":  client_name,
-        "crawler":      "screaming-frog" if SF_AVAILABLE else "python",
+        "crawler":      _crawler_used,
     }

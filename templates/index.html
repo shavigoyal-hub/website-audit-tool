@@ -229,6 +229,12 @@
         }
       };
 
+      let pollStartMs = null;
+      const _fmtElapsed = (ms) => {
+        const s = Math.round(ms / 1000);
+        const m = Math.floor(s / 60);
+        return m > 0 ? `${m}m ${s % 60}s` : `${s}s`;
+      };
       const renderQueue = (job) => {
         result.style.display = "block";
         result.className = "success";
@@ -237,10 +243,12 @@
         result.style.color = "#075985";
         const status = (job.status || "pending").toUpperCase();
         const line2 = job.worker ? `Worker: ${job.worker}` : "Waiting for a worker to pick this up. Start one on your Mac with <code>python3 worker.py</code>.";
-        result.innerHTML = `⏳ <strong>Job ${job.id} · ${status}</strong><br><span style="font-size:12px">${line2}</span>`;
+        const elapsed = pollStartMs ? ` · running ${_fmtElapsed(Date.now() - pollStartMs)}` : "";
+        result.innerHTML = `⏳ <strong>Job ${job.id} · ${status}</strong>${elapsed}<br><span style="font-size:12px">${line2}</span>`;
       };
 
       const pollJob = async (jid) => {
+        pollStartMs = Date.now();
         // ~20 min at 4s — some SF crawls take that long on big sites.
         for (let attempt = 0; attempt < 300; attempt++) {
           try {
@@ -251,10 +259,11 @@
               // transient and keep polling.
               renderQueue({id: jid, status: "polling…"});
             } else if (j.status === "done") {
+              const totalElapsed = pollStartMs ? _fmtElapsed(Date.now() - pollStartMs) : "";
               renderFinal({
                 ok: true, version: j.version,
                 sheet_url: j.sheet_url,
-                message: `Audit complete for ${j.live_url}.`,
+                message: `Audit complete for ${j.live_url} in ${totalElapsed}.`,
                 metrics: {counts: {pages_crawled: Number(j.pages)||0, composio_calls: 0, psi_calls: 0}, est_cost_usd: 0},
                 crawler: j.crawler || "",
               });
