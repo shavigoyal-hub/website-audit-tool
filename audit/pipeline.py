@@ -401,6 +401,24 @@ def run(live_url):
 
     psi_live = manual_psi or pagespeed.fetch_many(reps, "mobile", psi_key)
     psi_rows = observations.psi_to_observations(psi_live) if psi_live else []
+    # If EVERY PSI response errored (usually anonymous quota exhaustion),
+    # tell the reviewer instead of silently missing the LCP finding.
+    if psi_live and observations.psi_all_errored(psi_live):
+        sample_err = ""
+        for r in psi_live.values():
+            if r and r.get("error"):
+                sample_err = str(r["error"])[:200]
+                break
+        psi_rows.append({
+            "key": "psi_unavailable",
+            "category": "Page Speed",
+            "observation": ("Multiple pages found where PageSpeed Insights was "
+                            "blocked. LCP and Core Web Vitals could not be measured this run.\n"
+                            f"eg: {sample_err}"),
+            "priority": "High",
+            "impact": "May impact ranking",
+            "reference": "-",
+        })
 
     live_url_norm = live_url if live_url.endswith("/") else live_url + "/"
     site = parameters.evaluate(df, live_url_norm)

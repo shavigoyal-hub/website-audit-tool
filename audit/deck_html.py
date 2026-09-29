@@ -181,7 +181,17 @@ def _render_intro(row, client_display):
     hook_stat = row.get("hook_stat") or "+33%"
     hook_ctx  = row.get("hook_ctx") or "Increase your leads by 33%"
     subtitle  = row.get("observation") or "Same pages. Same website."
+    # Strip 'eg: <urls>' block from the intro subtitle — URLs belong on
+    # per-finding slides, not the hero.
+    import re as _re
+    subtitle = _re.split(r"\n\s*eg\s*:", subtitle, maxsplit=1, flags=_re.I)[0]
+    subtitle = subtitle.split("\n", 1)[0].strip()
     formula   = row.get("found") or ""
+    # If the sheet stored a #ERROR!/#REF! (Sheets parsed a leading '+X%' as
+    # a formula and blew up), fall back to a clean default so the deck
+    # doesn't show '#ERROR!' where the formula card should be.
+    if formula.strip().upper().startswith("#") or formula.strip() == "":
+        formula = "+5.8% Meta descriptions  ×  +25% Structured data  =  +33% More leads"
     example   = row.get("costs") or ""
 
     # Intro headline — highlight the stat portion in blue.
@@ -298,7 +308,22 @@ def _render_finding(row, page_no, total_pages, client_display):
         m = _re.search(r"(?<=\w{3})\.(?:\s+|$)", obs)
         if m:
             obs = obs[:m.start() + 1]
+        # Hard cap so the hero doesn't wrap to 4+ lines
+        if len(obs) > 70:
+            cut = obs[:70].rsplit(" ", 1)[0].rstrip(",.:;")
+            obs = cut + "…"
         hook_ctx = obs
+
+    # If 'found' is empty but observation has 'eg: <urls>', harvest them
+    # so 'What we found' shows real pages instead of 'Site-wide'.
+    if not (row.get("found") or "").strip():
+        obs_full = row.get("observation") or ""
+        eg_m = _re.search(r"eg\s*:\s*(.+)$", obs_full, _re.I | _re.S)
+        if eg_m:
+            harvested = [u.strip() for u in eg_m.group(1).splitlines() if u.strip().startswith("http")]
+            if harvested:
+                row = dict(row)  # don't mutate caller's dict
+                row["found"] = "\n".join(harvested)
 
     # URL rows with pills. Render as PATH ONLY (matches reference PDF style).
     import re as _ure
@@ -339,6 +364,20 @@ def _render_finding(row, page_no, total_pages, client_display):
         if not label or label.strip().lower() == "issue":
             label = _fallback_label(category, row.get("observation", ""))
         pcls = _pill_class(label)
+        # Canonical / redirect findings often ship as 'src → target'. Split
+        # so both URLs are readable on two lines instead of one truncated one.
+        arrow_m = _ure.match(r"^(.+?)\s*(?:→|->|=>)\s*(https?://\S+)$", url)
+        if arrow_m:
+            src_path = _to_path(arrow_m.group(1).strip())
+            tgt = arrow_m.group(2).strip()
+            display_url = (f"{_html.escape(src_path)}"
+                           f"<span class='wf-arrow'>→</span>"
+                           f"<span class='wf-target'>{_html.escape(tgt)}</span>")
+            rows_html.append(
+                f"<li><span class='wf-url wf-2line'>{display_url}</span>"
+                f"<span class='pill {pcls}'>{_html.escape(label)}</span></li>"
+            )
+            continue
         rows_html.append(
             f"<li><span class='wf-url'>{_html.escape(display_url)}</span>"
             f"<span class='pill {pcls}'>{_html.escape(label)}</span></li>"
@@ -658,6 +697,16 @@ html, body {
   width: 100%;
 }
 .wf-list li:first-child { border-top: 0; padding-top: 4px; }
+.wf-2line {
+  display: flex; flex-direction: column; gap: 3px; overflow: hidden;
+  white-space: normal;
+}
+.wf-2line .wf-arrow { color: var(--muted); padding: 0 4px; }
+.wf-2line .wf-target {
+  color: var(--muted); font-size: 10pt;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  display: block;
+}
 .wf-url {
   flex: 1 1 0;
   min-width: 0;

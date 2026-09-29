@@ -299,6 +299,13 @@ def build_passed_tab(fired_csv_keys, psi_passed, render_passed):
     return rows
 
 
+def psi_all_errored(psi_live):
+    """True if every PSI response contains an error (rate limit, timeout)."""
+    if not psi_live:
+        return True
+    return all((not r) or r.get("error") for r in psi_live.values())
+
+
 def psi_status(psi_live):
     """Return (failed_keys, passed_keys) for the five PageSpeed checks."""
     failed = set()
