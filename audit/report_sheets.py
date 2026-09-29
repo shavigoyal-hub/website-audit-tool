@@ -28,7 +28,12 @@ SKIP_KEYS = {"h1_long", "h1_duplicate",
              # / social share concern, not SEO. Direct-chat audit rule.
              "og_missing", "og_image_missing", "og_title_missing",
              "og_description_missing", "og_url_missing", "og_type_missing",
-             "twitter_card_missing", "social_preview_missing"}
+             "twitter_card_missing", "social_preview_missing",
+             # Speed / architecture rows dropped per CS review — either
+             # already covered by another finding, too directional, or
+             # a CRO concern.
+             "unoptimized_images", "high_carbon", "orphan_page",
+             "pagination_no_rel"}
 
 
 def _drop_og_findings(rows):
@@ -540,10 +545,17 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         # in the sum. Total is also capped at 35% — the realistic ceiling
         # for a same-pages, same-website lift.
         from audit.hook_copy import HOOK_COPY as _HOOK
+        # Positive-lead-lift keys ONLY: rows whose fix produces new leads
+        # (not loss-avoided). Master-table primary signal must be 'Lead'
+        # AND the hook_stat must be a '+X%' positive value.
         _LEAD_KEYS = {
-            "h1_missing", "meta_missing", "title_missing",
-            "structured_data", "thin_content", "cta_missing",
-            "about_missing", "nav_missing",
+            "h1_missing",
+            "meta_missing",
+            "structured_data",
+            "schema_product_missing",
+            "schema_article_missing",
+            "thin_content",
+            "cta_missing",
         }
         _MAX_LIFT_PCT = 35.0
 
