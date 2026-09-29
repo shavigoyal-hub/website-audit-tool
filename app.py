@@ -239,7 +239,6 @@ def append_finding_route():
     try:
         sheet_url = request.form.get("sheet_url", "").strip()
         prompt = request.form.get("prompt", "").strip()
-        priority = request.form.get("priority", "Medium").strip() or "Medium"
         category = request.form.get("category", "").strip() or None
 
         if not sheet_url:
@@ -250,37 +249,52 @@ def append_finding_route():
         from audit.live_check import audit_url
         from audit.llm_frame import frame as _llm_frame
 
-        results = []
-        errors = []
-        # Process each non-empty line as its own finding
-        for line in [l.strip() for l in prompt.splitlines() if l.strip()]:
-            m = re.match(r"(https?://\S+)\s+(.*)", line)
+        # Merge lines into (url, hint) pairs. Rules:
+        #   "URL description..."     -> one pair
+        #   "URL" then "description" -> one pair (previous URL adopts next line)
+        #   "URL" alone at end       -> pair with empty hint (audit_url auto-detects)
+        #   "description" alone      -> pair with no url (uses hint verbatim)
+        raw_lines = [l.strip() for l in prompt.splitlines() if l.strip()]
+        pairs = []
+        i = 0
+        while i < len(raw_lines):
+            line = raw_lines[i]
+            m = re.match(r"(https?://\S+)(?:\s+(.+))?$", line)
             if m:
                 url = m.group(1).strip().rstrip(".,;")
-                hint = m.group(2).strip()
+                hint = (m.group(2) or "").strip()
+                # Adopt the next non-URL line as the description
+                if not hint and i + 1 < len(raw_lines) and not raw_lines[i + 1].startswith(("http://", "https://")):
+                    hint = raw_lines[i + 1].strip()
+                    i += 1
+                pairs.append((url, hint))
             else:
-                url = ""
-                hint = line
+                pairs.append(("", line))
+            i += 1
 
-            # 1. Static rule check + on-page detection.
+        results = []
+        errors = []
+        for url, hint in pairs:
+            line = f"{url} {hint}".strip()
+            # 1. Static rule check + on-page detection (fetches URL if given).
             analysis = audit_url(url, hint) if url else {
-                "key": "", "label": hint or "Custom", "url": "",
-                "evidence": "no URL to audit", "detected": [],
+                "key": "", "label": (hint or "Custom")[:60], "url": "",
+                "evidence": "no URL supplied — recorded as manual note",
+                "detected": [],
             }
             row_label = analysis["label"]
-            row_priority = priority
+            row_priority = "Medium"
 
-            # 2. Ask Claude to phrase it if ANTHROPIC_API_KEY is available.
+            # 2. Ask the LLM (OpenAI first, Anthropic fallback) to phrase it.
             overrides = _llm_frame(url, hint)
             if overrides:
                 analysis["framed_by"] = "llm"
                 analysis["label"] = overrides.get("label") or analysis["label"]
                 row_label = analysis["label"]
                 row_priority = overrides.get("priority") or row_priority
-                # Include the pill wording on 'What we found'
                 overrides.setdefault("status_label", overrides.get("label"))
                 if overrides.get("verified") is False:
-                    analysis["evidence"] = "LLM could not verify from HTML — added on your say-so."
+                    analysis["evidence"] = "LLM couldn't verify from HTML — added on your say-so"
 
             row, err = report_sheets.append_finding(
                 sheet_url, url, row_label, priority=row_priority,

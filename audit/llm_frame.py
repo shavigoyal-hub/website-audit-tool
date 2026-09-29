@@ -12,7 +12,7 @@ import re
 
 import requests
 
-MODEL = os.environ.get("CHATBOT_MODEL", "claude-haiku-4-5-20251001")
+MODEL = os.environ.get("CHATBOT_MODEL", "").strip()  # auto below if empty
 
 _SYSTEM = """You are Gushwork's SEO audit copywriter. Turn a CS reviewer's
 rough note plus a page's HTML into one finding, in this EXACT JSON shape:
@@ -60,37 +60,59 @@ def _snippet(html, limit=6000):
 
 
 def frame(url, hint):
-    """Return dict of finding fields, or None if LLM disabled / call fails."""
-    key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
-    if not key:
+    """Return dict of finding fields, or None if no LLM key / call fails.
+
+    Prefers OpenAI (GPT) when OPENAI_API_KEY is set, else falls back to
+    Anthropic. Override which model to use with CHATBOT_MODEL env.
+    """
+    openai_key = os.environ.get("OPENAI_API_KEY", "").strip()
+    anth_key   = os.environ.get("ANTHROPIC_API_KEY", "").strip()
+    if not (openai_key or anth_key):
         return None
     html = _fetch_html(url)
     snippet = _snippet(html)
     user = (
         f"URL: {url or '(no URL)'}\n"
-        f"CS reviewer note: {hint or '(no note)'}\n\n"
+        f"CS reviewer note: {hint or '(no note — infer the issue from the HTML)'}\n\n"
         f"HTML snippet (head + first 3k of body):\n{snippet}"
     )
     try:
-        r = requests.post(
-            "https://api.anthropic.com/v1/messages",
-            headers={
-                "x-api-key": key,
-                "anthropic-version": "2023-06-01",
-                "content-type": "application/json",
-            },
-            json={
-                "model": MODEL,
-                "max_tokens": 700,
-                "system": _SYSTEM,
-                "messages": [{"role": "user", "content": user}],
-            },
-            timeout=30,
-        )
-        if not r.ok:
-            return None
-        data = r.json()
-        text = "".join(b.get("text", "") for b in data.get("content", []))
+        if openai_key:
+            model = MODEL or "gpt-4o-mini"
+            r = requests.post(
+                "https://api.openai.com/v1/chat/completions",
+                headers={"Authorization": f"Bearer {openai_key}",
+                         "Content-Type": "application/json"},
+                json={
+                    "model": model,
+                    "messages": [
+                        {"role": "system", "content": _SYSTEM},
+                        {"role": "user",   "content": user},
+                    ],
+                    "temperature": 0.4,
+                    "response_format": {"type": "json_object"},
+                    "max_tokens": 700,
+                },
+                timeout=30,
+            )
+            if not r.ok:
+                return None
+            text = (r.json().get("choices") or [{}])[0].get("message", {}).get("content", "")
+        else:
+            model = MODEL or "claude-haiku-4-5-20251001"
+            r = requests.post(
+                "https://api.anthropic.com/v1/messages",
+                headers={"x-api-key": anth_key,
+                         "anthropic-version": "2023-06-01",
+                         "content-type": "application/json"},
+                json={"model": model, "max_tokens": 700,
+                      "system": _SYSTEM,
+                      "messages": [{"role": "user", "content": user}]},
+                timeout=30,
+            )
+            if not r.ok:
+                return None
+            text = "".join(b.get("text", "") for b in r.json().get("content", []))
         start = text.find("{")
         end = text.rfind("}")
         if start < 0 or end <= start:

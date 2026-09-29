@@ -87,8 +87,13 @@ PAGE_TYPE_RULES = [
     ("Homepage",         lambda p: p in ("", "/")),
     ("About / Process",  lambda p: any(k in p for k in ("about", "our-process", "process", "who-we-are"))),
     ("Contact",          lambda p: "contact" in p),
-    ("Service / Product", lambda p: any(k in p for k in ("service", "product", "pricing", "solutions", "plans"))),
-    ("Article / Blog",   lambda p: any(k in p for k in ("blog", "article", "/category", "news", "post"))),
+    # E-commerce buckets — split product/category/collection so PSI + audits
+    # get one sample from each. Order matters: collection before category.
+    ("Collection",       lambda p: any(k in p for k in ("collection", "collections"))),
+    ("Product Category", lambda p: any(k in p for k in ("product-category", "product_cat", "shop-by"))),
+    ("Product",          lambda p: any(k in p for k in ("/product/", "/products/", "/item/", "/p/"))),
+    ("Service",          lambda p: any(k in p for k in ("service", "solutions", "plans", "pricing"))),
+    ("Article / Blog",   lambda p: any(k in p for k in ("blog", "article", "/news", "/post"))),
 ]
 
 
