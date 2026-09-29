@@ -140,13 +140,15 @@ def _parse_formula_terms(formula):
     import re
     if not formula:
         return []
-    # Split on × or = (with surrounding spaces)
-    parts = re.split(r'\s*([×=])\s*', formula)
+    # Split on ×, +, or = (with surrounding spaces). '+' must be
+    # padded with spaces so we don't split a leading '+' inside a stat.
+    parts = re.split(r'\s+([×+=])\s+', formula)
     terms = []
     for i, p in enumerate(parts):
         p = p.strip()
-        if not p: continue
-        if p in ('×', '='):
+        if not p:
+            continue
+        if p in ('×', '+', '='):
             terms.append(('op', p))
         else:
             m = re.match(r'^([+\-]?\d+(?:\.\d+)?%?)\s+(.+)$', p)

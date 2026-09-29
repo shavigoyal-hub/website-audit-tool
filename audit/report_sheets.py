@@ -527,12 +527,13 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         obs_rows = _drop_og_findings(obs_rows)
         obs_rows = _merge_findings_by_category(obs_rows)
 
-        # Dynamic intro formula: pick the top three POSITIVE lifts (things
-        # that lift leads when fixed), compound them, present as a formula
-        # chain. Falls back to the static +33% only if there aren't three
-        # positive-lift findings.
+        # Dynamic intro formula: sum ALL positive-lift stats across the
+        # findings in this audit (arithmetic sum, one per unique category).
+        # 'Fix h1 gets +32.3%, fix meta gets +5.8%, fix schema gets +5%,
+        #  fix FAQ gets +15% — total lift = +58.1%'.
         from audit.hook_copy import HOOK_COPY as _HOOK
-        _positive = []
+        _picks = []
+        _seen = set()
         for r in obs_rows:
             key = r.get("key", "")
             spec = _HOOK.get(key) if key else None
@@ -543,35 +544,30 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 continue
             pct = float(m.group(1))
             label = (r.get("category") or "").strip()
-            if label and pct > 0:
-                _positive.append((pct, label, stat))
-        # De-dupe by category, sort by lift descending, take top 3
-        _seen = set()
-        _pick = []
-        _positive.sort(key=lambda t: -t[0])
-        for pct, label, stat in _positive:
             k = label.lower()
-            if k in _seen:
+            if not label or pct <= 0 or k in _seen:
                 continue
             _seen.add(k)
-            _pick.append((pct, label, stat))
-            if len(_pick) >= 3:
-                break
+            _picks.append((pct, label, stat))
 
-        if _pick:
-            # Compound lift: (1+a) * (1+b) * (1+c) - 1
-            compound = 1.0
-            for pct, _lab, _st in _pick:
-                compound *= (1 + pct / 100.0)
-            total_pct = round((compound - 1) * 100, 1)
-            terms = "  ×  ".join(f"{s} {l}" for _p, l, s in _pick)
+        if _picks:
+            # Arithmetic sum of all positive-lift stats (per user request).
+            total_pct = round(sum(p for p, _, _ in _picks), 1)
+            # Show the top 3 by size in the formula chain (the deck card
+            # only fits a few boxes); the total reflects ALL positives.
+            _picks.sort(key=lambda t: -t[0])
+            top = _picks[:3]
+            more_n = len(_picks) - len(top)
+            terms = "  +  ".join(f"{s} {l}" for _p, l, s in top)
+            if more_n > 0:
+                terms += f"  +  ({more_n} more)"
             intro_stat = f"+{total_pct:g}%"
             intro_heading = f"Increase your leads by {total_pct:g}%"
             intro_formula = f"{terms}  =  +{total_pct:g}% More leads"
         else:
             intro_stat = "+33%"
             intro_heading = "Increase your leads by 33%"
-            intro_formula = ("+5.8% Meta descriptions  ×  +25% Structured "
+            intro_formula = ("+5.8% Meta descriptions  +  +25% Structured "
                              "data  =  +33% More leads")
 
         intro_row = [
