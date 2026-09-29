@@ -131,38 +131,9 @@ def evaluate(df, live_url):
                              "No favicon detected",
                              "A missing favicon weakens brand recognition in tabs and search."))
 
-    # ── HTTP + www variants active-probe ────────────────────────────
-    # Chat audits catch 'http and www both return 200 instead of 301'
-    # which the SF-crawl-data check misses when the alt variant never
-    # made it into the crawl. Probe them directly.
-    from urllib.parse import urlparse as _urlparse
-    p = _urlparse(origin)
-    canonical_scheme = p.scheme  # 'https'
-    naked_host = re.sub(r"^www\.", "", p.netloc)
-    canonical_has_www = p.netloc.startswith("www.")
-    variants_to_probe = []
-    # http:// canonical → should 301 to https
-    variants_to_probe.append(("http://" + p.netloc + "/", "http-to-https"))
-    # www/non-www alt → should 301 to canonical host
-    if canonical_has_www:
-        variants_to_probe.append((f"{canonical_scheme}://{naked_host}/", "non-www-to-www"))
-    else:
-        variants_to_probe.append((f"{canonical_scheme}://www.{naked_host}/", "www-to-non-www"))
-    bad_variants = []
-    for probe_url, kind in variants_to_probe:
-        try:
-            r = requests.get(probe_url, headers=UA, timeout=10, allow_redirects=False)
-        except Exception:
-            continue
-        if r.status_code not in (301, 308):
-            bad_variants.append(f"{probe_url} → HTTP {r.status_code}")
-    if bad_variants:
-        issues.append(_issue("http_www_redirect_missing", "HTTP + www redirect", "High",
-                             "http:// and non-canonical www variants do not 301 to the canonical host",
-                             "Both variants resolving with 200 split ranking signals across duplicate URLs.",
-                             reference=bad_variants))
-    else:
-        passed.append("http:// and www variants 301 to the canonical host")
+    # HTTP + www redirect checks removed per CS review — the probe kept
+    # producing false positives on sites that route through CDNs / edge
+    # workers with non-301 (but valid) redirect chains.
 
     # ── Viewport / pinch-zoom accessibility ──────────────────────────
     if home is not None and (home.text or "") and not homepage_blocked:
@@ -192,43 +163,9 @@ def evaluate(df, live_url):
         elif nav_html:
             passed.append("Navigation links resolve to real pages")
 
-    # --- www / non-www redirect (from SF crawl data) ---
-    # SF will include www. or non-www variants in the crawl if it encountered them.
-    canonical_has_www = host.startswith("www.")
-    alt_prefix = f"http{'s' if origin.startswith('https') else ''}://" + (
-        host[4:] if canonical_has_www else "www." + host)
-    alt_in_crawl = df[addr.str.startswith(alt_prefix)]
-    if not alt_in_crawl.empty:
-        alt_status = _num(alt_in_crawl, "Status Code").fillna(0).astype(int)
-        if alt_status.isin([301, 308]).all():
-            passed.append("www / non-www variants redirect to canonical host (301/308)")
-        elif alt_status.isin([302, 307]).any():
-            issues.append(_issue("wwwredir_temp", "WWW Redirect", "Low",
-                                 f"www / non-www handled with a temporary redirect instead of 301",
-                                 "Temporary redirects do not consolidate link equity.",
-                                 reference=alt_in_crawl["Address"].head(3).tolist()))
-        else:
-            issues.append(_issue("wwwredir_missing", "WWW Redirect", "Medium",
-                                 "www and non-www versions do not redirect to a single canonical host",
-                                 "Both www and non-www resolving splits ranking signals."))
-    else:
-        na.append("www / non-www redirect : alt variant not in SF crawl — verify manually: curl -sI " + alt_prefix + "/")
-
-    # --- HTTP → HTTPS redirect (from SF crawl data) ---
-    http_prefix = "http://" + re.sub(r"^www\.", "", host)
-    http_in_crawl = df[addr.str.startswith(http_prefix) & ~addr.str.startswith("https://")]
-    if not http_in_crawl.empty:
-        http_status = _num(http_in_crawl, "Status Code").fillna(0).astype(int)
-        if http_status.isin([301, 308]).all():
-            passed.append("HTTP redirects to HTTPS (301/308)")
-        else:
-            bad_http = http_in_crawl.loc[~http_status.isin([301, 308]), "Address"].head(3).tolist()
-            issues.append(_issue("httpsredir_missing", "HTTPS Redirect", "High",
-                                 "HTTP does not 301-redirect to HTTPS",
-                                 "Serving HTTP without HTTPS hurts trust and rankings.",
-                                 reference="\n".join(bad_http)))
-    else:
-        na.append("HTTP→HTTPS redirect : http:// URLs not in SF crawl scope — verify manually: curl -sI http://" + host + "/")
+    # www / non-www and HTTP→HTTPS redirect checks removed per CS review.
+    # SF-crawl-data variants produced too many false positives on sites
+    # behind CDNs; the active-probe versions were removed above too.
 
     # --- Homepage-level probes: schema, CTA, conversion path ---
     og_req = _get(origin + "/")

@@ -51,7 +51,15 @@ SKIP_KEYS = {"h1_long", "h1_duplicate",
              # already covered by another finding, too directional, or
              # a CRO concern.
              "unoptimized_images", "high_carbon", "orphan_page",
-             "pagination_no_rel", "image_large"}
+             "pagination_no_rel", "image_large",
+             # Redirect checks removed — chronic false positives.
+             "http_www_redirect_missing", "wwwredir_temp",
+             "wwwredir_missing", "httpsredir_missing",
+             # Legacy sf_csv findings that never had proper copy —
+             # duplicated by other findings already.
+             "title_multiple_tags", "meta_multiple_tags", "crawl_budget",
+             # Evidence-only tab, never rendered as an observation
+             "redirects"}
 
 
 def _drop_og_findings(rows):
