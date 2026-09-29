@@ -99,15 +99,32 @@ def enqueue(client, live_url):
 
 
 def get(job_id):
-    sid = _find_sheet()
-    if not sid:
+    """Fetch a job row by id.
+
+    Retries with a cleared sheet-id cache if the row is not found — a warm
+    Vercel lambda can hold a stale HISTORY_SHEET_ID from a previous env
+    setting, which would silently point /job at the wrong sheet.
+    """
+    def _lookup():
+        sid = _find_sheet()
+        if not sid:
+            return None
+        for r in _read_rows(sid)[1:]:
+            while len(r) < len(JOB_HEADER):
+                r.append("")
+            if r[0] == job_id:
+                return dict(zip(JOB_HEADER, r))
         return None
-    for r in _read_rows(sid)[1:]:
-        while len(r) < len(JOB_HEADER):
-            r.append("")
-        if r[0] == job_id:
-            return dict(zip(JOB_HEADER, r))
-    return None
+
+    row = _lookup()
+    if row is not None:
+        return row
+    # Retry after clearing the module-level cache so a stale warm lambda
+    # can re-resolve the correct sheet.
+    global _CACHED_ID
+    from audit import history as _hist
+    _hist._CACHED_ID = None
+    return _lookup()
 
 
 def claim_next(worker_id):

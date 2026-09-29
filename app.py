@@ -109,9 +109,22 @@ def run_audit():
 
 @app.route("/job/<jid>")
 def job_status(jid):
+    """Job status by id. If the row isn't found (warm-lambda cache miss,
+    Sheets read latency, or a genuinely wrong id), return a soft pending
+    response with `note` set so the UI keeps polling instead of showing
+    a scary 'unknown job' error. After ~2 min the front-end times out on
+    its own.
+    """
     j = jobs.get(jid)
     if not j:
-        return jsonify({"error": "unknown job"}), 404
+        return jsonify({
+            "id": jid,
+            "status": "pending",
+            "live_url": "",
+            "worker": "",
+            "sheet_url": "",
+            "note": "Waiting for the row to become visible…",
+        })
     return jsonify(j)
 
 
