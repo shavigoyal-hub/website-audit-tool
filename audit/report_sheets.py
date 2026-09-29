@@ -51,7 +51,7 @@ SKIP_KEYS = {"h1_long", "h1_duplicate",
              # already covered by another finding, too directional, or
              # a CRO concern.
              "unoptimized_images", "high_carbon", "orphan_page",
-             "pagination_no_rel"}
+             "pagination_no_rel", "image_large"}
 
 
 def _drop_og_findings(rows):

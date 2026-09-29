@@ -45,6 +45,7 @@ STATUS_LABEL = {
     "unoptimized_images":("Heavy images", "medium"),
     "image_large":      ("Oversized", "medium"),
     "high_carbon":      ("Heavy page", "medium"),
+    "robots_missing":   ("No / empty robots", "low"),
     "render_blocking":  ("Render blocking", "medium"),
     "url_long":         ("Long URL", "low"),
     "low_inlinks":      ("Few inlinks", "medium"),
@@ -454,6 +455,12 @@ HOOK_COPY = {
         "hook_ctx":  "leads lost when Google discovers pages 2x slower without a sitemap.",
         "costs":     "No sitemap slows indexation and hides new pages from Google for weeks.",
         "support":   "Google docs: XML sitemap is required for large sites and news / video content.",
+    },
+    "robots_missing": {
+        "hook_stat": "-3%",
+        "hook_ctx":  "SERP visibility risk when robots.txt is missing or empty.",
+        "costs":     "No robots.txt removes crawl control and hides the sitemap reference.",
+        "support":   "Google robots.txt spec: robots.txt should always be served, even if empty.",
     },
     "robots_block": {
         "hook_stat": "-100%",
