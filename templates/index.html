@@ -98,10 +98,13 @@
   </style>
 </head>
 <body>
+  <a id="backToUpsell" href="/upsell" style="display:none;align-self:flex-start;margin:-24px 0 18px;font-size:13px;font-weight:600;color:#0070FF;text-decoration:none">&larr; Back to upsell</a>
   <div class="logo">Gushwork <span id="versionBadge" style="font-size:11px;color:#6366f1;background:#ede9fe;padding:2px 8px;border-radius:10px;font-weight:600;letter-spacing:0.02em;margin-left:6px"></span></div>
   <script>
     // "" on this app's own URL; "/audit" when mounted inside SEO Reporting.
     const BASE = {{ request.script_root|tojson }};
+    // Opened from SEO Reporting's upsell page (mounted at /audit): offer the way back.
+    if (BASE) document.getElementById("backToUpsell").style.display = "inline-block";
     fetch(BASE + "/health").then(r=>r.json()).then(d=>{
       if (d.version) document.getElementById("versionBadge").textContent = "v" + d.version;
     }).catch(()=>{});
