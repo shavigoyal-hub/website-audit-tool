@@ -14,6 +14,31 @@ from audit import crawler, observations, pagespeed, parameters, report_xlsx, rep
 from audit.version import VERSION
 
 app = Flask(__name__)
+
+
+class _MountPrefix:
+    """Serve the app under /audit as well as at the root.
+
+    The SEO Reporting tool mounts this app at /audit (a Next.js rewrite), so
+    the audit sits behind that tool's Google login and inside its upsell
+    flow. Requests arriving as /audit/... are served as if at the root, with
+    SCRIPT_NAME set, so request.script_root is "/audit" and every link the
+    page builds keeps the prefix. Direct visits to this app are unchanged.
+    """
+    PREFIX = "/audit"
+
+    def __init__(self, wsgi):
+        self.wsgi = wsgi
+
+    def __call__(self, environ, start_response):
+        path = environ.get("PATH_INFO", "") or "/"
+        if path == self.PREFIX or path.startswith(self.PREFIX + "/"):
+            environ["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + self.PREFIX
+            environ["PATH_INFO"] = path[len(self.PREFIX):] or "/"
+        return self.wsgi(environ, start_response)
+
+
+app.wsgi_app = _MountPrefix(app.wsgi_app)
 app.config["MAX_CONTENT_LENGTH"] = 20 * 1024 * 1024
 
 SF_CLI = "/Applications/Screaming Frog SEO Spider.app/Contents/MacOS/ScreamingFrogSEOSpiderLauncher"
@@ -100,7 +125,7 @@ def run_audit():
         return jsonify({
             "ok": True, "version": VERSION,
             "job_id": jid,
-            "poll_url": f"/job/{jid}",
+            "poll_url": f"{request.script_root}/job/{jid}",
             "message": "Queued for local worker.",
         })
     except Exception:
@@ -211,7 +236,9 @@ def build_deck():
         # On-the-fly deck URL — Vercel's /tmp file isn't reachable from the
         # next request, so we point at /deck?sheet=… which re-renders live.
         from urllib.parse import quote
-        deck_url = (request.host_url.rstrip("/")
+        # Built on the host AND the mount prefix the request came through, so
+        # a deck made inside SEO Reporting opens inside it too.
+        deck_url = (request.host_url.rstrip("/") + request.script_root
                     + f"/deck?sheet={quote(sheet_url, safe=':/?&=')}")
         resp = {
             "ok": True,
