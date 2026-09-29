@@ -134,6 +134,48 @@ def _check_broken_homepage_images(html, origin, findings):
             reference="\n".join(broken[:5])))
 
 
+def _check_fragment_only_nav(html, origin, findings):
+    """Detect single-page-app nav where every top nav link is a #fragment.
+
+    Extract the FIRST <nav>...</nav> block; if it has ≥3 anchors and ≥60% of
+    them are fragment-only (href starts with '#' or href starts with '/' and
+    contains '#' with no path), the site has no distinct pages for its top
+    sections to rank.
+    """
+    nav_m = re.search(r"<nav\b[^>]*>(.*?)</nav>", html, re.I | re.S)
+    if not nav_m:
+        return
+    nav_html = nav_m.group(1)
+    anchors = re.findall(r'<a[^>]+href=["\']([^"\']+)["\']', nav_html, re.I)
+    # Filter out mailto: / tel: / javascript: / empty
+    anchors = [a for a in anchors if a and not a.lower().startswith(
+        ("mailto:", "tel:", "javascript:"))]
+    if len(anchors) < 3:
+        return
+    frag_only = []
+    for a in anchors:
+        a_stripped = a.strip()
+        if a_stripped.startswith("#"):
+            frag_only.append(a_stripped)
+            continue
+        # /#product or https://site/#product
+        if "#" in a_stripped:
+            # split path from fragment
+            path_part = a_stripped.split("#", 1)[0].rstrip("/")
+            if path_part in ("", origin, origin.rstrip("/")):
+                frag_only.append(a_stripped)
+    if len(frag_only) / len(anchors) >= 0.6:
+        sample = ", ".join(f"{origin}{f}" if f.startswith("#") else f
+                           for f in frag_only[:4])
+        findings.append(_issue(
+            "fragment_only_nav", "Site Architecture", "High",
+            f"Nav has {len(frag_only)}/{len(anchors)} fragment-only links — "
+            f"there is no distinct page for these sections to rank",
+            "Fragment nav gives Google one page instead of many; each section "
+            "loses its own SERP.",
+            reference=f"{origin}/ → {sample}"))
+
+
 def _check_duplicate_homepage(origin, home_html, findings):
     """Compare / and /home body sizes — if same, they're duplicate."""
     for path in ("/home", "/home/"):
@@ -171,6 +213,7 @@ def evaluate(live_url):
         _check_schema_types(html, origin, findings)
         _check_default_favicon(html, origin, findings)
         _check_broken_homepage_images(html, origin, findings)
+        _check_fragment_only_nav(html, origin, findings)
         _check_duplicate_homepage(origin, html, findings)
     except Exception as exc:
         print(f"[deep] evaluate failed: {exc}")
