@@ -185,19 +185,71 @@ def _sitemap_urls(sitemap_url, cap=2000):
     return list(seen)
 
 
+def _sf_list_crawl(urls, max_urls=None):
+    """Run SF in LIST mode against a fixed URL list (typically from sitemap).
+
+    Much more reliable than link-discovery mode on sites that block spiders
+    or hide content behind JS. All the same speed / bot-friendly configs
+    from _sf_crawl still apply.
+    """
+    ua = os.environ.get("SF_USER_AGENT", "").strip() or _DEFAULT_UA
+    max_threads = os.environ.get("SF_MAX_THREADS", "").strip() or "2"
+
+    tmp_dir = tempfile.mkdtemp(prefix="sf_list_")
+    list_path = os.path.join(tmp_dir, "urls.txt")
+    try:
+        with open(list_path, "w") as fh:
+            for u in urls[: (max_urls or 5000)]:
+                fh.write(u.strip() + "\n")
+        cmd = [SF_CLI, "--headless", "--crawl-list", list_path,
+               "--output-folder", tmp_dir,
+               "--export-tabs", "Internal:HTML",
+               "--overwrite",
+               "--config-option", "crawler.check_images=false",
+               "--config-option", "crawler.check_css=false",
+               "--config-option", "crawler.check_js=false",
+               "--config-option", "crawler.check_swf=false",
+               "--config-option", "crawler.check_external_links=false",
+               "--config-option", f"spider.user_agent={ua}",
+               "--config-option", f"spider.max_threads={int(max_threads)}"]
+        r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
+        if r.returncode != 0:
+            raise RuntimeError(
+                f"SF list-mode exit {r.returncode}. stderr[:800]: {r.stderr[:800]}"
+            )
+        for name in ("internal_html.csv", "internal_all.csv"):
+            matches = glob.glob(os.path.join(tmp_dir, name))
+            if matches:
+                break
+        else:
+            raise FileNotFoundError(
+                f"list-mode: no internal_*.csv in {tmp_dir}. "
+                f"Files: {os.listdir(tmp_dir)[:20]}"
+            )
+        df = pd.read_csv(matches[0], dtype=str, keep_default_na=False,
+                         low_memory=False)
+        df.columns = [c.strip() for c in df.columns]
+        return df
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
+
+
 def _get_dataframe_with_tag(live_url):
-    """SF first with smart auto-detection; fall back to Python crawler on failure.
+    """SF first with smart auto-detection; fall back through progressively
+    simpler crawlers on failure.
 
-    Fallback chain:
-      1. Probe homepage — get canonical (post-redirect) URL, detect SPA, find sitemap.
-      2. SF crawl of the canonical URL. Auto-enables JS rendering if the
-         probe detected an SPA. Retries once with JS rendering if the first
-         attempt returned 0 pages.
-      3. Sitemap fallback: if SF still returns nothing but the site has a
-         sitemap, seed the built-in crawler with sitemap URLs.
-      4. Plain Python crawl as last resort.
+    Chain:
+      1. Probe homepage — canonical URL after redirects, SPA detection, sitemap.
+      2. SF spider crawl of the canonical URL. JS rendering auto-on if SPA.
+      3. If SF returns 0-1 rows, retry with JS rendering.
+      4. **SF LIST mode** against sitemap URLs (many sites where SF spider
+         fails still let SF fetch a fixed URL list). We keep SF's rich
+         data extraction this way.
+      5. Python fetch of sitemap URLs (last resort — thin data).
+      6. Python spider crawl of the homepage (final fallback).
 
-    Returns (df, crawler_used).
+    Returns (df, crawler_used) — 'screaming-frog' / 'screaming-frog-list'
+    / 'sitemap' / 'python'.
     """
     max_urls = os.environ.get("SF_MAX_URLS", "").strip()
     max_urls = int(max_urls) if max_urls.isdigit() else None
@@ -216,17 +268,30 @@ def _get_dataframe_with_tag(live_url):
                 print(f"[pipeline] SF returned {len(df)} rows — retrying with JS rendering")
                 os.environ["SF_JS_RENDER"] = "1"
                 df = _sf_crawl(target, max_urls=max_urls)
-            if len(df) >= 1:
+            if len(df) >= 2:
                 return df, "screaming-frog"
             print(f"[pipeline] SF crawl came back empty on {target}")
         except Exception as exc:
-            print(f"[pipeline] SF failed: {exc}")
+            print(f"[pipeline] SF spider failed: {exc}")
 
-    # Sitemap fallback
+        # SF LIST mode — feed sitemap URLs directly to SF.
+        if probe["sitemap"]:
+            urls = _sitemap_urls(probe["sitemap"])
+            if urls:
+                print(f"[pipeline] SF list-mode fallback — {len(urls)} URLs "
+                       f"from {probe['sitemap']}")
+                try:
+                    df = _sf_list_crawl(urls, max_urls=max_urls)
+                    if len(df) >= 1:
+                        return df, "screaming-frog-list"
+                except Exception as exc:
+                    print(f"[pipeline] SF list-mode failed: {exc}")
+
+    # Python-side sitemap fallback (no SF at all — thinner data)
     if probe["sitemap"]:
         urls = _sitemap_urls(probe["sitemap"])
         if urls:
-            print(f"[pipeline] sitemap fallback — {len(urls)} URLs from {probe['sitemap']}")
+            print(f"[pipeline] python-sitemap fallback — {len(urls)} URLs")
             rows = crawler.crawl_urls(urls) if hasattr(crawler, "crawl_urls") else crawler.crawl(target)
             return pd.DataFrame(rows), "sitemap"
 

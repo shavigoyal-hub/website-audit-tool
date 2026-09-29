@@ -20,7 +20,28 @@ _PRIO_RANK = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 
 # Findings intentionally NOT reported in the sheet / deck.
 # User rule: never surface these as observations.
-SKIP_KEYS = {"h1_long", "h1_duplicate", "og_missing"}
+SKIP_KEYS = {"h1_long", "h1_duplicate",
+             # Every og:* / open graph / social preview finding — CRO
+             # / social share concern, not SEO. Direct-chat audit rule.
+             "og_missing", "og_image_missing", "og_title_missing",
+             "og_description_missing", "og_url_missing", "og_type_missing",
+             "twitter_card_missing", "social_preview_missing"}
+
+
+def _drop_og_findings(rows):
+    """Belt-and-braces: also drop anything whose observation mentions og: or
+    Open Graph, in case a finding leaks in from an LLM-enriched row that
+    used a different key name."""
+    import re as _re
+    og_re = _re.compile(r"\b(og:|open graph|twitter:card|social preview)", _re.I)
+    kept = []
+    for r in rows:
+        cat = (r.get("category") or "")
+        obs = (r.get("observation") or "")
+        if og_re.search(cat) or og_re.search(obs):
+            continue
+        kept.append(r)
+    return kept
 
 # Canonical family name per finding key, so ALL H1 sub-issues collapse into
 # one 'H1 Tags' row (not one row per Missing/Multiple/Short/etc.).
@@ -507,6 +528,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         # first; URLs from every merged sub-finding are combined with their
         # specific status labels.
         obs_rows = [r for r in obs_rows if r.get("key", "") not in SKIP_KEYS]
+        obs_rows = _drop_og_findings(obs_rows)
         obs_rows = _merge_findings_by_category(obs_rows)
 
         # Finding rows — Hook Context references Hook Stat in column E.
