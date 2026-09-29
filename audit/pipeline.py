@@ -32,49 +32,26 @@ _DEFAULT_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
 
 
 def _sf_crawl(url, max_urls=None):
-    """Crawl HTML pages only, with sensible defaults for real sites.
+    """Crawl HTML pages only, with SF's own defaults.
 
-    Fixes we bake in by default:
-      - HTML only (skip images/css/js/swf/externals)
-      - Real Chrome User-Agent (dodges basic bot fingerprinting)
-      - Lower thread count (avoids rate limits)
-      - Full traceback on failure via captured stderr
+    Older SF CLI versions (like the one on this Mac) don't recognise
+    --config-option, so we skip it entirely and rely on the SF GUI's
+    saved config (user agent, threads, respect-robots etc.). To tune
+    those, open SF once and set them in Configuration → Spider.
 
-    Opt-in via env for the trickier fixes:
-      SF_MAX_URLS=1000        — cap the crawl (also stops runaway loops)
-      SF_MAX_THREADS=2        — override concurrency (default 2)
-      SF_USER_AGENT=<string>  — override UA
-      SF_JS_RENDER=1          — enable JS rendering (slower, works on SPAs)
-      SF_RESPECT_ROBOTS=0     — ignore robots.txt (only for authorized audits)
-      SF_EXCLUDE_PARAMS=1     — skip URLs with query strings (faceted nav)
+    Opt-in via env:
+      SF_MAX_URLS      — hint SF via env; SF still needs its own crawl-limit config
+      SF_CONFIG_FILE   — pass a .seospiderconfig file via --config <path>
     """
-    ua = os.environ.get("SF_USER_AGENT", "").strip() or _DEFAULT_UA
-    max_threads = os.environ.get("SF_MAX_THREADS", "").strip() or "2"
-    js_render = os.environ.get("SF_JS_RENDER", "").strip() in ("1", "true", "yes")
-    respect_robots = os.environ.get("SF_RESPECT_ROBOTS", "1").strip() not in ("0", "false", "no")
-    exclude_params = os.environ.get("SF_EXCLUDE_PARAMS", "").strip() in ("1", "true", "yes")
-
     tmp_dir = tempfile.mkdtemp(prefix="sf_audit_")
     try:
         cmd = [SF_CLI, "--headless", "--crawl", url,
                "--output-folder", tmp_dir,
                "--export-tabs", "Internal:HTML",
-               "--overwrite",
-               "--config-option", "crawler.check_images=false",
-               "--config-option", "crawler.check_css=false",
-               "--config-option", "crawler.check_js=false",
-               "--config-option", "crawler.check_swf=false",
-               "--config-option", "crawler.check_external_links=false",
-               "--config-option", f"spider.user_agent={ua}",
-               "--config-option", f"spider.max_threads={int(max_threads)}",
-               "--config-option", f"spider.respect_robots_txt={'true' if respect_robots else 'false'}"]
-        if js_render:
-            cmd += ["--config-option", "spider.js_rendering_enabled=true"]
-        if exclude_params:
-            # Skip URLs with any ?query — kills faceted-nav loops.
-            cmd += ["--config-option", "spider.exclude=.*\\?.*"]
-        if max_urls:
-            cmd += ["--config-option", f"crawler.max_urls={int(max_urls)}"]
+               "--overwrite"]
+        cfg = os.environ.get("SF_CONFIG_FILE", "").strip()
+        if cfg and os.path.isfile(cfg):
+            cmd += ["--config", cfg]
         # Capture stderr so a failure surfaces something usable in the Jobs row.
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=600)
         if r.returncode != 0:
@@ -188,13 +165,9 @@ def _sitemap_urls(sitemap_url, cap=2000):
 def _sf_list_crawl(urls, max_urls=None):
     """Run SF in LIST mode against a fixed URL list (typically from sitemap).
 
-    Much more reliable than link-discovery mode on sites that block spiders
-    or hide content behind JS. All the same speed / bot-friendly configs
-    from _sf_crawl still apply.
+    Uses SF's own default config (older SF CLI does not recognise
+    --config-option). Tune via SF GUI or SF_CONFIG_FILE env.
     """
-    ua = os.environ.get("SF_USER_AGENT", "").strip() or _DEFAULT_UA
-    max_threads = os.environ.get("SF_MAX_THREADS", "").strip() or "2"
-
     tmp_dir = tempfile.mkdtemp(prefix="sf_list_")
     list_path = os.path.join(tmp_dir, "urls.txt")
     try:
@@ -204,14 +177,10 @@ def _sf_list_crawl(urls, max_urls=None):
         cmd = [SF_CLI, "--headless", "--crawl-list", list_path,
                "--output-folder", tmp_dir,
                "--export-tabs", "Internal:HTML",
-               "--overwrite",
-               "--config-option", "crawler.check_images=false",
-               "--config-option", "crawler.check_css=false",
-               "--config-option", "crawler.check_js=false",
-               "--config-option", "crawler.check_swf=false",
-               "--config-option", "crawler.check_external_links=false",
-               "--config-option", f"spider.user_agent={ua}",
-               "--config-option", f"spider.max_threads={int(max_threads)}"]
+               "--overwrite"]
+        cfg = os.environ.get("SF_CONFIG_FILE", "").strip()
+        if cfg and os.path.isfile(cfg):
+            cmd += ["--config", cfg]
         r = subprocess.run(cmd, capture_output=True, text=True, timeout=900)
         if r.returncode != 0:
             raise RuntimeError(
