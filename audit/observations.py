@@ -121,7 +121,7 @@ CATALOG = {
     "h1_multiple": ("Low",
         "Multiple pages found with more than one H1 tag",
         "Multiple H1s dilute the page's primary topic signal."),
-    "thin_content": ("High",
+    "thin_content": ("Critical",
         "Multiple pages found that are thin or low-value (under 300 words)",
         "Thin pages struggle to rank for target keywords and convert visitors."),
     "content_depth": ("High",
@@ -374,12 +374,19 @@ def psi_to_observations(psi_live):
                      "reference": ref})
 
     if lcp:
-        u, v = max(lcp, key=lambda x: x[1])
-        # Attach the actual LCP seconds to each URL so the deck pill reads
-        # 'LCP 7.0s' instead of the generic 'LCP > 4s'.
-        urls_with_stat = [f"{url}||LABEL=LCP {sec}s" for url, sec in lcp]
-        add("lcp_high" if v >= 4 else "lcp_medium",
-            f"{u} ({v}s)", urls=urls_with_stat)
+        # Split into two disjoint buckets — high (>=4s) vs medium (2.5-4s) —
+        # and emit each as its own finding so a page with LCP 3.0s never
+        # lands under a 'LCP > 4s' slide. Sort worst-first within each bucket.
+        high_bucket   = sorted([(u, v) for u, v in lcp if v >= 4],   key=lambda x: -x[1])
+        medium_bucket = sorted([(u, v) for u, v in lcp if v < 4],    key=lambda x: -x[1])
+        if high_bucket:
+            u, v = high_bucket[0]
+            urls_with_stat = [f"{url}||LABEL=LCP {sec}s" for url, sec in high_bucket]
+            add("lcp_high", f"{u} ({v}s)", urls=urls_with_stat)
+        if medium_bucket:
+            u, v = medium_bucket[0]
+            urls_with_stat = [f"{url}||LABEL=LCP {sec}s" for url, sec in medium_bucket]
+            add("lcp_medium", f"{u} ({v}s)", urls=urls_with_stat)
     if cls:
         u, v = max(cls, key=lambda x: x[1])
         add("cls_high", f"{u} (CLS {v})", urls=[x[0] for x in cls])

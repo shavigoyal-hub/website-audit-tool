@@ -303,13 +303,13 @@ HOOK_COPY = {
         "support":   "Google JavaScript SEO docs: pages with hydration errors get dropped from the index.",
     },
     "render_blocked": {
-        "hook_stat": "-25%",
+        "hook_stat": "-35%",
         "hook_ctx":  "leads lost when critical resources are blocked from crawl.",
         "costs":     "Blocked resources stop Google from seeing the full page, dropping rankings and leads.",
         "support":   "Google Search Central: sites blocking CSS/JS in robots.txt lose visibility.",
     },
     "render_js_dependent": {
-        "hook_stat": "-18%",
+        "hook_stat": "-35%",
         "hook_ctx":  "leads lost when the page needs JS to become useful content.",
         "costs":     "JS-dependent content is indexed slower — and sometimes not at all, so leads never arrive.",
         "support":   "Onely 2023: JS-only content is indexed up to 9x slower than server-rendered HTML.",
@@ -364,7 +364,7 @@ HOOK_COPY = {
         "support":   "",
     },
     "render_blocking": {
-        "hook_stat": "-8%",
+        "hook_stat": "-35%",
         "hook_ctx":  "leads lost when render-blocking scripts delay first paint.",
         "costs":     "Render-blocking resources delay the first meaningful paint, hurting rankings and leads.",
         "support":   "Web.dev render-blocking audit: eliminating them typically saves 200-500ms LCP.",
@@ -389,7 +389,7 @@ HOOK_COPY = {
         "support":   "Deep-link hierarchies concentrate authority on money pages.",
     },
     "nav_missing": {
-        "hook_stat": "-40%",
+        "hook_stat": "-20%",
         "hook_ctx":  "crawl coverage without a persistent top navigation.",
         "costs":     "No top menu means Google (and users) can't reach the money pages in one click.",
         "support":   "Every page needs a stable primary nav for internal PageRank to flow.",
@@ -452,7 +452,7 @@ HOOK_COPY = {
         "support":   "Google robots.txt spec.",
     },
     "favicon_missing": {
-        "hook_stat": "-3%",
+        "hook_stat": "-15%",
         "hook_ctx":  "leads and repeat visits lost when tabs and search show no brand icon.",
         "costs":     "Favicons in tabs and SERP drive brand recall and repeat visits.",
         "support":   "Google 2019 SERP redesign: favicon shows next to every mobile organic result.",

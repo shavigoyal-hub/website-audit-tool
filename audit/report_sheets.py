@@ -545,16 +545,17 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         # in the sum. Total is also capped at 35% — the realistic ceiling
         # for a same-pages, same-website lift.
         from audit.hook_copy import HOOK_COPY as _HOOK
-        # Positive-lead-lift keys ONLY: rows whose fix produces new leads
-        # (not loss-avoided). Master-table primary signal must be 'Lead'
-        # AND the hook_stat must be a '+X%' positive value.
+        # Master v4 Lead-sum set. Fixing a Lead-primary finding — whether
+        # its hook_stat is displayed as a positive lift (+15%) or a
+        # negative loss (-35%) — recovers |stat|% leads for the intro sum.
         _LEAD_KEYS = {
-            "h1_missing",
-            "meta_missing",
-            "structured_data",
-            "schema_product_missing",
-            "schema_article_missing",
-            "thin_content",
+            "h1_missing", "title_missing", "meta_missing",
+            "structured_data", "schema_product_missing",
+            "schema_article_missing", "thin_content",
+            "error_404_money", "render_error", "render_blocked",
+            "render_js_dependent", "render_blocking",
+            "lcp_high", "lcp_medium", "cls_high", "perf_low", "perf_moderate",
+            "sitemap_missing", "favicon_missing", "about_missing",
             "cta_missing",
         }
         _MAX_LIFT_PCT = 35.0
@@ -568,16 +569,18 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             spec = _HOOK.get(key) if key else None
             stat = (spec or {}).get("hook_stat", "")
             import re as _sr
-            m = _sr.match(r"^\+?(\d+(?:\.\d+)?)%$", str(stat).strip())
+            m = _sr.match(r"^([+\-]?)(\d+(?:\.\d+)?)%$", str(stat).strip())
             if not m:
                 continue
-            pct = float(m.group(1))
+            pct = abs(float(m.group(2)))
             label = (r.get("category") or "").strip()
             k = label.lower()
             if not label or pct <= 0 or k in _seen:
                 continue
             _seen.add(k)
-            _picks.append((pct, label, stat))
+            # Show the term as a positive lift in the intro card, because
+            # 'Increase your leads by N%' is a gain narrative.
+            _picks.append((pct, label, f"+{pct:g}%"))
 
         if _picks:
             _picks.sort(key=lambda t: -t[0])
