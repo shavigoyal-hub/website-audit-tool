@@ -100,11 +100,13 @@
 <body>
   <div class="logo">Gushwork <span id="versionBadge" style="font-size:11px;color:#6366f1;background:#ede9fe;padding:2px 8px;border-radius:10px;font-weight:600;letter-spacing:0.02em;margin-left:6px"></span></div>
   <script>
-    fetch("/health").then(r=>r.json()).then(d=>{
+    // "" on this app's own URL; "/audit" when mounted inside SEO Reporting.
+    const BASE = {{ request.script_root|tojson }};
+    fetch(BASE + "/health").then(r=>r.json()).then(d=>{
       if (d.version) document.getElementById("versionBadge").textContent = "v" + d.version;
     }).catch(()=>{});
 
-    fetch("/history?n=15").then(r=>r.json()).then(d=>{
+    fetch(BASE + "/history?n=15").then(r=>r.json()).then(d=>{
       if (d.sheet_url) document.getElementById("historyAll").href = d.sheet_url;
       const list = document.getElementById("historyList");
       if (!d.runs || !d.runs.length) return;
@@ -249,7 +251,7 @@
         // ~20 min at 4s — some SF crawls take that long on big sites.
         for (let attempt = 0; attempt < 300; attempt++) {
           try {
-            const r = await fetch(`/job/${jid}`);
+            const r = await fetch(`${BASE}/job/${jid}`);
             const j = await r.json();
             if (!r.ok) {
               // Never surface HTTP errors as "unknown job" — treat as
@@ -288,7 +290,7 @@
 
       try {
         const fd = new FormData(this);
-        const res = await fetch("/run", { method: "POST", body: fd });
+        const res = await fetch(BASE + "/run", { method: "POST", body: fd });
         const data = await res.json();
         if (data.job_id) {
           renderQueue({id: data.job_id, status: "pending"});
@@ -320,7 +322,7 @@
         fd.append("sheet_url", sheetUrl);
         fd.append("prompt", prompt);
         files.forEach(f => fd.append("images", f, f.name));
-        const res = await fetch("/append-finding", { method: "POST", body: fd });
+        const res = await fetch(BASE + "/append-finding", { method: "POST", body: fd });
         const data = await res.json();
         if (data.ok) {
           out.style.color = "#166534";
@@ -358,7 +360,7 @@
 
       try {
         const fd = new FormData(this);
-        const res = await fetch("/build-deck", { method: "POST", body: fd });
+        const res = await fetch(BASE + "/build-deck", { method: "POST", body: fd });
         const data = await res.json();
         result.style.display = "block";
         result.style.marginTop = "16px";
