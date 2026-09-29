@@ -7,6 +7,7 @@ Auto-start:       load com.gushwork.audit-worker.plist into launchd
 Env: COMPOSIO_API_KEY, optional PAGESPEED_API_KEY (same as Flask app).
 """
 import argparse
+import os
 import signal
 import socket
 import time
@@ -16,9 +17,10 @@ from audit import jobs
 from audit.pipeline import SF_AVAILABLE, run as _run
 
 
-# Absolute wall-clock ceiling per job. A stuck Composio/PSI call has caused
-# jobs to hang for 1h+ before — we'd rather fail visibly than block the queue.
-_JOB_TIMEOUT_SEC = 15 * 60
+# Per-job timeout. 0 = no timeout (run until pipeline returns or crashes).
+# Default is 0 now — SF crawls on big e-commerce sites (Shopify + JS render)
+# routinely take 20-30 min and the artificial cap was killing legit runs.
+_JOB_TIMEOUT_SEC = int(os.environ.get("WORKER_JOB_TIMEOUT_SEC", "0"))
 
 
 class _JobTimeout(Exception):
@@ -26,12 +28,16 @@ class _JobTimeout(Exception):
 
 
 def _run_with_timeout(fn, args, timeout):
-    """Run `fn(*args)` in-process, raise _JobTimeout after `timeout` seconds.
+    """Run `fn(*args)` in-process; enforce `timeout` seconds if > 0.
 
-    Uses signal.SIGALRM (POSIX only, fine for macOS/Linux worker). Blocking
-    syscalls (subprocess.run for SF, requests.get for PSI, Composio HTTP)
-    all get interrupted by the alarm.
+    timeout=0 disables the SIGALRM cap entirely — pipeline runs to
+    completion however long it takes. Big Shopify audits with JS
+    rendering routinely exceed 15 min and the timeout was killing
+    legit runs.
     """
+    if not timeout or int(timeout) <= 0:
+        return fn(*args)
+
     def _handler(signum, frame):
         raise _JobTimeout(f"job exceeded {timeout}s")
 
@@ -71,8 +77,9 @@ def main():
     args = p.parse_args()
 
     worker_id = socket.gethostname()
+    to_str = f"{args.timeout}s" if args.timeout > 0 else "off"
     print(f"[worker] {worker_id} — SF={'yes' if SF_AVAILABLE else 'no'} "
-          f"— poll every {args.poll}s, per-job timeout {args.timeout}s")
+          f"— poll every {args.poll}s, per-job timeout {to_str}")
     _reset_ghost_jobs(worker_id)
 
     while True:
