@@ -536,7 +536,7 @@
     "in_lead_sum": "",
     "label": "No / empty robots",
     "primary_signal": "CTR",
-    "priority": "Low",
+    "priority": "High",
     "support": "Google robots.txt spec: robots.txt should always be served, even if empty."
   },
   "schema_article_missing": {
