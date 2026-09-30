@@ -487,7 +487,7 @@ def _render_finding(row, page_no, total_pages, client_display):
             <div class="card-label">What we found</div>
             <div class="card-label right">{_html.escape(category)}</div>
           </div>
-          <ul class="wf-list">{"".join(rows_html) or f"<li><span class='wf-url'>Site-wide</span><span class='pill {_pill_class(_fallback_label(category, row.get('observation', '')))}'>{_html.escape(_fallback_label(category, row.get('observation', '')))}</span></li>"}</ul>
+          <ul class="wf-list">{"".join(rows_html) or f"<li><span class='wf-url'>Homepage</span><span class='pill {_pill_class(_fallback_label(category, row.get('observation', '')))}'>{_html.escape(_fallback_label(category, row.get('observation', '')))}</span></li>"}</ul>
         </div>
         <div class="card-col">
           <div class="card card-costs">

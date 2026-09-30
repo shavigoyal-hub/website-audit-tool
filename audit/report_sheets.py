@@ -687,6 +687,8 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             # category "Missing H1") when there are no examples, which we
             # don't want rendered as a URL row on the deck.
             labelled = []
+            _url_re = _srr_pre = __import__("re")
+            _url_pat = _url_re.compile(r"https?://\S+")
             for entry in ref.split("\n"):
                 entry = entry.strip()
                 if not entry or entry == "-":
@@ -696,8 +698,22 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                     u = u.strip(); label = label.strip()
                 else:
                     u, label = entry, default_label
-                if u.startswith("http") or u.startswith("/") or "." in u:
+                # Pull the FIRST URL out of the entry — reference lines can be
+                # 'bullet-prefixed' (• 1 /path/ page + \n + https://...) and
+                # we want the real URL, not the human bullet.
+                m_url = _url_pat.search(u)
+                if m_url:
+                    labelled.append((m_url.group(0).rstrip(".,;"), label))
+                elif u.startswith("/"):
                     labelled.append((u, label))
+            # Belt-and-braces: if the reference gave us nothing, scrape URLs
+            # from the observation text. Never fall back to "Site-wide" — CS
+            # always wants an example URL per finding.
+            if not labelled:
+                for m_url in _url_pat.finditer(r.get("observation", "") or ""):
+                    labelled.append((m_url.group(0).rstrip(".,;"), default_label))
+                    if len(labelled) >= 3:
+                        break
             found_with_labels = "\n".join(f"{u} | {lb}" for u, lb in labelled[:8])
             sheet_row = len(obs_data) + 1
             # Sanitise ctx for embedding in a formula string:
@@ -1297,7 +1313,10 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
                 # reviewer always sees a filled Impact even for manual finds.
         hook_stat,
         formula,
-        f"{url} | {pill}" if url else f"Site-wide | {pill}",
+        # Never write "Site-wide" — CS always wants a real example URL.
+        # When the chatbot adds a finding with no URL, leave a hint from
+        # the label so at least the pill still shows.
+        f"{url} | {pill}" if url else f"(no URL supplied) | {pill}",
         costs,
         support,
     ]]
