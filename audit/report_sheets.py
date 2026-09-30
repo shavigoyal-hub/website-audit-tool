@@ -650,7 +650,8 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             for pct, lbl, stat_str in scaled_picks:
                 _scaled_by_cat[lbl.lower()] = stat_str
             total_pct = round(sum(p for p, _, _ in scaled_picks), 1)
-            top = scaled_picks[:3]
+            # Show up to 4 categories inline before collapsing the rest.
+            top = scaled_picks[:4]
             more_n = len(scaled_picks) - len(top)
             terms = "  +  ".join(f"{s} {l}" for _p, l, s in top)
             if more_n > 0:
