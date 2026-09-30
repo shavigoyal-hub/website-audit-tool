@@ -111,7 +111,9 @@
 
     fetch(BASE + "/history?n=15").then(r=>r.json()).then(d=>{
       // Link the header to the /history-ui page rather than the raw Google Sheet.
-      document.getElementById("historyAll").href = "/history-ui";
+      // Under SEO Reporting the app lives at /api/audit; a bare "/history-ui"
+      // there is that tool's own (missing) page, not this one.
+      document.getElementById("historyAll").href = BASE + "/history-ui";
       const list = document.getElementById("historyList");
       if (!d.runs || !d.runs.length) return;
       d.runs.forEach(run => {
