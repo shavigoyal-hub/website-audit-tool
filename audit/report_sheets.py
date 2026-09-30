@@ -88,7 +88,15 @@ SKIP_KEYS = {"h1_long", "h1_duplicate",
              "duplicate_form_ids", "duplicate_form_id",
              "llm_http_naked_redirect", "llm_naked_domain_redirect",
              "llm_url_variants_no_redirect",
-             "llm_all_url_variants_return_200"}
+             "llm_all_url_variants_return_200",
+             # Confirmation / thank-you page indexability — user rule: skip.
+             "llm_indexable_confirmation_pages",
+             "llm_indexable_thank_you_page",
+             "llm_thank_you_page_indexable",
+             "indexable_thank_you_page",
+             "thank_you_page_indexable",
+             "indexable_confirmation_page",
+             "confirmation_page_indexable"}
 
 
 def _drop_og_findings(rows):

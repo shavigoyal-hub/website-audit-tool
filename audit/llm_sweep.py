@@ -101,7 +101,8 @@ weirdness a rule set would miss:
   - Wix/WordPress editor leftovers (copy-of-*, /services-2, /page-2)
   - Nav labels that don't match their destination URL
   - Same H1 used across many pages as a CTA line
-  - Indexable thank-you / confirmation pages
+  - (DO NOT flag indexable thank-you / confirmation pages — skipped
+    per user rule.)
   - Duplicate <form> ids on the same page
   - (DO NOT talk about /feeds/, /tags/, /categories/, /author/ pages —
     they're excluded from every audit. Never mention them.)
@@ -210,7 +211,9 @@ def evaluate(live_url):
             _lo = obs.lower()
             if ("html entit" in _lo or "&amp;" in _lo or "&#" in _lo
                     or "few internal link" in _lo or "internal linking" in _lo
-                    or "inlinks" in _lo):
+                    or "inlinks" in _lo
+                    or "thank you" in _lo or "thank-you" in _lo
+                    or "confirmation page" in _lo):
                 continue
             # Strip junk URLs from the reference list — never show a feed /
             # tag / category / author page as evidence, even if the LLM
