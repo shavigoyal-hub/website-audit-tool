@@ -651,8 +651,8 @@
   },
   "title_duplicate": {
     "costs": "Duplicate titles confuse Google about which page to rank, so none of them rank well.",
-    "hook_ctx": "ranking risk from duplicate titles. Google picks one page and hides the rest.",
-    "hook_stat": "-5%",
+    "hook_ctx": "leads lost when Google collapses duplicate titles into one URL and hides the rest.",
+    "hook_stat": "-15%",
     "in_lead_sum": "YES",
     "label": "Duplicate title",
     "primary_signal": "Lead",
@@ -711,8 +711,8 @@
   },
   "url_long": {
     "costs": "Long URLs are harder to share and look less clickable in the SERP.",
-    "hook_ctx": "SERP click-through on URLs above 115 characters.",
-    "hook_stat": "-3%",
+    "hook_ctx": "leads lost when URLs above 115 chars get truncated in SERPs.",
+    "hook_stat": "-8%",
     "in_lead_sum": "YES",
     "label": "Long URL",
     "primary_signal": "Lead",
