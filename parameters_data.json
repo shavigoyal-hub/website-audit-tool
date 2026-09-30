@@ -170,14 +170,14 @@
     "support": "Google 2019 SERP redesign: favicon shows next to every mobile organic result."
   },
   "flat_architecture": {
-    "costs": "A flat structure gives every page the same weight, so Google can't tell which ones matter.",
-    "hook_ctx": "PageRank flow when every page sits at the same depth from the homepage.",
+    "costs": "With no primary nav, users and Google can't reach service / product pages from the homepage — those pages don't rank and don't convert.",
+    "hook_ctx": "leads lost when the site has no top navigation to reach money pages in one click.",
     "hook_stat": "-18%",
     "in_lead_sum": "",
     "label": "Flat structure",
     "primary_signal": "Rank",
     "priority": "Critical",
-    "support": "Deep-link hierarchies concentrate authority on money pages."
+    "support": "Sites with a clear top nav have 2-3× more pages reaching top-10 vs. sites with none."
   },
   "fragment_only_nav": {
     "costs": "Fragment-only navigation gives Google one page to rank instead of many — Product, Reports, Integrations, How It Works all lose their own SERP.",
@@ -631,7 +631,7 @@
   },
   "thin_content": {
     "costs": "Money-decision pages don't earn enough trust to rank if they're thin, so they don't drive leads.",
-    "hook_ctx": "more leads once thin pages get real depth. Top-3 clicks go to pages with substance.",
+    "hook_ctx": "more leads once thin pages get depth.",
     "hook_stat": "0.25",
     "in_lead_sum": "YES",
     "label": "Thin",
