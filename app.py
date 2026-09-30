@@ -265,6 +265,119 @@ def build_deck():
         return jsonify({"error": traceback.format_exc()}), 500
 
 
+@app.route("/chat", methods=["POST"])
+def chat_route():
+    """Unified chatbot endpoint. LLM classifies the message → routes to
+    add-finding OR edit-parameter. Falls back to line-based append-finding
+    when no OPENAI_API_KEY is set.
+    """
+    try:
+        sheet_url = request.form.get("sheet_url", "").strip()
+        prompt = request.form.get("prompt", "").strip()
+        images_present = bool(request.files.getlist("images"))
+        if not prompt and not images_present:
+            return jsonify({"error": "prompt or image required"}), 400
+
+        from audit import chat_intent
+        intent = chat_intent.classify(prompt) if prompt else {
+            "action": "add_finding", "findings": [
+                {"url": "", "hint": "Screenshot attached — reviewer note"}]}
+
+        if intent["action"] == "edit_parameter":
+            from scripts.update_parameter import apply_edits
+            result = apply_edits(intent["edits"])
+            return jsonify({
+                "ok": bool(result.get("ok")),
+                "action": "edit_parameter",
+                "edits_applied": result.get("applied", []),
+                "message": result.get("message",
+                                       "Parameter catalog updated."),
+                "commit_url": result.get("commit_url"),
+            })
+
+        if intent["action"] == "unknown":
+            return jsonify({
+                "ok": False, "action": "unknown",
+                "message": f"Not sure what to do — {intent.get('reason', '')}. "
+                           "Rephrase, or paste 'url description' to add a "
+                           "finding, or 'change <param> <field> to <value>' "
+                           "to edit the catalog."
+            }), 400
+
+        # action == "add_finding" — reuse the legacy per-line pipeline but
+        # with LLM-decided splitting (each intent finding = one row).
+        return _do_append_findings(
+            sheet_url=sheet_url,
+            pairs=[(f["url"], f["hint"]) for f in intent["findings"]],
+            request=request,
+        )
+    except Exception:
+        return jsonify({"error": traceback.format_exc()}), 500
+
+
+def _do_append_findings(sheet_url, pairs, request):
+    """Shared append logic used by /chat and /append-finding."""
+    if not sheet_url:
+        return jsonify({"error": "sheet_url required"}), 400
+
+    image_urls = []
+    from audit.drive_upload import upload_image
+    for fs in request.files.getlist("images"):
+        content = fs.read()
+        if not content:
+            continue
+        url = upload_image(fs.filename or "screenshot.png", content,
+                            mime_type=fs.mimetype or "image/png")
+        if url:
+            image_urls.append(url)
+
+    from audit.live_check import audit_url
+    from audit.llm_frame import frame as _llm_frame
+
+    results, errors = [], []
+    for url, hint in pairs:
+        line = f"{url} {hint}".strip()
+        analysis = audit_url(url, hint) if url else {
+            "key": "", "label": (hint or "Custom")[:60], "url": "",
+            "evidence": "no URL supplied — recorded as manual note",
+            "detected": [],
+        }
+        row_label = analysis["label"]
+        row_priority = "Medium"
+        overrides = _llm_frame(url, hint)
+        if overrides:
+            analysis["framed_by"] = "llm"
+            analysis["label"] = overrides.get("label") or analysis["label"]
+            row_label = analysis["label"]
+            row_priority = overrides.get("priority") or row_priority
+            overrides.setdefault("status_label", overrides.get("label"))
+            if overrides.get("verified") is False:
+                analysis["evidence"] = "LLM couldn't verify from HTML — added on your say-so"
+        if image_urls and not results:
+            marker = "\n".join(f"IMG: {u}" for u in image_urls)
+            overrides = overrides or {}
+            overrides["support"] = ((overrides.get("support") or "") + "\n" + marker).strip()
+        row, err = report_sheets.append_finding(
+            sheet_url, url, row_label, priority=row_priority,
+            category=None, finding_key=analysis["key"],
+            overrides=overrides)
+        if err:
+            errors.append({"line": line, "error": err, "analysis": analysis})
+        else:
+            results.append({"line": line, "row": row, "analysis": analysis})
+
+    if not results and errors:
+        return jsonify({"ok": False, "errors": errors,
+                        "message": errors[0]["error"]}), 400
+    msg_bits = [f"row {r['row']}: {r['analysis']['label']} ({r['analysis']['evidence']})"
+                for r in results]
+    return jsonify({
+        "ok": True, "action": "add_finding",
+        "added": len(results), "results": results, "errors": errors,
+        "message": f"Added {len(results)} finding(s). " + "; ".join(msg_bits),
+    })
+
+
 @app.route("/append-finding", methods=["POST"])
 def append_finding_route():
     """Append manual findings to the reviewed sheet.

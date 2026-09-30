@@ -154,8 +154,8 @@
     <div id="result"></div>
 
     <div id="appendBox" style="display:none; margin-top:24px; padding-top:20px; border-top:1px dashed #e5e7eb;">
-      <label>Add findings (chatbot)</label>
-      <p class="hint">One per line. Format: <code>&lt;url&gt; &lt;description&gt;</code>. Each line is audited independently — the chatbot verifies the finding against the URL and picks the right hook copy.</p>
+      <label>Chatbot</label>
+      <p class="hint">Add findings: <code>&lt;url&gt; &lt;description&gt;</code> — the bot figures out how many findings you meant. Or edit the master catalog: <code>change duplicate title primary signal to lead</code>, <code>set favicon default priority to Medium</code>, etc.</p>
       <textarea id="appendPrompt" rows="4" style="width:100%;padding:11px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fafafa;margin-bottom:8px;font-family:inherit;resize:vertical" placeholder="https://clearwaterprocessing.com/our-services/ flat architecture&#10;https://clearwaterprocessing.com/ no top menu&#10;https://clearwaterprocessing.com/ no about page"></textarea>
       <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px">Attach screenshots (optional, shown on the finding's slide)</label>
       <input type="file" id="appendImages" accept="image/*" multiple style="font-size:12px;margin-bottom:12px" />
@@ -321,22 +321,20 @@
       const imgInput = document.getElementById("appendImages");
       const files = imgInput && imgInput.files ? Array.from(imgInput.files) : [];
       const out = document.getElementById("appendResult");
-      if (!prompt && files.length === 0) { out.style.color = "#991b1b"; out.textContent = "Enter at least one line or attach an image."; return; }
-      // Preview how many findings will land — each non-empty line is one finding.
-      const previewLines = prompt.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
-      if (previewLines.length > 1) {
-        const ok = confirm(`This will add ${previewLines.length} separate findings (one per line):\n\n${previewLines.map((l,i)=>` ${i+1}. ${l.slice(0,80)}`).join("\n")}\n\nContinue?`);
-        if (!ok) { out.style.color = "#475569"; out.textContent = "Cancelled."; return; }
-      }
-      out.style.color = "#6b7280"; out.textContent = files.length ? `Uploading ${files.length} image(s) + auditing…` : "Auditing and appending…";
+      if (!prompt && files.length === 0) { out.style.color = "#991b1b"; out.textContent = "Enter a message or attach an image."; return; }
+      out.style.color = "#6b7280"; out.textContent = files.length ? `Uploading ${files.length} image(s) + thinking…` : "Thinking…";
       try {
         const fd = new FormData();
         fd.append("sheet_url", sheetUrl);
         fd.append("prompt", prompt);
         files.forEach(f => fd.append("images", f, f.name));
-        const res = await fetch(BASE + "/append-finding", { method: "POST", body: fd });
+        const res = await fetch(BASE + "/chat", { method: "POST", body: fd });
         const data = await res.json();
-        if (data.ok) {
+        if (data.ok && data.action === "edit_parameter") {
+          out.style.color = "#166534";
+          out.innerHTML = `✓ ${data.message}<div style="margin-top:6px;color:#475569;font-size:11px">${(data.edits_applied || []).map(e => `• ${e}`).join("<br>")}</div>`;
+          document.getElementById("appendPrompt").value = "";
+        } else if (data.ok && data.action === "add_finding") {
           out.style.color = "#166534";
           const lines = (data.results || []).map(r => {
             const a = r.analysis;

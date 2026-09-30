@@ -104,6 +104,46 @@ def _git_head():
         return ""
 
 
+_LAST_SHEET_SYNC = [0.0]  # mutable box so nested fn can update it
+_SHEET_SYNC_INTERVAL_SEC = 300  # 5 min
+
+
+def _periodic_sheet_sync():
+    """Every 5 min: pull the master Parameters sheet into parameters_data.json.
+
+    Lets Vercel-side chat edits reach audits without manual git commits.
+    If the JSON changed, commit + push so the auto-restart below picks it up.
+    Silent skip if COMPOSIO_API_KEY missing or on any error.
+    """
+    now = time.time()
+    if now - _LAST_SHEET_SYNC[0] < _SHEET_SYNC_INTERVAL_SEC:
+        return
+    _LAST_SHEET_SYNC[0] = now
+    if not os.environ.get("COMPOSIO_API_KEY"):
+        return
+    try:
+        r = subprocess.run(
+            [sys.executable, "scripts/sync_parameters_from_sheet.py"],
+            timeout=60, capture_output=True, text=True)
+        if r.returncode != 0:
+            return
+        # If JSON changed, commit + push. Worker's auto-update restart will
+        # then reload it on the next poll.
+        diff = subprocess.run(["git", "diff", "--quiet", "parameters_data.json"],
+                              timeout=10)
+        if diff.returncode != 0:
+            subprocess.run(["git", "add", "parameters_data.json"],
+                            timeout=10, check=False)
+            subprocess.run(["git", "commit", "-m",
+                            "params: sync from master sheet"],
+                            timeout=15, check=False)
+            subprocess.run(["git", "push", "origin", "main"],
+                            timeout=60, check=False)
+            print("[worker] param sync: pushed sheet-side edits")
+    except Exception as exc:
+        print(f"[worker] param sync failed: {exc}")
+
+
 def _auto_update_and_maybe_restart(startup_sha):
     """Fetch origin, fast-forward if there's a new commit, restart in place.
 
@@ -159,6 +199,7 @@ def main():
         # started on, pull + re-exec so a git push is enough — no manual
         # restart. Only checked when idle (no job claimed yet) so a running
         # job never gets killed mid-pipeline.
+        _periodic_sheet_sync()
         _auto_update_and_maybe_restart(startup_sha)
 
         try:
