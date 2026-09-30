@@ -372,18 +372,24 @@ def _render_finding(row, page_no, total_pages, client_display):
         # points to which.
         arrow_m = _ure.match(r"^(.+?)\s*(?:→|->|=>)\s*(https?://\S+)$", url)
         if arrow_m:
-            src_path = _to_path(arrow_m.group(1).strip())
-            tgt_path = _to_path(arrow_m.group(2).strip())
-            display_url = (f"{_html.escape(src_path)}"
+            src_raw = arrow_m.group(1).strip()
+            tgt_raw = arrow_m.group(2).strip()
+            src_path = _to_path(src_raw)
+            tgt_path = _to_path(tgt_raw)
+            src_href = src_raw if src_raw.startswith("http") else url
+            display_url = (f"<a href='{_html.escape(src_href)}' target='_blank' rel='noopener'>{_html.escape(src_path)}</a>"
                            f"<span class='wf-arrow'>→</span>"
-                           f"<span class='wf-target'>{_html.escape(tgt_path)}</span>")
+                           f"<a class='wf-target' href='{_html.escape(tgt_raw)}' target='_blank' rel='noopener'>{_html.escape(tgt_path)}</a>")
             rows_html.append(
                 f"<li><span class='wf-url wf-2line'>{display_url}</span>"
                 f"<span class='pill {pcls}'>{_html.escape(label)}</span></li>"
             )
             continue
+        # Path stays as the display text, but the anchor href is the full URL
+        # so a click in the PDF / HTML opens the page directly.
+        href = url if url.startswith("http") else display_url
         rows_html.append(
-            f"<li><span class='wf-url'>{_html.escape(display_url)}</span>"
+            f"<li><a class='wf-url' href='{_html.escape(href)}' target='_blank' rel='noopener'>{_html.escape(display_url)}</a>"
             f"<span class='pill {pcls}'>{_html.escape(label)}</span></li>"
         )
 
@@ -773,7 +779,9 @@ html, body {
   font-size: 10.5pt; color: var(--text);
   font-family: 'JetBrains Mono', 'IBM Plex Mono', ui-monospace, Menlo, monospace;
   font-weight: 400;
+  text-decoration: none;
 }
+a.wf-url:hover { color: var(--blue); text-decoration: underline; }
 .pill {
   flex: 0 0 auto;
   display: inline-block; padding: 2px 9px; border-radius: 6px;
