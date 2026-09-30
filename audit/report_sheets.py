@@ -629,6 +629,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             # 'Increase your leads by N%' is a gain narrative.
             _picks.append((pct, label, f"+{pct:g}%"))
 
+        _scaled_by_cat = {}   # category(lower) -> scaled hook_stat, e.g. "+8.8%"
         if _picks:
             _picks.sort(key=lambda t: -t[0])
             raw_sum = sum(p for p, _, _ in _picks)
@@ -642,6 +643,12 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                     (round(p * scale, 1), lbl, f"+{round(p * scale, 1):g}%")
                     for p, lbl, _stat in _picks
                 ]
+            # Remember each category's scaled stat so the individual finding
+            # rows below can display the SAME number the intro promises.
+            # Otherwise the cover says '+8.8% Pages' but the Pages slide says
+            # '15% more leads' — inconsistent.
+            for pct, lbl, stat_str in scaled_picks:
+                _scaled_by_cat[lbl.lower()] = stat_str
             total_pct = round(sum(p for p, _, _ in scaled_picks), 1)
             top = scaled_picks[:3]
             more_n = len(scaled_picks) - len(top)
@@ -737,12 +744,16 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 f'IFERROR(TEXT(E{sheet_row},"+#.#%;-#.#%;0%")&" "&"{ctx_body}",'
                 f'E{sheet_row}&" "&"{ctx_body}"))'
             )
+            # If this category is in the intro's scaled lead-sum, use the
+            # SCALED stat so the finding slide matches the cover promise.
+            row_cat_key = (r.get("category") or "").strip().lower()
+            row_stat = _scaled_by_cat.get(row_cat_key, copy["hook_stat"])
             obs_data.append([
                 r.get("category", ""),
                 r.get("observation", ""),
                 r.get("priority", ""),
                 r.get("impact", ""),
-                _clean_stat_row(copy["hook_stat"]),
+                _clean_stat_row(row_stat),
                 hook_ctx_formula,
                 found_with_labels,      # URL | STATUS per line
                 copy["costs"],
