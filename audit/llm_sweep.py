@@ -48,12 +48,22 @@ def _strip(html):
     return html[:_MAX_HTML]
 
 
+_JUNK_URL = re.compile(
+    r"/feeds?/|/tags?/|/categor(?:y|ies)/|/page/\d+|"
+    r"[?&]paged?=|/author/|/attachment/|/wp-json/|/wp-admin/|"
+    r"/xmlrpc\.php|/wp-content/uploads/", re.I)
+
+
 def _sitemap_sample(origin):
     r = _get(origin + "/sitemap.xml", timeout=10)
     if not r or r.status_code != 200:
         return []
     urls = re.findall(r"<loc>\s*([^<\s]+)\s*</loc>", r.text or "")
-    return urls[:_MAX_SITEMAP_URLS]
+    # Never show junk URLs to the LLM as sample content (feeds/tags/etc.).
+    # Track the raw count separately so it can report 'feeds dominate sitemap'
+    # from the ratio.
+    non_junk = [u for u in urls if not _JUNK_URL.search(u)]
+    return non_junk[:_MAX_SITEMAP_URLS]
 
 
 def _pick_extra_pages(sitemap_urls, origin):
@@ -81,7 +91,8 @@ weirdness a rule set would miss:
   - HTML entities rendered literally in titles/metas (&amp;, &#039;)
   - Indexable thank-you / confirmation pages
   - Duplicate <form> ids on the same page
-  - Programmatic feeds/tags making up most of the sitemap
+  - (DO NOT talk about /feeds/, /tags/, /categories/, /author/ pages —
+    they're excluded from every audit. Never mention them.)
   - Broken image references, placeholder text, lorem ipsum
   - Content that looks AI-generated with no editing
 
@@ -182,13 +193,24 @@ def evaluate(live_url):
             obs = str(f.get("observation", "")).strip()
             if not obs:
                 continue
+            # Strip junk URLs from the reference list — never show a feed /
+            # tag / category / author page as evidence, even if the LLM
+            # mentioned it.
+            ref_raw = str(f.get("reference", "")).strip()
+            ref_lines = [ln.strip() for ln in ref_raw.split("\n") if ln.strip()]
+            ref_lines = [ln for ln in ref_lines if not _JUNK_URL.search(ln)]
+            reference = "\n".join(ref_lines) if ref_lines else "-"
+            # If a finding is *specifically about* feeds pages, drop it —
+            # the user's hard rule: never talk about feeds pages.
+            if _JUNK_URL.search(obs.lower()) or "feeds" in obs.lower():
+                continue
             findings.append({
                 "key":         key,
                 "category":    str(f.get("category", "")).strip() or "Manual review",
                 "priority":    str(f.get("priority", "Medium")).strip().title(),
                 "observation": obs,
                 "impact":      str(f.get("impact", "")).strip(),
-                "reference":   str(f.get("reference", "")).strip() or "-",
+                "reference":   reference,
             })
         print(f"[llm_sweep] {len(findings)} findings from LLM sweep")
         return findings

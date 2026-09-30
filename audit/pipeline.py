@@ -382,7 +382,15 @@ def run(live_url):
         manual_psi = stored.get("manual_psi")
 
     df_raw, _crawler_used = _get_dataframe_with_tag(live_url)
-    df = sf_csv.load_from_df(df_raw, exclude_patterns=exclude_patterns)
+    # Apply the default junk-URL excludes (feeds, tags, categories, wp-*, etc.)
+    # BEFORE anything reads the df, so PSI rep-picking and every check see the
+    # same filtered universe. Otherwise a /feeds/ URL can become the "Article"
+    # rep and end up in the LCP / Perf findings even though _apply_url_rules
+    # strips it from the sf_csv-side findings.
+    df = sf_csv.load_from_df(
+        df_raw,
+        exclude_patterns=list(exclude_patterns or []) + DEFAULT_EXCLUDE_URL_PATTERNS,
+    )
     status_num = pd.to_numeric(df.get("Status Code", pd.Series([], dtype=str)),
                                errors="coerce").fillna(0).astype(int)
     total_pages = int((sf_csv.is_html(df) & (status_num == 200)).sum())
