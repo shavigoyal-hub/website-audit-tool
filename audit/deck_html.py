@@ -427,14 +427,24 @@ def _render_finding(row, page_no, total_pages, client_display):
                 img_urls.append(proxied)
 
     # Supporting stat — big blue number, first sentence dark bold, rest muted.
-    # Rule (per CS): the Supporting Stats box carries STATS only. If support
-    # copy has no digit at all — no %, no Nx, no count — hide the block
-    # entirely instead of repeating a narrative sentence.
+    # HARD RULE (per CS): the Supporting Stats box is for a STAT, not a
+    # narrative. Support must LEAD with a number / percentage / Nx / ratio.
+    # If it starts with prose, hide the block — that narrative already lives
+    # in What It Costs You above it.
     sup_html = ""
     if support:
         import re
-        has_digit = bool(re.search(r"\d", support))
-        if has_digit:
+        # Leading-stat detector: %, decimal %, Nx, N of N, or a bare number
+        # followed by a unit word (seconds, sites, users, pages, etc.).
+        starts_with_stat = bool(re.match(
+            r"^\s*(?:[+\-]?\d+(?:[.,]\d+)?\s*(?:%|x)|"
+            r"\d+\s+of\s+\d+|"
+            r"\d[\d,]{2,}|"                                   # 1,000+ or 100+
+            r"\d+\s+(?:seconds|sec|min|hours?|days?|ms|"
+            r"sites?|users?|pages?|visitors?|clicks?|leads?|percent|out\s+of))",
+            support, re.I,
+        ))
+        if starts_with_stat:
             m = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?)\s*(.*)$", support)
             if m and m.group(1):
                 num_clean = _fmt_leading_num(m.group(1))
