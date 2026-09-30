@@ -25,16 +25,24 @@ class _MountPrefix:
     SCRIPT_NAME set, so request.script_root is "/audit" and every link the
     page builds keeps the prefix. Direct visits to this app are unchanged.
     """
-    PREFIX = "/audit"
+    # INSIDE SEO REPORTING (Shavi, 2026-09-30) this app is a Vercel Python
+    # function at /api/audit, served from the same repo and deployment as the
+    # Next.js app; /audit is kept as a redirect for older links. This list
+    # lives HERE, not in the seo-reporting copy: the sync action overwrites
+    # that copy with this file on every push, which is how the first sync
+    # (16:36) took /api/audit down with a Flask 404 on every route.
+    PREFIXES = ("/api/audit", "/audit")
 
     def __init__(self, wsgi):
         self.wsgi = wsgi
 
     def __call__(self, environ, start_response):
         path = environ.get("PATH_INFO", "") or "/"
-        if path == self.PREFIX or path.startswith(self.PREFIX + "/"):
-            environ["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + self.PREFIX
-            environ["PATH_INFO"] = path[len(self.PREFIX):] or "/"
+        for prefix in self.PREFIXES:
+            if path == prefix or path.startswith(prefix + "/"):
+                environ["SCRIPT_NAME"] = environ.get("SCRIPT_NAME", "") + prefix
+                environ["PATH_INFO"] = path[len(prefix):] or "/"
+                break
         return self.wsgi(environ, start_response)
 
 
