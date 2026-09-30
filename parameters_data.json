@@ -659,6 +659,16 @@
     "priority": "Medium",
     "support": "Google Search Central: duplicate titles cause Google to pick a non-optimal one."
   },
+  "title_duplicate_sitewide": {
+    "costs": "Duplicate homepage-title on every page pushes all inner pages out of non-branded search — the site rides on one URL only.",
+    "hook_ctx": "leads lost when every page shares the homepage title and only one URL can rank.",
+    "hook_stat": "-25%",
+    "in_lead_sum": "YES",
+    "label": "Sitewide Duplicate Titles",
+    "primary_signal": "Lead",
+    "priority": "Critical",
+    "support": "Give each page a unique, keyword-relevant title."
+  },
   "title_long": {
     "costs": "Truncated titles in search reduce click-through and rankings.",
     "hook_ctx": "CTR loss when titles get truncated in the SERP.",
