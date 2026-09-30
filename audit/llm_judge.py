@@ -266,6 +266,37 @@ def _enrich_row(row, live_url, mode, model, key):
     return _call_anthropic(prompt, model, key)
 
 
+# Canonical category names by finding key. Locks the header the LLM is
+# allowed to write for these — 'Pages' is too generic for thin content,
+# etc. Overrides the LLM's category whenever the finding key matches.
+_CANONICAL_CATEGORY = {
+    "thin_content":       "Thin Pages",
+    "near_duplicate":     "Duplicate Content",
+    "cta_missing":        "Above-Fold CTA",
+    "nav_missing":        "Site Navigation",
+    "error_404":          "404 Errors",
+    "error_404_money":    "404 on Money Pages",
+    "error_5xx":          "Server Errors",
+    "canonical_missing":  "Canonical Tags",
+    "canonical_not_self": "Canonical Tags",
+    "sitemap_missing":    "XML Sitemap",
+    "robots_missing":     "Robots.txt",
+    "robots_block":       "Robots.txt Blocking",
+    "lcp_high":           "Page Speed (LCP)",
+    "lcp_medium":         "Page Speed (LCP)",
+    "cls_high":           "Layout Shift (CLS)",
+    "perf_low":           "Page Speed",
+    "perf_moderate":      "Page Speed",
+    "structured_data":    "Schema Markup",
+    "schema_organization_missing": "Homepage Schema",
+    "title_missing":      "Title Tags",
+    "title_duplicate":    "Duplicate Titles",
+    "meta_missing":       "Meta Descriptions",
+    "meta_duplicate":     "Duplicate Meta Descriptions",
+    "h1_missing":         "Missing H1",
+}
+
+
 def _apply_judgement(row, judgement):
     if not judgement:
         return row
@@ -285,6 +316,11 @@ def _apply_judgement(row, judgement):
             v = v.strip()
         if v:
             new[k_row] = v
+    # Force canonical category for known keys — LLM tends to say 'Pages' for
+    # thin_content etc., which is too generic.
+    forced = _CANONICAL_CATEGORY.get(row.get("key"))
+    if forced:
+        new["category"] = forced
     insight = judgement.get("insight")
     if isinstance(insight, str):
         insight = insight.strip()
