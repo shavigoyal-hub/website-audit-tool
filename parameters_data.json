@@ -711,11 +711,11 @@
   },
   "url_long": {
     "costs": "Long URLs are harder to share and look less clickable in the SERP.",
-    "hook_ctx": "leads lost when URLs above 115 chars get truncated in SERPs.",
-    "hook_stat": "-8%",
-    "in_lead_sum": "YES",
+    "hook_ctx": "SERP click-through when URLs above 115 chars get truncated in results.",
+    "hook_stat": "-3%",
+    "in_lead_sum": "",
     "label": "Long URL",
-    "primary_signal": "Lead",
+    "primary_signal": "CTR",
     "priority": "Low",
     "support": "Backlinko URL study: URLs over 115 chars underperform on CTR."
   },
