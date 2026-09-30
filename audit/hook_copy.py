@@ -690,6 +690,49 @@ def _load_overrides():
 _load_overrides()
 
 
+# ── Source-citation scrubber ─────────────────────────────────────────────
+# User rule: never name a source in the deck. Strip common citation prefixes
+# ('Google 2020 field study:', 'Backlinko URL study:', 'AWR 2024:',
+# 'Web.dev CLS study:', 'Ahrefs 2023 broken-links study:', etc.) from every
+# support / costs field so the deck only shows the fact.
+def _scrub_sources():
+    import re as _re
+    # Sources we never want named in the deck. Any leading phrase that
+    # starts with one of these names + ends at ':' / '.' / ';' / '—' is
+    # stripped. Also strips whole-sentence source-only supports.
+    _SOURCE_NAMES = (
+        r"Google(?:\s+Search\s+Central)?", r"Moz", r"Backlinko",
+        r"Ahrefs", r"Semrush", r"AWR", r"Web\.dev", r"Deloitte(?:/Google)?",
+        r"HubSpot", r"Nielsen", r"Neil\s+Patel", r"Search\s+Engine\s+Journal",
+        r"Wikipedia", r"Yoast", r"Chartbeat", r"Portent",
+    )
+    src_alt = "|".join(_SOURCE_NAMES)
+    # Prefix: "<Source> <anything up to punctuation>[:;.—–-]"
+    prefix_re = _re.compile(
+        r"^\s*(?:" + src_alt + r")\b[^:;—–.\n]{0,120}[:;—–]\s*",
+        _re.I,
+    )
+    # A whole line that's only a source reference (no fact): drop it.
+    only_source_re = _re.compile(
+        r"^\s*(?:" + src_alt + r")\b[^\n]{0,120}\.?\s*$",
+        _re.I,
+    )
+    for spec in HOOK_COPY.values():
+        for fld in ("support", "costs"):
+            v = (spec.get(fld) or "").strip()
+            if not v:
+                continue
+            if only_source_re.match(v):
+                spec[fld] = ""
+                continue
+            new = prefix_re.sub("", v).strip()
+            if new and new[0].islower():
+                new = new[0].upper() + new[1:]
+            spec[fld] = new
+
+_scrub_sources()
+
+
 def for_row(key, default_obs="", default_costs="", priority=""):
     """Return dict for a given observation key, or best-effort defaults."""
     if key and key in HOOK_COPY:
