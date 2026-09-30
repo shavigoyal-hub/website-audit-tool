@@ -112,6 +112,11 @@ SKIP_KEYS = {"h1_long", "h1_duplicate",
              "thank_you_page_indexable",
              "indexable_confirmation_page",
              "confirmation_page_indexable",
+             # 'Editor leftovers' style claims on CMS-generated category /
+             # product slugs (Volusion, old ecommerce). User rule.
+             "llm_url_issues", "llm_editor_leftovers",
+             "llm_cms_slug", "llm_generated_slug",
+             "editor_leftovers", "url_issues",
              # Viewport, AI-generated content, placeholder text — user rule.
              "viewport_pinch_zoom_blocked",
              "llm_viewport_issues", "llm_viewport_pinch_zoom_blocked",

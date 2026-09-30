@@ -108,6 +108,9 @@ weirdness a rule set would miss:
   - (DO NOT flag viewport / pinch-zoom issues)
   - (DO NOT flag AI-generated content, placeholder text, or lorem ipsum)
   - (DO NOT flag broken image references or duplicate <form> ids)
+  - (DO NOT flag /category-s/N.htm, /product-s/N.htm, /category-N/ or
+    similar CMS URL patterns as 'editor leftovers' — those are normal
+    slugs for Volusion / older ecommerce platforms.)
 
 Return STRICT JSON:
 {"findings": [{"key": "<short_snake_case>", "category": "<2-4 word category>",
@@ -217,7 +220,10 @@ def evaluate(live_url):
                     or "viewport" in _lo or "pinch" in _lo
                     or "ai-generated" in _lo or "ai generated" in _lo
                     or "placeholder text" in _lo or "lorem ipsum" in _lo
-                    or "broken image" in _lo or "form id" in _lo):
+                    or "broken image" in _lo or "form id" in _lo
+                    or "editor leftover" in _lo or "editor artifact" in _lo
+                    or "category-s/" in _lo or "product-s/" in _lo
+                    or "generated slug" in _lo or "cms slug" in _lo):
                 continue
             # Strip junk URLs from the reference list — never show a feed /
             # tag / category / author page as evidence, even if the LLM
