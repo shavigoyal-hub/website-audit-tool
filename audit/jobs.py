@@ -17,7 +17,13 @@ JOBS_TAB = "Jobs"
 JOB_HEADER = ["id", "created_utc", "client", "live_url",
               "status", "worker", "started_utc", "finished_utc",
               "sheet_url", "error", "crawler", "pages",
-              "composio_calls", "psi_calls", "cost_usd"]
+              "composio_calls", "psi_calls", "cost_usd",
+              # WHO QUEUED IT (Shavi, 2026-09-30): the host the /run request
+              # came in on — "seo-reporting-five.vercel.app" when the audit
+              # was started from inside the SEO Reporting tool. That tool's
+              # Runs & history page reads this tab and shows only the rows it
+              # queued itself; the standalone deployment's audits stay off it.
+              "source"]
 
 
 def _ensure_tab(sid):
@@ -58,7 +64,7 @@ def _ensure_tab(sid):
 def _read_rows(sid):
     try:
         resp = _cx("GOOGLESHEETS_BATCH_GET", {
-            "spreadsheet_id": sid, "ranges": [f"{JOBS_TAB}!A1:O"]})
+            "spreadsheet_id": sid, "ranges": [f"{JOBS_TAB}!A1:P"]})
     except Exception as exc:
         print(f"[jobs] read: {exc}")
         return []
@@ -77,7 +83,7 @@ def _find_row(sid, job_id):
     return None
 
 
-def enqueue(client, live_url):
+def enqueue(client, live_url, source=""):
     sid = _find_sheet()
     if not sid:
         return None
@@ -92,7 +98,7 @@ def enqueue(client, live_url):
             "valueInputOption": "USER_ENTERED",
             "values": [[jid, _now(), client, live_url,
                         "pending", "", "", "", "", "",
-                        "", "", "", "", ""]],
+                        "", "", "", "", "", source or ""]],
         })
         return jid
     except Exception as exc:

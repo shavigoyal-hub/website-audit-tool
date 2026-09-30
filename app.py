@@ -125,7 +125,9 @@ def run_audit():
             }
             return jsonify(resp)
 
-        jid = jobs.enqueue(client_name, live_url)
+        # The host this request came in on, kept on the job row so the SEO
+        # Reporting tool can list the audits queued from inside it.
+        jid = jobs.enqueue(client_name, live_url, source=request.host)
         if not jid:
             return jsonify({
                 "error": "Could not enqueue job — history sheet unreachable.",
