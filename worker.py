@@ -94,6 +94,47 @@ def _reset_ghost_jobs(worker_id):
         print(f"[worker] ghost reset failed: {exc}")
 
 
+def _git_head():
+    """Current HEAD sha, or '' if this isn't a git checkout."""
+    try:
+        return subprocess.check_output(
+            ["git", "rev-parse", "HEAD"], stderr=subprocess.DEVNULL,
+            timeout=5).decode().strip()
+    except Exception:
+        return ""
+
+
+def _auto_update_and_maybe_restart(startup_sha):
+    """Fetch origin, fast-forward if there's a new commit, restart in place.
+
+    Returns True if we restarted (never returns to caller in that case).
+    Silent no-op on any error — the worker keeps running the old code.
+    """
+    if not startup_sha:
+        return False
+    try:
+        subprocess.run(["git", "fetch", "--quiet", "origin", "main"],
+                       timeout=30, check=False)
+        remote_sha = subprocess.check_output(
+            ["git", "rev-parse", "origin/main"],
+            stderr=subprocess.DEVNULL, timeout=5).decode().strip()
+    except Exception:
+        return False
+    if not remote_sha or remote_sha == startup_sha:
+        return False
+    # New commit on origin/main — pull + exec self so the fresh code runs.
+    try:
+        subprocess.run(["git", "pull", "--ff-only", "--quiet", "origin", "main"],
+                       timeout=30, check=True)
+    except Exception as exc:
+        print(f"[worker] auto-pull failed: {exc}")
+        return False
+    new_sha = _git_head()
+    print(f"[worker] new commit on main ({startup_sha[:7]} → {new_sha[:7]}); "
+          f"restarting in place…")
+    os.execv(sys.executable, [sys.executable] + sys.argv)
+
+
 def main():
     p = argparse.ArgumentParser()
     p.add_argument("--poll", type=int, default=20,
@@ -105,13 +146,21 @@ def main():
     args = p.parse_args()
 
     worker_id = socket.gethostname()
+    startup_sha = _git_head()
     to_str = f"{args.timeout}s (SIGKILL if exceeded)" if args.timeout > 0 else "off"
     print(f"[worker] {worker_id} — SF={'yes' if SF_AVAILABLE else 'no'} "
           f"— poll every {args.poll}s, per-job timeout {to_str}, "
-          f"pipeline runs in subprocess (kill-safe)")
+          f"pipeline runs in subprocess (kill-safe), "
+          f"HEAD={startup_sha[:7] or 'n/a'}")
     _reset_ghost_jobs(worker_id)
 
     while True:
+        # Every poll cycle: if origin/main has moved past what this process
+        # started on, pull + re-exec so a git push is enough — no manual
+        # restart. Only checked when idle (no job claimed yet) so a running
+        # job never gets killed mid-pipeline.
+        _auto_update_and_maybe_restart(startup_sha)
+
         try:
             job = jobs.claim_next(worker_id)
         except Exception as exc:
