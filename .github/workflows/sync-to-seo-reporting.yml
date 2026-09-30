@@ -1,0 +1,67 @@
+# KEEP THE COPY INSIDE SEO REPORTING IN STEP WITH THIS REPO (Shavi, 2026-09-30).
+#
+# seo-reporting-five (tusharkumar-web/seo-reporting) carries a complete copy
+# of this app's web layer under audit_tool/, served there as a Python
+# function at /api/audit. On every push to main here, the same files are
+# copied over and pushed to that repo's main, which deploys five. Changes are
+# made HERE, never in the copy.
+#
+# Needs one secret on this repo: SEO_REPORTING_PUSH_TOKEN — a GitHub token
+# with "Contents: read and write" on tusharkumar-web/seo-reporting.
+name: Sync audit tool into seo-reporting
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "app.py"
+      - "audit/**"
+      - "templates/**"
+      - "parameters_data.json"
+      - "requirements.txt"
+  workflow_dispatch:
+
+jobs:
+  sync:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out this repo
+        uses: actions/checkout@v4
+        with:
+          path: source
+
+      - name: Check out seo-reporting
+        uses: actions/checkout@v4
+        with:
+          repository: tusharkumar-web/seo-reporting
+          token: ${{ secrets.SEO_REPORTING_PUSH_TOKEN }}
+          path: target
+          ref: main
+
+      - name: Copy the web layer into audit_tool/
+        run: |
+          set -e
+          rm -rf target/audit_tool
+          mkdir -p target/audit_tool
+          cp source/app.py target/audit_tool/audit_web.py
+          cp -R source/audit target/audit_tool/audit
+          cp -R source/templates target/audit_tool/templates
+          cp source/parameters_data.json target/audit_tool/parameters_data.json
+          cp source/requirements.txt target/audit_tool/requirements.txt
+          cp source/requirements.txt target/requirements.txt
+          [ -f source/CSM-AUDIT-GUIDE.md ] && cp source/CSM-AUDIT-GUIDE.md target/audit_tool/CSM-AUDIT-GUIDE.md || true
+          find target/audit_tool -name "__pycache__" -type d -prune -exec rm -rf {} +
+
+      - name: Push to seo-reporting main
+        working-directory: target
+        run: |
+          set -e
+          git config user.name "audit-tool sync"
+          git config user.email "shavi.goyal@gushwork.ai"
+          git add -A audit_tool requirements.txt
+          if git diff --cached --quiet; then echo "Nothing changed in the web layer."; exit 0; fi
+          SHA="${GITHUB_SHA::7}"
+          MSG="$(git -C ../source log -1 --format=%s)"
+          git commit -m "Audit tool: sync from website-audit-tool@${SHA} — ${MSG}" \
+            -m "Copied by .github/workflows/sync-to-seo-reporting.yml in shavigoyal-hub/website-audit-tool. Change the audit there, not here."
+          git push origin HEAD:main
