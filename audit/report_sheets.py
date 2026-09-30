@@ -123,11 +123,21 @@ def _merge_findings_by_category(rows):
     """
     # Group by CANONICAL family name (H1 Tags, Meta Description, Title Tags,
     # Page Speed). Findings not in the family map stand alone.
+    # Only RULE keys listed in _CATEGORY_FAMILY are ever merged. Anything
+    # else (llm_* sweep findings, deep_analyzer findings, single rules)
+    # stands alone even when its category text happens to match another
+    # row's. Grouping by category text was the bug behind
+    # "https://www.pilotpaintingco.com/contact | Issue" appearing under
+    # the thin-pages row: llm_judge had rewritten both thin_content and an
+    # LLM sweep finding about /contact to the category "Pages", the two
+    # were merged, thin_content's reference (the evidence-tab name, not a
+    # URL) was dropped, and the sweep's /contact URL was printed under a
+    # claim about thin SEO pages.
     groups = {}
     order  = []
-    for r in rows:
+    for i, r in enumerate(rows):
         key = r.get("key", "")
-        family = _CATEGORY_FAMILY.get(key, (r.get("category") or "").strip())
+        family = _CATEGORY_FAMILY.get(key) or f"__solo_{i}"
         if family not in groups:
             order.append(family)
             groups[family] = []

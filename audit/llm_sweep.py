@@ -54,6 +54,18 @@ _JUNK_URL = re.compile(
     r"/xmlrpc\.php|/wp-content/uploads/", re.I)
 
 
+_THIN_WORDS = re.compile(
+    r"\bthin\b|word count|\b(?:little|minimal|sparse|short|not enough|lack of|"
+    r"lacks?)\s+(?:copy|content|text)|content depth|low[- ]value", re.I)
+
+
+def _is_non_seo_url(line):
+    """True when a reference line names a utility page (contact, login…)."""
+    from audit.sf_csv import NON_SEO_PATTERNS
+    low = line.lower()
+    return any(pat in low for pat in NON_SEO_PATTERNS)
+
+
 def _sitemap_sample(origin):
     r = _get(origin + "/sitemap.xml", timeout=10)
     if not r or r.status_code != 200:
@@ -199,6 +211,16 @@ def evaluate(live_url):
             ref_raw = str(f.get("reference", "")).strip()
             ref_lines = [ln.strip() for ln in ref_raw.split("\n") if ln.strip()]
             ref_lines = [ln for ln in ref_lines if not _JUNK_URL.search(ln)]
+            # Thin / low-copy observations are SEO-content findings, and
+            # those never fire on utility pages (/contact, /login, /privacy…
+            # — sf_csv.NON_SEO_PATTERNS, same rule as v46). The prompt tells
+            # the model to skip thin content, but it still reported the
+            # pilotpaintingco contact page as thin; drop such URLs here, and
+            # drop the finding when nothing else backs it.
+            if _THIN_WORDS.search(obs):
+                ref_lines = [ln for ln in ref_lines if not _is_non_seo_url(ln)]
+                if not ref_lines:
+                    continue
             reference = "\n".join(ref_lines) if ref_lines else "-"
             # If a finding is *specifically about* feeds pages, drop it —
             # the user's hard rule: never talk about feeds pages.
