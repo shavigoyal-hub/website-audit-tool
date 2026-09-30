@@ -101,13 +101,13 @@ weirdness a rule set would miss:
   - Wix/WordPress editor leftovers (copy-of-*, /services-2, /page-2)
   - Nav labels that don't match their destination URL
   - Same H1 used across many pages as a CTA line
-  - (DO NOT flag indexable thank-you / confirmation pages — skipped
-    per user rule.)
-  - Duplicate <form> ids on the same page
-  - (DO NOT talk about /feeds/, /tags/, /categories/, /author/ pages —
-    they're excluded from every audit. Never mention them.)
-  - Broken image references, placeholder text, lorem ipsum
-  - Content that looks AI-generated with no editing
+  - Sitewide duplicate titles (every page shares the homepage title —
+    verify by looking at 3-4 sampled pages, then say so with URLs)
+  - (DO NOT flag indexable thank-you / confirmation pages)
+  - (DO NOT talk about /feeds/, /tags/, /categories/, /author/ pages)
+  - (DO NOT flag viewport / pinch-zoom issues)
+  - (DO NOT flag AI-generated content, placeholder text, or lorem ipsum)
+  - (DO NOT flag broken image references or duplicate <form> ids)
 
 Return STRICT JSON:
 {"findings": [{"key": "<short_snake_case>", "category": "<2-4 word category>",
@@ -213,7 +213,11 @@ def evaluate(live_url):
                     or "few internal link" in _lo or "internal linking" in _lo
                     or "inlinks" in _lo
                     or "thank you" in _lo or "thank-you" in _lo
-                    or "confirmation page" in _lo):
+                    or "confirmation page" in _lo
+                    or "viewport" in _lo or "pinch" in _lo
+                    or "ai-generated" in _lo or "ai generated" in _lo
+                    or "placeholder text" in _lo or "lorem ipsum" in _lo
+                    or "broken image" in _lo or "form id" in _lo):
                 continue
             # Strip junk URLs from the reference list — never show a feed /
             # tag / category / author page as evidence, even if the LLM

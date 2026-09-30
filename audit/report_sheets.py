@@ -96,7 +96,14 @@ SKIP_KEYS = {"h1_long", "h1_duplicate",
              "indexable_thank_you_page",
              "thank_you_page_indexable",
              "indexable_confirmation_page",
-             "confirmation_page_indexable"}
+             "confirmation_page_indexable",
+             # Viewport, AI-generated content, placeholder text — user rule.
+             "viewport_pinch_zoom_blocked",
+             "llm_viewport_issues", "llm_viewport_pinch_zoom_blocked",
+             "llm_ai_generated_content", "llm_ai_content",
+             "ai_generated_content",
+             "llm_placeholder_text_or_lorem_ipsum",
+             "llm_lorem_ipsum", "lorem_ipsum"}
 
 
 def _drop_og_findings(rows):

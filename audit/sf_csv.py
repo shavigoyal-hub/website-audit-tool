@@ -278,9 +278,28 @@ def run_checks(df, df_full, has_images_csv):
     counts = Counter(t for t in tnorm if t.strip())
     dupset = {t for t, c in counts.items() if c > 1}
     dup_mask = tnorm.isin(dupset) if dupset else pd.Series([False] * len(df), index=df.index)
-    findings.append(_finding("title_duplicate", addr[dup_mask].tolist(),
-                             evidence=("Duplicate Titles", ["Address", "Title 1"],
-                                       _safe_loc(df, dup_mask, ["Address", "Title 1"]))))
+    # Sitewide detector: if a SINGLE title covers >=50% of SEO pages, this
+    # isn't just a duplicate-titles finding — it's 'every page has the
+    # homepage title'. Emit with title_duplicate_sitewide instead so the
+    # framer picks the Lead-focused sitewide copy from HOOK_COPY.
+    seo_count = int(seo.sum())
+    dominant = None
+    if seo_count >= 3 and counts:
+        top_title, top_n = counts.most_common(1)[0]
+        if top_n / seo_count >= 0.5:
+            dominant = top_title
+    if dominant:
+        dom_mask = seo & (title == dominant)
+        # Suppress the plain title_duplicate finding when the dominant one
+        # already covers everything — otherwise we'd emit both.
+        findings.append(_finding("title_duplicate_sitewide",
+                                 addr[dom_mask].tolist(),
+                                 evidence=("Sitewide Duplicate Title", ["Address", "Title 1"],
+                                           _safe_loc(df, dom_mask, ["Address", "Title 1"]))))
+    else:
+        findings.append(_finding("title_duplicate", addr[dup_mask].tolist(),
+                                 evidence=("Duplicate Titles", ["Address", "Title 1"],
+                                           _safe_loc(df, dup_mask, ["Address", "Title 1"]))))
 
     # Pagination rel prev/next: flag paginated pages that are missing BOTH signals
     paginated_pages = seo & is_paginated & ~addr.str.endswith("/page/1/")

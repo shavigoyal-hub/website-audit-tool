@@ -291,6 +291,7 @@ _CANONICAL_CATEGORY = {
     "schema_organization_missing": "Homepage Schema",
     "title_missing":      "Title Tags",
     "title_duplicate":    "Duplicate Titles",
+    "title_duplicate_sitewide": "Duplicate Titles",
     "meta_missing":       "Meta Descriptions",
     "meta_duplicate":     "Duplicate Meta Descriptions",
     "h1_missing":         "Missing H1",
