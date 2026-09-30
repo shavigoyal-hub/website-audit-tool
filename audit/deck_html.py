@@ -426,21 +426,26 @@ def _render_finding(row, page_no, total_pages, client_display):
             else:
                 img_urls.append(proxied)
 
-    # Supporting stat — big blue number, first sentence dark bold, rest muted
+    # Supporting stat — big blue number, first sentence dark bold, rest muted.
+    # Rule (per CS): the Supporting Stats box carries STATS only. If support
+    # copy has no digit at all — no %, no Nx, no count — hide the block
+    # entirely instead of repeating a narrative sentence.
     sup_html = ""
     if support:
         import re
-        m = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?)\s*(.*)$", support)
-        if m and m.group(1):
-            num_clean = _fmt_leading_num(m.group(1))
-            rest_hl, rest_tail = _split_headline(m.group(2))
-            sup_rest_html = f"<span class='headline'>{rest_hl}</span>"
-            if rest_tail:
-                sup_rest_html += f" {rest_tail}"
-            sup_html = (f"<span class='sup-num'>{_html.escape(num_clean)}</span>"
-                        f"<div class='sup-rest'>{sup_rest_html}</div>")
-        else:
-            sup_html = f"<div class='sup-rest'>{_html.escape(support)}</div>"
+        has_digit = bool(re.search(r"\d", support))
+        if has_digit:
+            m = re.match(r"^\s*([+\-]?\d+(?:\.\d+)?%?)\s*(.*)$", support)
+            if m and m.group(1):
+                num_clean = _fmt_leading_num(m.group(1))
+                rest_hl, rest_tail = _split_headline(m.group(2))
+                sup_rest_html = f"<span class='headline'>{rest_hl}</span>"
+                if rest_tail:
+                    sup_rest_html += f" {rest_tail}"
+                sup_html = (f"<span class='sup-num'>{_html.escape(num_clean)}</span>"
+                            f"<div class='sup-rest'>{sup_rest_html}</div>")
+            else:
+                sup_html = f"<div class='sup-rest'>{_html.escape(support)}</div>"
 
     # Empty stat: if this is a Manual / Custom row, DON'T fabricate a
     # priority-based percentage — it confuses the reader ('-8% no About
