@@ -59,7 +59,13 @@ SKIP_KEYS = {"h1_long", "h1_duplicate",
              # duplicated by other findings already.
              "title_multiple_tags", "meta_multiple_tags", "crawl_budget",
              # Evidence-only tab, never rendered as an observation
-             "redirects"}
+             "redirects",
+             # User-requested skips (2026-09-30): HTML entities and
+             # low-inlinks are not parameters we report.
+             "low_inlinks",
+             "llm_html_entities_title", "llm_html_entities",
+             "html_entities", "html_entities_in_titles",
+             "raw_html_entities_in_titles"}
 
 
 def _drop_og_findings(rows):

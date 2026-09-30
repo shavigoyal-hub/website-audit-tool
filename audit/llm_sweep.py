@@ -100,7 +100,6 @@ weirdness a rule set would miss:
   - Wix/WordPress editor leftovers (copy-of-*, /services-2, /page-2)
   - Nav labels that don't match their destination URL
   - Same H1 used across many pages as a CTA line
-  - HTML entities rendered literally in titles/metas (&amp;, &#039;)
   - Indexable thank-you / confirmation pages
   - Duplicate <form> ids on the same page
   - (DO NOT talk about /feeds/, /tags/, /categories/, /author/ pages —
@@ -204,6 +203,13 @@ def evaluate(live_url):
                 key = f"llm_{key}"
             obs = str(f.get("observation", "")).strip()
             if not obs:
+                continue
+            # User-requested skips: never emit HTML-entity or low-inlinks
+            # findings even if the model wants to.
+            _lo = obs.lower()
+            if ("html entit" in _lo or "&amp;" in _lo or "&#" in _lo
+                    or "few internal link" in _lo or "internal linking" in _lo
+                    or "inlinks" in _lo):
                 continue
             # Strip junk URLs from the reference list — never show a feed /
             # tag / category / author page as evidence, even if the LLM
