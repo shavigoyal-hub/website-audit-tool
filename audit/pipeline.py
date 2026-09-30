@@ -428,6 +428,18 @@ def run(live_url):
     except Exception as exc:
         print(f"[pipeline] deep_analyzer skipped: {exc}")
 
+    # LLM free-form sweep — catches site-specific weirdness the fixed rules
+    # miss (Wix copy-of-* pages, nav-label mismatches, HTML entities in
+    # titles, indexable TY pages, feeds sitemap ratios, etc.).
+    try:
+        from audit import llm_sweep as _sweep
+        sweep_issues = _sweep.evaluate(live_url_norm)
+        if sweep_issues:
+            print(f"[pipeline] llm_sweep emitted {len(sweep_issues)} findings")
+        site["issues"].extend(sweep_issues)
+    except Exception as exc:
+        print(f"[pipeline] llm_sweep skipped: {exc}")
+
     site_obs = [{"key": i.get("key", ""),
                  "category": i["category"], "observation": i["observation"],
                  "priority": i["priority"], "impact": i["impact"],
