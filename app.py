@@ -250,11 +250,31 @@ def build_deck():
         # a deck made inside SEO Reporting opens inside it too.
         deck_url = (request.host_url.rstrip("/") + request.script_root
                     + f"/deck?sheet={quote(sheet_url, safe=':/?&=')}")
+        # Auto-QC the sheet before shipping the deck. If it finds issues,
+        # attach them to the response so the reviewer sees them, but still
+        # return the deck URL — the reviewer can decide whether to ship.
+        qc_problems = []
+        try:
+            from scripts.qc_sheet import qc as _qc
+            from audit.report_sheets import _extract_sheet_id as _sid
+            _pid = _sid(sheet_url) or sheet_url
+            for row, cat, msg in _qc(_pid):
+                loc = f"row {row}" if row else "sheet"
+                qc_problems.append(f"{loc} [{cat}]: {msg}")
+            if qc_problems:
+                print(f"[qc] {len(qc_problems)} deck-build issues on {sheet_url}:")
+                for line in qc_problems[:20]:
+                    print(f"  {line}")
+        except Exception as exc:
+            print(f"[qc] deck QC skipped: {exc}")
+
         resp = {
             "ok": True,
             "version": VERSION,
             "deck_url": deck_url,
-            "message": f"Deck built ({len(obs_rows)} pages).",
+            "message": f"Deck built ({len(obs_rows)} pages)."
+                       + (f" · {len(qc_problems)} QC warning(s)" if qc_problems else ""),
+            "qc_problems": qc_problems,
         }
         try:
             history.update_deck(sheet_url, deck_url, "")

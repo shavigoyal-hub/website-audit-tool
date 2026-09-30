@@ -480,12 +480,27 @@ def run(live_url):
         total_pages=total_pages, total_images=total_images, meta=meta,
     )
     metrics_snap = metrics.snapshot()
+    qc_problems = []
     if sheet_url:
         try:
             history.append_run(client_name, live_url, sheet_url,
                                 metrics=metrics_snap)
         except Exception:
             pass
+        # Auto-QC the freshly-built sheet — surface issues in metrics so the
+        # worker can log them, but never fail the run (a QC hit is a sheet
+        # concern, not a pipeline crash).
+        try:
+            from scripts.qc_sheet import qc as _qc
+            from audit.report_sheets import _extract_sheet_id as _sid
+            problems = _qc(_sid(sheet_url) or sheet_url)
+            if problems:
+                qc_problems = [f"row {r}[{c}] {m}" for r, c, m in problems]
+                print(f"[qc] {len(problems)} issue(s) on new sheet:")
+                for line in qc_problems[:20]:
+                    print(f"  {line}")
+        except Exception as exc:
+            print(f"[qc] auto-QC skipped: {exc}")
     else:
         # report_sheets.build swallowed an exception into LAST_ERROR.
         # Surface it so the worker can mark the job with a real error
@@ -498,4 +513,5 @@ def run(live_url):
         "observations": len(rows),
         "client_name":  client_name,
         "crawler":      _crawler_used,
+        "qc_problems":  qc_problems,
     }
