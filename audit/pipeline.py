@@ -332,6 +332,55 @@ _CONVERSION_SKIP_KEYS = {
 }
 
 
+_VERIFY_CHECKS = {
+    # key -> callable(html) -> True if tag IS present
+    "h1_missing":    lambda h: bool(re.search(r"<h1\b[^>]*>[^<\s]", h, re.I | re.S)),
+    "title_missing": lambda h: bool(re.search(
+        r"<title[^>]*>\s*[^<\s]", h, re.I | re.S)),
+    "meta_missing":  lambda h: bool(re.search(
+        r'<meta[^>]+name=["\']description["\'][^>]+content=["\'][^"\']+',
+        h, re.I)),
+}
+
+
+def _verify_on_page(findings):
+    """Drop URLs from title/meta/h1 _missing findings when the tag is
+    actually present in fresh rendered HTML. SF reads raw HTML; JS-only
+    tags produce false positives.
+    """
+    import requests as _rq
+    _UA = {"User-Agent": "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+                          "AppleWebKit/537.36 (KHTML, like Gecko) "
+                          "Chrome/126.0.0.0 Safari/537.36"}
+    out = []
+    for f in findings:
+        key = f.get("key", "")
+        checker = _VERIFY_CHECKS.get(key)
+        if not checker:
+            out.append(f); continue
+        exs = f.get("examples") or []
+        confirmed = []
+        for url in exs:
+            # Only URLs (skip evidence-style labels)
+            if not url.startswith("http"):
+                confirmed.append(url); continue
+            try:
+                r = _rq.get(url, headers=_UA, timeout=10, allow_redirects=True)
+                if r.status_code != 200 or checker(r.text):
+                    # tag IS present now — drop from finding
+                    continue
+                confirmed.append(url)
+            except Exception:
+                confirmed.append(url)  # can't verify -> keep
+        if not confirmed:
+            continue
+        new = dict(f); new["examples"] = confirmed
+        if "count" in new:
+            new["count"] = len(confirmed)
+        out.append(new)
+    return out
+
+
 def _apply_url_rules(findings):
     """Filter finding-URL evidence per Direct-chat audit rules.
 
@@ -402,6 +451,12 @@ def run(live_url):
 
     findings = sf_csv.run_checks(df, df, has_images_csv=False)
     findings = _apply_url_rules(findings)
+    # Second-look verification for on-page findings that a JS-rendered site
+    # can defeat: title_missing, meta_missing, h1_missing. The SF crawl reads
+    # raw HTML; a page that renders those tags client-side gets a false
+    # positive. Re-fetch each flagged URL with a full browser UA and drop
+    # entries where the tag is actually present.
+    findings = _verify_on_page(findings)
     reps = sf_csv.representative_pages(df, custom_patterns=page_type_patterns)
 
     psi_live = manual_psi or pagespeed.fetch_many(reps, "mobile", psi_key)
