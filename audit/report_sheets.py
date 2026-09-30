@@ -19,6 +19,21 @@ from audit.hook_copy import STATUS_LABEL as _STATUS_LABEL
 _PRIO_RANK = {"Critical": 0, "High": 1, "Medium": 2, "Low": 3}
 
 
+def _safe_text(s):
+    """Force any string to render as plain text in Sheets — never a formula.
+
+    Empty stays empty. A leading =/+/-/@ triggers Sheets' formula parser
+    (which is where the '#ERROR!' cells came from). Apostrophe prefix
+    keeps it as text without changing what the reader sees.
+    """
+    s = "" if s is None else str(s)
+    if not s:
+        return s
+    if s[0] in "=+-@":
+        return "'" + s
+    return s
+
+
 def _clean_stat_row(s):
     """Sanitise a hook_stat so Sheets USER_ENTERED never trips into #ERROR.
 
@@ -753,14 +768,26 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 elif u.startswith("/"):
                     labelled.append((u, label))
             # Belt-and-braces: if the reference gave us nothing, scrape URLs
-            # from the observation text. Never fall back to "Site-wide" — CS
-            # always wants an example URL per finding.
+            # from the observation text.
             if not labelled:
                 for m_url in _url_pat.finditer(r.get("observation", "") or ""):
                     labelled.append((m_url.group(0).rstrip(".,;"), default_label))
                     if len(labelled) >= 3:
                         break
-            found_with_labels = "\n".join(f"{u} | {lb}" for u, lb in labelled[:8])
+            # Site-wide findings — flat architecture, nav_missing,
+            # sitemap_missing, robots_missing, etc. Don't show the homepage
+            # URL as evidence (misleading); write 'Sitewide | <label>'
+            # instead. For sitemap/about probes we DO want the tried-URLs
+            # list — those live in reference and were already picked up.
+            _SITEWIDE_KEYS = {
+                "flat_architecture", "nav_missing", "hub_subdomain",
+                "hub_linking_weak", "crawl_budget_wasted", "robots_block",
+                "robots_missing", "fragment_only_nav",
+            }
+            if key in _SITEWIDE_KEYS:
+                found_with_labels = f"Sitewide | {default_label}"
+            else:
+                found_with_labels = "\n".join(f"{u} | {lb}" for u, lb in labelled[:8])
             sheet_row = len(obs_data) + 1
             # Sanitise ctx for embedding in a formula string:
             #   - collapse newlines / CR to spaces (would end the formula)
@@ -795,8 +822,8 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 _clean_stat_row(row_stat),
                 hook_ctx_formula,
                 found_with_labels,      # URL | STATUS per line
-                copy["costs"],
-                copy["support"],
+                _safe_text(copy["costs"]),
+                _safe_text(copy["support"]),
             ])
 
         # 4 blank rows for the user to add parameters manually after the run.

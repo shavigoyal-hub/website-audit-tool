@@ -43,11 +43,23 @@ def evaluate(df, live_url):
 
     # --- Presence checks (from the crawl) ---
     has_about = bool(addr_l.str.contains(r"/about|who-we-serve|our-process|meet-the-team|/team").any())
-    (passed if has_about else issues).append(
-        "About / company page present" if has_about else _issue(
+    if has_about:
+        passed.append("About / company page present")
+    else:
+        # Show which common About-page paths we tried and their status —
+        # far clearer for CS than 'homepage | No About page'.
+        _about_paths = ["/about", "/about-us", "/about.html", "/our-company",
+                        "/who-we-are", "/company", "/team"]
+        _about_probe = []
+        for _p in _about_paths:
+            _r = _get(f"{origin}{_p}")
+            _sc = _r.status_code if _r is not None else "no response"
+            _about_probe.append(f"{origin}{_p} → {_sc}")
+        issues.append(_issue(
             "about_missing", "About / Company Page", "High",
-            "No clear About / company page found in the crawl",
-            "A missing About page weakens brand trust signals."))
+            "No About / company page — all common paths return 404",
+            "A missing About page weakens brand trust signals.",
+            reference=_about_probe))
     has_contact = bool(addr_l.str.contains(r"/contact|book-meeting|/get-in-touch|/schedule").any())
     (passed if has_contact else issues).append(
         "Contact page present" if has_contact else _issue(
@@ -94,14 +106,26 @@ def evaluate(df, live_url):
                              "A missing / empty robots.txt removes control over crawler access."))
 
     # --- XML sitemap ---
-    sm = _get(f"{origin}/sitemap.xml")
-    sm2 = sm if (sm is not None and sm.status_code == 200) else _get(f"{origin}/sitemap_index.xml")
-    if sm2 is not None and sm2.status_code == 200 and ("<urlset" in sm2.text or "<sitemapindex" in sm2.text):
+    _sm_paths = ["/sitemap.xml", "/sitemap_index.xml", "/sitemap-index.xml",
+                 "/sitemap.gz", "/sitemap1.xml"]
+    _sm_probe = []
+    _sm_found = None
+    for _p in _sm_paths:
+        _r = _get(f"{origin}{_p}")
+        _sc = _r.status_code if _r is not None else "no response"
+        _sm_probe.append(f"{origin}{_p} → {_sc}")
+        if (_r is not None and _r.status_code == 200
+                and ("<urlset" in (_r.text or "") or "<sitemapindex" in (_r.text or ""))):
+            _sm_found = _r
+            break
+    if _sm_found is not None:
         passed.append("XML sitemap found and valid")
     else:
-        issues.append(_issue("sitemap_missing", "XML Sitemap", "Critical",
-                             "No XML sitemap served at any standard path and robots.txt declares none",
-                             "Without a sitemap, Google discovers new pages up to 2x slower."))
+        issues.append(_issue(
+            "sitemap_missing", "XML Sitemap", "Critical",
+            "No XML sitemap served at any standard path",
+            "Without a sitemap, Google discovers new pages up to 2x slower.",
+            reference=_sm_probe))
 
     # --- Favicon ---
     # Detection is broad: any <link rel="...icon..."> in the homepage HTML, OR
