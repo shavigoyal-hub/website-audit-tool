@@ -437,8 +437,8 @@ def _render_finding(row, page_no, total_pages, client_display):
         # Leading-stat detector: %, decimal %, Nx, N of N, or a bare number
         # followed by a unit word (seconds, sites, users, pages, etc.).
         starts_with_stat = bool(re.match(
-            r"^\s*(?:[+\-]?\d+(?:[.,]\d+)?\s*(?:%|x)|"
-            r"\d+\s+of\s+\d+|"
+            r"^\s*(?:[+\-]?\d+(?:[.,-]\d+)?\s*(?:%|x)|"
+            r"\d+\s+of\s+\d+|only\s+\d+\s+of\s+\d+|"
             r"\d[\d,]{2,}|"                                   # 1,000+ or 100+
             r"\d+\s+(?:seconds|sec|min|hours?|days?|ms|"
             r"sites?|users?|pages?|visitors?|clicks?|leads?|percent|out\s+of))",
