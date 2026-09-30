@@ -1031,6 +1031,11 @@ def read_for_deck(sheet_url_or_id):
         # when a formula fails. Never let those reach the deck.
         if v.startswith("#") and v.endswith("!") and 4 <= len(v) <= 12:
             return ""
+        # Strip leading apostrophe (Sheets text-mode marker). We prefix
+        # certain writes with ' to force text render (percentages that
+        # otherwise get rounded); the API returns that ' verbatim.
+        if v.startswith("'"):
+            v = v[1:]
         return v
 
     # Assemble slides: intro (from Slide Review or first Observations row)
