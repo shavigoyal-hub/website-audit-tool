@@ -42,14 +42,36 @@ def evaluate(df, live_url):
     addr_l = addr.str.lower()
 
     # --- Presence checks (from the crawl) ---
-    has_about = bool(addr_l.str.contains(r"/about|who-we-serve|our-process|meet-the-team|/team").any())
+    has_about = bool(addr_l.str.contains(
+        r"about|who-we-serve|our-process|meet-the-team|/team|our-story|company",
+        regex=True).any())
+    # Fallback: crawl might have missed the URL. Also check the homepage's
+    # own anchor list and probe a wider set of paths.
+    if not has_about:
+        try:
+            _hp = _get(f"{origin}/")
+            _hp_text = (_hp.text or "").lower() if _hp and _hp.status_code == 200 else ""
+            if re.search(r'href=["\'][^"\']*(?:about|our-story|our-company|who-we-are)[^"\']*["\']', _hp_text):
+                has_about = True
+        except Exception:
+            pass
+    if not has_about:
+        # Probe wider set including .asp/.htm/.php that older sites use
+        for _p in ["/about", "/about-us", "/about.html", "/aboutus.asp",
+                   "/aboutus.php", "/aboutus.htm", "/our-story", "/our-company",
+                   "/who-we-are", "/company", "/team"]:
+            _r = _get(f"{origin}{_p}")
+            if _r is not None and _r.status_code == 200:
+                has_about = True
+                break
     if has_about:
         passed.append("About / company page present")
     else:
         # Show which common About-page paths we tried and their status —
-        # far clearer for CS than 'homepage | No About page'.
-        _about_paths = ["/about", "/about-us", "/about.html", "/our-company",
-                        "/who-we-are", "/company", "/team"]
+        # clearer for CS than 'homepage | No About page'.
+        _about_paths = ["/about", "/about-us", "/about.html", "/aboutus.asp",
+                        "/aboutus.php", "/our-company", "/who-we-are",
+                        "/company", "/team", "/our-story"]
         _about_probe = []
         for _p in _about_paths:
             _r = _get(f"{origin}{_p}")
@@ -57,14 +79,32 @@ def evaluate(df, live_url):
             _about_probe.append(f"{origin}{_p} → {_sc}")
         issues.append(_issue(
             "about_missing", "About / Company Page", "High",
-            "No About / company page — all common paths return 404",
+            "No About / company page — all common paths return 404 and no homepage link points to one",
             "A missing About page weakens brand trust signals.",
             reference=_about_probe))
-    has_contact = bool(addr_l.str.contains(r"/contact|book-meeting|/get-in-touch|/schedule").any())
+    has_contact = bool(addr_l.str.contains(
+        r"contact|book-meeting|/get-in-touch|/schedule|reach-us|get-a-quote",
+        regex=True).any())
+    if not has_contact:
+        try:
+            _hp2 = _get(f"{origin}/")
+            _hp2_text = (_hp2.text or "").lower() if _hp2 and _hp2.status_code == 200 else ""
+            if re.search(r'href=["\'][^"\']*(?:contact|get-in-touch|reach-us|get-a-quote)[^"\']*["\']', _hp2_text):
+                has_contact = True
+        except Exception:
+            pass
+    if not has_contact:
+        for _p in ["/contact", "/contact-us", "/contact.html",
+                   "/contactus.asp", "/contactus.php", "/contactus.htm",
+                   "/get-in-touch", "/reach-us"]:
+            _r = _get(f"{origin}{_p}")
+            if _r is not None and _r.status_code == 200:
+                has_contact = True
+                break
     (passed if has_contact else issues).append(
         "Contact page present" if has_contact else _issue(
             "contact_missing", "Contact Page", "High",
-            "No contact / booking page found in the crawl",
+            "No contact / booking page — neither crawled nor probed at common paths, and no homepage link points to one",
             "A missing contact path reduces conversions and local SEO."))
 
     # --- Crawl budget (share of redirects / errors / non-indexable) ---

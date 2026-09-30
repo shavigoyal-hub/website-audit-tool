@@ -759,9 +759,13 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                     u = u.strip(); label = label.strip()
                 else:
                     u, label = entry, default_label
-                # Pull the FIRST URL out of the entry — reference lines can be
-                # 'bullet-prefixed' (• 1 /path/ page + \n + https://...) and
-                # we want the real URL, not the human bullet.
+                # Canonical/redirect findings ship 'src → target' — preserve
+                # the arrow so the deck can render both. Otherwise pull the
+                # FIRST URL out of the entry.
+                arrow = _url_re.search(r"(https?://\S+)\s*(?:→|->|=>)\s*(https?://\S+)", u)
+                if arrow:
+                    labelled.append((f"{arrow.group(1).rstrip('.,;')} → {arrow.group(2).rstrip('.,;')}", label))
+                    continue
                 m_url = _url_pat.search(u)
                 if m_url:
                     labelled.append((m_url.group(0).rstrip(".,;"), label))
