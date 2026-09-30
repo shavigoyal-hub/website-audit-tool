@@ -246,12 +246,12 @@ def run_checks(df, df_full, has_images_csv):
     # Titles
     title = _col(df, "Title 1")
     tlen = _num(df, "Title 1 Length").fillna(0)
-    long_title = ok & (tlen > 80)
+    long_title = seo & (tlen > 80)
     findings.append(_finding("title_long",
                              [f"{u}: {t}" for u, t in zip(addr[long_title], title[long_title])],
                              evidence=("Long Titles", ["Address", "Title 1", "Title 1 Length"],
                                        _safe_loc(df, long_title, ["Address", "Title 1", "Title 1 Length"]))))
-    findings.append(_finding("title_missing", addr[ok & (title.str.strip() == "")].tolist()))
+    findings.append(_finding("title_missing", addr[seo & (title.str.strip() == "")].tolist()))
     # short title (<30 chars, excluding empty) on SEO pages
     findings.append(_finding("title_short", addr[seo & (tlen > 0) & (tlen < 30)].tolist()))
     # keyword-stuffed: 3+ pipe separators OR a token repeated 3+ times
@@ -260,7 +260,7 @@ def run_checks(df, df_full, has_images_csv):
             return True
         toks = [w for w in re.findall(r"[a-z]{4,}", t.lower())]
         return any(c >= 3 for c in Counter(toks).values())
-    ks = ok & title.map(stuffed)
+    ks = seo & title.map(stuffed)
     findings.append(_finding("title_stuffed",
                              [f"{u}: {t}" for u, t in zip(addr[ks], title[ks])]))
     # duplicate titles: pages sharing the same <title> excluding paginated URLs
@@ -274,7 +274,7 @@ def run_checks(df, df_full, has_images_csv):
         | (rel_next.str.strip() != "")
         | (rel_prev.str.strip() != "")
     )
-    tnorm = title.where(ok & ~is_paginated, "")
+    tnorm = title.where(seo & ~is_paginated, "")
     counts = Counter(t for t in tnorm if t.strip())
     dupset = {t for t, c in counts.items() if c > 1}
     dup_mask = tnorm.isin(dupset) if dupset else pd.Series([False] * len(df), index=df.index)
@@ -283,7 +283,7 @@ def run_checks(df, df_full, has_images_csv):
                                        _safe_loc(df, dup_mask, ["Address", "Title 1"]))))
 
     # Pagination rel prev/next: flag paginated pages that are missing BOTH signals
-    paginated_pages = ok & is_paginated & ~addr.str.endswith("/page/1/")
+    paginated_pages = seo & is_paginated & ~addr.str.endswith("/page/1/")
     missing_pagination_signals = paginated_pages & (rel_next.str.strip() == "") & (rel_prev.str.strip() == "")
     findings.append(_finding("pagination_no_rel",
                              addr[missing_pagination_signals].tolist(),
@@ -293,15 +293,15 @@ def run_checks(df, df_full, has_images_csv):
     # Meta description
     md = _col(df, "Meta Description 1")
     mdlen = _num(df, "Meta Description 1 Length").fillna(0)
-    findings.append(_finding("meta_long", addr[ok & (mdlen > 200)].tolist()))
-    findings.append(_finding("meta_missing", addr[ok & (md.str.strip() == "")].tolist()))
+    findings.append(_finding("meta_long", addr[seo & (mdlen > 200)].tolist()))
+    findings.append(_finding("meta_missing", addr[seo & (md.str.strip() == "")].tolist()))
     # Meta description length: split into two buckets.
     # 'meta_fragment' — 1-30 chars — those aren't descriptions, they're stubs.
     # 'meta_short'    — 30-70 chars — under-uses snippet real estate.
     findings.append(_finding("meta_fragment", addr[seo & (mdlen > 0) & (mdlen <= 30)].tolist()))
     findings.append(_finding("meta_short",    addr[seo & (mdlen > 30) & (mdlen < 70)].tolist()))
     # duplicate meta descriptions across pages
-    mdnorm = md.where(ok & (mdlen > 0), "")
+    mdnorm = md.where(seo & (mdlen > 0), "")
     md_counts = Counter(m for m in mdnorm if m.strip())
     md_dupset = {m for m, c in md_counts.items() if c > 1}
     md_dup_mask = mdnorm.isin(md_dupset) if md_dupset else pd.Series([False] * len(df), index=df.index)
@@ -309,11 +309,11 @@ def run_checks(df, df_full, has_images_csv):
 
     # H1
     h1 = _col(df, "H1-1")
-    miss_h1 = ok & (h1.str.strip() == "")
+    miss_h1 = seo & (h1.str.strip() == "")
     findings.append(_finding("h1_missing", addr[miss_h1].tolist(),
                              evidence=("Missing H1", ["Address"], [[u] for u in addr[miss_h1]])))
     h12 = _col(df, "H1-2")
-    findings.append(_finding("h1_multiple", addr[ok & (h12.str.strip() != "")].tolist()))
+    findings.append(_finding("h1_multiple", addr[seo & (h12.str.strip() != "")].tolist()))
     # H1 length + duplicate H1 (SEO pages)
     h1len = _num(df, "H1-1 Length").fillna(0)
     findings.append(_finding("h1_long", addr[seo & (h1len > 70)].tolist()))
@@ -348,7 +348,7 @@ def run_checks(df, df_full, has_images_csv):
 
     # Near duplicates
     nd = _num(df, "No. Near Duplicates").fillna(0)
-    near = ok & (nd > 0)
+    near = seo & (nd > 0)
     findings.append(_finding("near_duplicate", addr[near].tolist(),
                              evidence=("Near Duplicates",
                                        ["Address", "No. Near Duplicates", "Closest Near Duplicate Match"],
@@ -365,12 +365,12 @@ def run_checks(df, df_full, has_images_csv):
 
     # Carbon
     carbon = _col(df, "Carbon Rating").str.upper()
-    findings.append(_finding("high_carbon", addr[ok & carbon.isin(["E", "F"])].tolist()))
+    findings.append(_finding("high_carbon", addr[seo & carbon.isin(["E", "F"])].tolist()))
 
     # Missing canonical
     canon = _col(df, "Canonical Link Element 1")
     addr_col = _col(df, "Address")
-    findings.append(_finding("canonical_missing", addr[ok & (canon.str.strip() == "")].tolist()))
+    findings.append(_finding("canonical_missing", addr[seo & (canon.str.strip() == "")].tolist()))
 
     # Canonical not self-referencing: canonical is set but points to a different URL.
     # Use html_200 (not ok) because the page being checked is Non-Indexable
@@ -392,7 +392,7 @@ def run_checks(df, df_full, has_images_csv):
     # Spelling / grammar
     sp = _num(df, "Spelling Errors").fillna(0)
     gr = _num(df, "Grammar Errors").fillna(0)
-    findings.append(_finding("spelling_grammar", addr[ok & ((sp > 0) | (gr > 0))].tolist()))
+    findings.append(_finding("spelling_grammar", addr[seo & ((sp > 0) | (gr > 0))].tolist()))
 
     # JS-dependent rendering (only when SF was crawled in JavaScript mode)
     # Fires when raw HTML has almost no text but rendered version has full content,
@@ -400,18 +400,18 @@ def run_checks(df, df_full, has_images_csv):
     rend_wc = _num(df, "Rendered Word Count")
     if rend_wc.notna().any():
         rend_wc_f = rend_wc.fillna(0)
-        js_dep = ok & (wc < 100) & (rend_wc_f > 200)
+        js_dep = seo & (wc < 100) & (rend_wc_f > 200)
         findings.append(_finding("render_js_dependent", addr[js_dep].tolist()))
 
     # Multiple <title> tags on the same page (SF exports Title 2 when > 1 found)
     if "Title 2" in df.columns:
         title2 = _col(df, "Title 2")
-        findings.append(_finding("title_multiple_tags", addr[ok & (title2.str.strip() != "")].tolist()))
+        findings.append(_finding("title_multiple_tags", addr[seo & (title2.str.strip() != "")].tolist()))
 
     # Multiple <meta name="description"> on the same page
     if "Meta Description 2" in df.columns:
         md2 = _col(df, "Meta Description 2")
-        findings.append(_finding("meta_multiple_tags", addr[ok & (md2.str.strip() != "")].tolist()))
+        findings.append(_finding("meta_multiple_tags", addr[seo & (md2.str.strip() != "")].tolist()))
 
     # Low inlinks (orphan-like pages): SEO pages with 0 or 1 inlink
     inlinks = _num(df, "Inlinks").fillna(-1)
