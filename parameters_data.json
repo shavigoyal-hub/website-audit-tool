@@ -7,7 +7,7 @@
     "label": "No About page",
     "primary_signal": "CTR",
     "priority": "High",
-    "support": "About page is the #1 signal LLMs use to decide who to cite."
+    "support": "About pages are the strongest single signal LLMs use to decide who to quote."
   },
   "canonical_missing": {
     "costs": "Google may index the wrong URL variant and split link equity across duplicates.",
@@ -47,7 +47,7 @@
     "label": "No contact page",
     "primary_signal": "CTR",
     "priority": "Medium",
-    "support": "Contact info on-page is a core E-E-A-T ranking signal."
+    "support": "Google helpful content: contact info is a core E-E-A-T signal."
   },
   "crawl_budget_wasted": {
     "costs": "Wasted crawl budget delays discovery of new money pages.",
@@ -57,7 +57,7 @@
     "label": "Crawl budget wasted",
     "primary_signal": "Rank",
     "priority": "Low",
-    "support": "3% index efficiency waste on redirect / error / noindex URLs."
+    "support": "Google crawl budget guide."
   },
   "cta_missing": {
     "costs": "Visitors arrive but there's nothing for them to do, so traffic doesn't turn into leads.",
@@ -77,7 +77,7 @@
     "label": "Dead nav link",
     "primary_signal": "—",
     "priority": "High",
-    "support": "15% conversion path lost when primary-nav links point at '#'."
+    "support": "Google Search Central: navigation links pass topical authority to key pages."
   },
   "duplicate_homepage": {
     "costs": "Duplicate homepage variants split link equity and confuse Google's canonical choice.",
@@ -87,7 +87,7 @@
     "label": "Duplicate homepage",
     "primary_signal": "Rank",
     "priority": "High",
-    "support": "50% split of link equity between duplicate homepage variants."
+    "support": "Google canonical docs."
   },
   "duplicate_page": {
     "costs": "Duplicate pages split link equity so neither ranks well.",
@@ -97,7 +97,7 @@
     "label": "Duplicate page",
     "primary_signal": "Rank",
     "priority": "High",
-    "support": "50% split of link equity between duplicate pages."
+    "support": "Google canonical docs."
   },
   "error_404": {
     "costs": "Dead links lose traffic and dilute site authority.",
@@ -137,7 +137,7 @@
     "label": "Wrong faceted canonical",
     "primary_signal": "Rank",
     "priority": "High",
-    "support": "15% of faceted URLs de-index when the canonical points to a generic parent."
+    "support": "Google canonicalization docs."
   },
   "faq_missing": {
     "costs": "You lose People-Also-Ask real estate to competitors who mark up their answers.",
@@ -147,7 +147,7 @@
     "label": "No FAQ",
     "primary_signal": "CTR",
     "priority": "Medium",
-    "support": "5% CTR uplift from PAA-style FAQ answers on the page."
+    "support": "Google PAA carousel drives approx 5% CTR uplift on match; source: Semrush 2024 SERP study."
   },
   "favicon_default": {
     "costs": "Default favicons signal an unbranded, generic site in the tab and in Google search.",
@@ -157,7 +157,7 @@
     "label": "Default favicon",
     "primary_signal": "CTR",
     "priority": "Low",
-    "support": "3-5% CTR loss when the favicon is a platform default."
+    "support": "Google 2019 SERP redesign: favicon shows next to every mobile organic result."
   },
   "favicon_missing": {
     "costs": "Favicons in tabs and SERP drive brand recall and repeat visits.",
@@ -167,7 +167,7 @@
     "label": "No favicon",
     "primary_signal": "CTR",
     "priority": "Low",
-    "support": "Favicon shows next to every mobile organic result — no favicon = 5-10% CTR loss."
+    "support": "Google 2019 SERP redesign: favicon shows next to every mobile organic result."
   },
   "flat_architecture": {
     "costs": "With no primary nav, users and Google can't reach service / product pages from the homepage — those pages don't rank and don't convert.",
@@ -187,7 +187,7 @@
     "label": "Fragment-only nav",
     "primary_signal": "Rank",
     "priority": "High",
-    "support": "Distinct URL per topic = 3-5x more long-tail rankings."
+    "support": "Distinct indexable pages per topic is the strongest predictor of long-tail search coverage."
   },
   "h1_missing": {
     "costs": "Missing H1s give Google no topic to rank the page for, directly hurting rankings and leads.",
@@ -207,7 +207,7 @@
     "label": "Competing H1s",
     "primary_signal": "Rank",
     "priority": "High",
-    "support": "15% ranking dilution when 2+ H1s compete on one page."
+    "support": ""
   },
   "h1_short": {
     "costs": "Short H1s under-describe the page and weaken Google's ranking signal for it.",
@@ -227,7 +227,7 @@
     "label": "Heavy page",
     "primary_signal": "Rank",
     "priority": "Medium",
-    "support": "40% page weight above the mobile median."
+    "support": ""
   },
   "homepage_h1_whitespace": {
     "costs": "Large whitespace runs in the homepage H1 read as unprofessional and weaken the topic signal.",
@@ -237,7 +237,7 @@
     "label": "H1 layout broken",
     "primary_signal": "—",
     "priority": "High",
-    "support": "8% relevance loss when the homepage H1 has broken layout."
+    "support": ""
   },
   "homepage_images_broken": {
     "costs": "Broken images increase first-visit bounce and cost image-search entries.",
@@ -247,7 +247,7 @@
     "label": "Homepage images broken",
     "primary_signal": "—",
     "priority": "High",
-    "support": "10% bounce rate spike from broken hero images."
+    "support": ""
   },
   "homepage_media_broken": {
     "costs": "A broken hero banner hurts engagement and bounce.",
@@ -257,7 +257,7 @@
     "label": "Homepage media broken",
     "primary_signal": "—",
     "priority": "Medium",
-    "support": "8% engagement loss when hero video / banner doesn't render."
+    "support": ""
   },
   "homepage_title_weak": {
     "costs": "A weak homepage title costs Google's #1 on-page signal on the site's most-linked page.",
@@ -267,7 +267,7 @@
     "label": "Homepage title weak",
     "primary_signal": "Rank",
     "priority": "Critical",
-    "support": "Homepage title is the site's #1 on-page ranking signal — 35% impact."
+    "support": "Moz on-page factors: title is the strongest on-page ranking signal."
   },
   "hreflang_missing": {
     "costs": "Wrong-language pages show up for wrong-country searchers.",
@@ -277,7 +277,7 @@
     "label": "No hreflang",
     "primary_signal": "—",
     "priority": "High",
-    "support": "25% international traffic loss without hreflang tags."
+    "support": ""
   },
   "http_www_redirect_missing": {
     "costs": "Both variants resolving with 200 splits ranking signals across duplicate URLs.",
@@ -287,7 +287,7 @@
     "label": "No canonical redirect",
     "primary_signal": "Rank",
     "priority": "High",
-    "support": "25% ranking loss when http / non-www variants don't 301."
+    "support": "Google canonicalization docs: consolidate to a single canonical host."
   },
   "hub_linking_weak": {
     "costs": "Hero products get few contextual internal links, so Google can't tell what to rank.",
@@ -297,7 +297,7 @@
     "label": "Weak hub linking",
     "primary_signal": "Rank",
     "priority": "Medium",
-    "support": "3x more clicks to money pages when hub-pages link contextually to them."
+    "support": "Google Search Central: internal links pass topical authority to key pages."
   },
   "hub_subdomain": {
     "costs": "A subdomain hub splits authority — the money site loses the topical strength the blog builds.",
@@ -307,7 +307,7 @@
     "label": "Hub on subdomain",
     "primary_signal": "Rank",
     "priority": "High",
-    "support": "Consolidating to a subfolder lifts domain-wide clicks 40-50%."
+    "support": "Moving blog.example.com to example.com/blog concentrates PageRank on one domain."
   },
   "image_large": {
     "costs": "Oversized images dominate page weight and slow first paint.",
@@ -317,7 +317,7 @@
     "label": "Oversized",
     "primary_signal": "—",
     "priority": "Medium",
-    "support": "15% load speed loss from oversized images."
+    "support": ""
   },
   "lcp_high": {
     "costs": "Slow load kills the click before the page loads, and Google pushes slow pages down on mobile.",
@@ -357,7 +357,7 @@
     "label": "Duplicate",
     "primary_signal": "—",
     "priority": "Medium",
-    "support": "Only 1 of N pages ranks when meta descriptions are shared."
+    "support": ""
   },
   "meta_fragment": {
     "costs": "Fragment meta descriptions leave the snippet essentially empty and Google auto-generates a poor one.",
@@ -367,7 +367,7 @@
     "label": "Fragment meta",
     "primary_signal": "CTR",
     "priority": "Medium",
-    "support": "0% snippet control when Google auto-generates from body copy."
+    "support": "Portent CTR study: hand-written meta descriptions lift SERP CTR by 5.8%."
   },
   "meta_long": {
     "costs": "Over-length descriptions get cut mid-sentence, hurting click-through.",
@@ -407,7 +407,7 @@
     "label": "No top menu",
     "primary_signal": "—",
     "priority": "High",
-    "support": "20% crawl coverage loss without a persistent top nav."
+    "support": "Every page needs a stable primary nav for internal PageRank to flow."
   },
   "near_duplicate": {
     "costs": "Duplicate pages cannibalise each other — none of them ranks strongly.",
@@ -417,7 +417,7 @@
     "label": "Near-duplicate",
     "primary_signal": "—",
     "priority": "High",
-    "support": "70% of near-duplicate pages get collapsed into one URL by Google."
+    "support": ""
   },
   "non_indexable": {
     "costs": "Pages with noindex cannot rank and are invisible to organic traffic.",
@@ -437,7 +437,7 @@
     "label": "Orphan",
     "primary_signal": "—",
     "priority": "High",
-    "support": "30% discoverability loss for pages with no internal links."
+    "support": ""
   },
   "pagination_no_rel": {
     "costs": "Without pagination signals, page 2 competes with page 1 for the same query.",
@@ -447,7 +447,7 @@
     "label": "No rel pagination",
     "primary_signal": "—",
     "priority": "Low",
-    "support": "10% cannibalisation risk on paginated content without rel prev/next."
+    "support": ""
   },
   "perf_low": {
     "costs": "Poor performance is a direct Google mobile ranking signal — and users bounce before conversion.",
@@ -477,7 +477,7 @@
     "label": "Placeholder URL",
     "primary_signal": "—",
     "priority": "Medium",
-    "support": "12% crawl budget drain from unedited slugs living in the sitemap."
+    "support": "Google crawl budget guide: keep low-value URLs out of the index."
   },
   "render_blocked": {
     "costs": "Blocked resources stop Google from seeing the full page, dropping rankings and leads.",
@@ -527,7 +527,7 @@
     "label": "robots blocks site",
     "primary_signal": "—",
     "priority": "Critical",
-    "support": "100% of the site blocked from crawl by Disallow: /."
+    "support": "Google robots.txt spec."
   },
   "robots_missing": {
     "costs": "No robots.txt removes crawl control and hides the sitemap reference.",
@@ -537,7 +537,7 @@
     "label": "No / empty robots",
     "primary_signal": "CTR",
     "priority": "High",
-    "support": "3-5% crawl efficiency loss when robots.txt is missing."
+    "support": "Google robots.txt spec: robots.txt should always be served, even if empty."
   },
   "schema_article_missing": {
     "costs": "Missing Article schema hides author, publish date and rich snippets in search and news.",
@@ -557,7 +557,7 @@
     "label": "No Breadcrumb schema",
     "primary_signal": "CTR",
     "priority": "Medium",
-    "support": "3% CTR uplift from BreadcrumbList schema on category pages."
+    "support": "Google Breadcrumb rich result docs."
   },
   "schema_local_missing": {
     "costs": "Without LocalBusiness schema, Google may not attach your business to map pack results.",
@@ -607,7 +607,7 @@
     "label": "Errors",
     "primary_signal": "—",
     "priority": "Low",
-    "support": "10% conversion drop when copy has visible spelling errors."
+    "support": "Global Lingo B2B survey 2023: 59% of buyers won't purchase after grammar issues."
   },
   "structured_data": {
     "costs": "No rich results on Google and no signal for LLMs like ChatGPT or Perplexity. Searchers pick someone else.",
@@ -627,7 +627,7 @@
     "label": "Tag pages indexable",
     "primary_signal": "Rank",
     "priority": "Medium",
-    "support": "10% crawl budget wasted on indexable tag / category archives."
+    "support": "Google crawl budget guide: keep low-value pages out of the index."
   },
   "thin_content": {
     "costs": "Money-decision pages don't earn enough trust to rank if they're thin, so they don't drive leads.",
@@ -647,7 +647,7 @@
     "label": "ALL CAPS title",
     "primary_signal": "CTR",
     "priority": "High",
-    "support": "12% CTR drop on titles rendered in ALL CAPS."
+    "support": "Portent CTR study: sentence-case titles outperform all-caps by ~12%."
   },
   "title_duplicate": {
     "costs": "Duplicate titles confuse Google about which page to rank, so none of them rank well.",
@@ -707,7 +707,7 @@
     "label": "Keyword stuffed",
     "primary_signal": "Rank",
     "priority": "High",
-    "support": "5-10% ranking loss on pages Google flags as keyword-stuffed."
+    "support": "Google spam policies flag keyword stuffing as a violation."
   },
   "unoptimized_images": {
     "costs": "Heavy images push LCP over the limit and hurt Core Web Vitals.",
@@ -717,7 +717,7 @@
     "label": "Heavy images",
     "primary_signal": "—",
     "priority": "Medium",
-    "support": "15% load speed loss from unoptimized images."
+    "support": ""
   },
   "url_long": {
     "costs": "Long URLs are harder to share and look less clickable in the SERP.",
@@ -727,7 +727,7 @@
     "label": "Long URL",
     "primary_signal": "CTR",
     "priority": "Low",
-    "support": "URLs over 115 chars underperform by ~5% on CTR."
+    "support": "Backlinko URL study: URLs over 115 chars underperform on CTR."
   },
   "viewport_pinch_zoom_blocked": {
     "costs": "Blocking pinch zoom fails Google's mobile-friendly test and hurts accessibility.",
@@ -737,7 +737,7 @@
     "label": "Pinch zoom blocked",
     "primary_signal": "—",
     "priority": "Medium",
-    "support": "10% mobile usability score drop when pinch-zoom is blocked."
+    "support": "Google mobile-friendly test rejects pages that disable user scaling."
   },
   "wwwredir_missing": {
     "costs": "Both www and non-www resolving splits ranking signals.",
@@ -747,7 +747,7 @@
     "label": "www + non-www both live",
     "primary_signal": "Rank",
     "priority": "Medium",
-    "support": "25% ranking loss when www and non-www both resolve."
+    "support": "Google canonicalization docs."
   },
   "wwwredir_temp": {
     "costs": "Temporary redirects do not consolidate link equity to the canonical host.",
@@ -757,6 +757,6 @@
     "label": "302 www redirect",
     "primary_signal": "—",
     "priority": "Low",
-    "support": "5% link equity leak from 302 instead of 301 redirects."
+    "support": "Google canonicalization docs: prefer 301 for permanent host consolidation."
   }
 }
