@@ -23,8 +23,10 @@ def _clean_stat_row(s):
     """Sanitise a hook_stat so Sheets USER_ENTERED never trips into #ERROR.
 
     Accepts:  '-15%', '+32.3%', '5%', '9x', '0'   (parsed cleanly)
-    Anything else gets an apostrophe prefix which forces Sheets to
-    render it verbatim as text.
+    Also accepts bare decimals like '0.25' → converted to '+25%' so
+    Sheets stores a real percentage. parameters_data.json (synced from the
+    master sheet) can carry decimals when the sheet cell was formatted as %.
+    Anything else gets an apostrophe prefix which forces text render.
     """
     import re as _rss
     s = (s or "").strip()
@@ -34,6 +36,15 @@ def _clean_stat_row(s):
     m = _rss.match(r"^(\d+x|\d+)$", s)
     if m:
         return m.group(1)
+    # Bare decimal → treat as fraction and format as %
+    try:
+        v = float(s)
+        if abs(v) <= 1.5:
+            pct = round(v * 100, 1)
+            sign = "+" if pct >= 0 else "-"
+            return f"{sign}{abs(pct):g}%"
+    except ValueError:
+        pass
     return ("'" + s) if s and not s.startswith("'") else s
 
 # Findings intentionally NOT reported in the sheet / deck.
@@ -60,12 +71,24 @@ SKIP_KEYS = {"h1_long", "h1_duplicate",
              "title_multiple_tags", "meta_multiple_tags", "crawl_budget",
              # Evidence-only tab, never rendered as an observation
              "redirects",
-             # User-requested skips (2026-09-30): HTML entities and
-             # low-inlinks are not parameters we report.
+             # User-requested skips (2026-09-30): HTML entities,
+             # low-inlinks, duplicate H1s (redundant with title_duplicate),
+             # broken images, placeholder text, duplicate form IDs, and
+             # any HTTP/naked-domain redirect flavor — not audit parameters.
              "low_inlinks",
              "llm_html_entities_title", "llm_html_entities",
              "html_entities", "html_entities_in_titles",
-             "raw_html_entities_in_titles"}
+             "raw_html_entities_in_titles",
+             "homepage_images_broken",
+             "llm_broken_image", "llm_broken_images",
+             "llm_broken_image_references", "broken_images",
+             "placeholder_urls", "llm_placeholder_text",
+             "llm_placeholder_urls", "placeholder_text",
+             "llm_duplicate_form_ids", "llm_duplicate_form_id",
+             "duplicate_form_ids", "duplicate_form_id",
+             "llm_http_naked_redirect", "llm_naked_domain_redirect",
+             "llm_url_variants_no_redirect",
+             "llm_all_url_variants_return_200"}
 
 
 def _drop_og_findings(rows):

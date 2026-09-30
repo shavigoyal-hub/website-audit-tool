@@ -273,13 +273,16 @@ def _get_dataframe_with_tag(live_url):
 # report findings whose sample URLs are only these (junk to Google, or CRO
 # assets that don't compete for organic traffic).
 DEFAULT_EXCLUDE_URL_PATTERNS = [
-    r"/feeds?/",              # /feed/, /feeds/
-    r"/tags?/",               # /tag/, /tags/
-    r"/categor(y|ies)/",      # /category/, /categories/
+    # (?:/|$|\?|#) tail catches both "/feeds" (no trailing slash — Wix
+    # style) and "/feeds/blog/…" — the old r"/feeds?/" only matched the
+    # trailing-slash form and let /feeds through.
+    r"/feeds?(?:/|$|\?|#)",
+    r"/tags?(?:/|$|\?|#)",
+    r"/categor(?:y|ies)(?:/|$|\?|#)",
     r"/page/\d+",             # WordPress paged archives
     r"[?&]paged?=",           # ?paged=2, ?page=2
-    r"/author/",              # WordPress author archives
-    r"/attachment/",          # WordPress attachment pages
+    r"/author(?:/|$)",        # WordPress author archives
+    r"/attachment(?:/|$)",    # WordPress attachment pages
     r"/wp-json/",             # WordPress REST endpoints
     r"/wp-admin/",
     r"/xmlrpc\.php",

@@ -49,9 +49,10 @@ def _strip(html):
 
 
 _JUNK_URL = re.compile(
-    r"/feeds?/|/tags?/|/categor(?:y|ies)/|/page/\d+|"
-    r"[?&]paged?=|/author/|/attachment/|/wp-json/|/wp-admin/|"
-    r"/xmlrpc\.php|/wp-content/uploads/", re.I)
+    # (?:/|$|\?|#) so /feeds (no slash) is matched too
+    r"/feeds?(?:/|$|\?|#)|/tags?(?:/|$|\?|#)|/categor(?:y|ies)(?:/|$|\?|#)"
+    r"|/page/\d+|[?&]paged?=|/author(?:/|$)|/attachment(?:/|$)"
+    r"|/wp-json/|/wp-admin/|/xmlrpc\.php|/wp-content/uploads/", re.I)
 
 
 _THIN_WORDS = re.compile(
