@@ -637,7 +637,7 @@
     "label": "Thin",
     "primary_signal": "Lead",
     "priority": "High",
-    "support": "AWR 2024: 54.4% of Google clicks go to top-3 — thin pages rarely reach top-3."
+    "support": "54.4% of Google clicks go to top-3 — thin pages rarely reach top-3."
   },
   "title_all_caps": {
     "costs": "All-caps titles look spammy in Google search results and drop click-through.",
