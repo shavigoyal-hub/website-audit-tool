@@ -1026,7 +1026,12 @@ def read_for_deck(sheet_url_or_id):
 
     obs_rows = []
     def _g(row, i):
-        return row[i].strip() if i < len(row) and row[i] is not None else ""
+        v = row[i].strip() if i < len(row) and row[i] is not None else ""
+        # Belt-and-braces: '#ERROR!' / '#REF!' / '#NAME?' sometimes leak in
+        # when a formula fails. Never let those reach the deck.
+        if v.startswith("#") and v.endswith("!") and 4 <= len(v) <= 12:
+            return ""
+        return v
 
     # Assemble slides: intro (from Slide Review or first Observations row)
     # + findings (all Observations rows, except first/last in legacy mode)
