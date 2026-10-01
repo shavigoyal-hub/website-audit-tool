@@ -562,13 +562,24 @@ def _apply_dimensions(sid, sheet_id, obs_data):
         "range": {"sheetId": sheet_id, "dimension": "ROWS",
                   "startIndex": 0, "endIndex": 1},
         "properties": {"pixelSize": 40}, "fields": "pixelSize"}})
-    # Body row height — a comfortable minimum; long-wrapped text can still
-    # grow past this when Sheets recomputes on-view.
+    # No fixed body row height — a hard pixelSize was clipping wrapped
+    # observations ('Multiple pages found with duplicate title tags (3
+    # pages) eg: • 1 /about/ pages…'). Letting Sheets auto-size the row to
+    # the wrapped content means the whole observation shows.
+    #
+    # Also force WRAP strategy on the text columns (Observation, Impact,
+    # What We Found, Costs, Support) so long content wraps instead of
+    # overflowing / getting clipped.
     if len(obs_data) > 1:
-        requests_.append({"updateDimensionProperties": {
-            "range": {"sheetId": sheet_id, "dimension": "ROWS",
-                      "startIndex": 1, "endIndex": len(obs_data)},
-            "properties": {"pixelSize": 90}, "fields": "pixelSize"}})
+        requests_.append({"repeatCell": {
+            "range": {"sheetId": sheet_id,
+                      "startRowIndex": 1, "endRowIndex": len(obs_data),
+                      "startColumnIndex": 1, "endColumnIndex": min(ncols, 9)},
+            "cell": {"userEnteredFormat": {
+                "wrapStrategy": "WRAP",
+                "verticalAlignment": "TOP"}},
+            "fields": "userEnteredFormat.wrapStrategy,userEnteredFormat.verticalAlignment",
+        }})
     # Header-row filter (Sheets shows the dropdown funnel icons in row 1)
     requests_.append({"setBasicFilter": {
         "filter": {

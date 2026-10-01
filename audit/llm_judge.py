@@ -30,23 +30,21 @@ the FULL list of URLs the finding applies to. Rewrite it in Gushwork's
 voice, and QUANTIFY + SCOPE by page pattern.
 
 QUANTIFY + SCOPE (this is what separates you from a template):
-- KEEP the "Multiple pages found with <issue>" opener — that's Gushwork
-  house style. Add the total count and per-pattern breakdown right after.
-- Format the observation exactly like this:
-    "Multiple pages found with <5-8 word issue> (<N> pages)
-     eg:
-      • <count> <pattern> pages
-      • <count> <pattern> pages
-      • <example URL>"
-  Example:
-    "Multiple pages found with missing title tags (312 pages)
-     eg:
-      • 243 /product/ pages
-      • 54 /product-category/ pages
-      • https://garofano.store/product/tavolo-milano/"
-- Bucket URLs by first path segment:
+- Observation format: ONE short sentence stating the problem + the scope.
+  No 'Multiple pages found with'. No 'eg:' prefix. No '• 1 /path/ pages'
+  bullet counts. CS readability wins.
+- Shape:
+    "<Problem> on <N> pages: <path1>, <path2>, <path3>"
+  Examples:
+    "Duplicate title tags on 3 pages: /about/, /services/, /contact/"
+    "Missing title tag on 312 pages, mostly /product/ (243) and /product-category/ (54)"
+    "No H1 tag on homepage: https://example.com/"
+    "Thin content on /10-reasons-to-eat-green-foods-s/433.htm (under 300 words)"
+- When there are many URLs, name the dominant path pattern and the count
+  rather than listing every URL. 3-4 example paths is enough.
+- Bucket by first path segment when counts help:
     /product/* /products/*        -> "/product/ pages"
-    /product-category/* /product_cat/* /collection/* -> "/product-category/ pages"
+    /product-category/* /collection/* -> "/product-category/ pages"
     /service/* /services/*        -> "/service/ pages"
     /                             -> "homepage"
     /about, /contact              -> name them explicitly
@@ -70,7 +68,7 @@ Return ONLY valid JSON matching this schema, no explanation:
   "priority":  "Critical | High | Medium | Low — judge based on business impact for THIS site, not templated",
   "hook_stat": "specific number tied to what you found ('-32%', '+15%', '0%', '7.0s LCP'). No generic '-15%' when you can be specific.",
   "hook_ctx":  "one sentence, starts lowercase, ends with period. Says what the number means in leads/ranking/LLM terms.",
-  "observation": "EXACT format: 'Multiple pages found with <5-8 word issue> (<N> pages)\\neg:\\n• <count> <pattern> pages\\n• <count> <pattern> pages\\n• <example URL>'. If single page: 'The homepage has <issue>\\neg: <url>'. No paragraphs, no benchmarks, no prescriptive fixes, no mechanism explanations.",
+  "observation": "ONE short sentence: '<Problem> on <N> pages: <path1>, <path2>, <path3>'. For a single page: '<Problem> on <path or URL>'. No 'Multiple pages found with'. No 'eg:'. No '• 1 /path/ pages' bullets. No benchmarks, no fixes, no mechanism explanations.",
   "costs":     "1-2 short sentences of business consequence. Direct, no em-dashes.",
   "support":   "one line: a supporting stat or citation. Empty string if none.",
   "insight":   "one extra insight you noticed while reading the HTML that the original finding missed. Empty string if none.",
