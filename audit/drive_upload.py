@@ -75,11 +75,47 @@ def _make_public(file_id):
 
 
 def upload_image(filename, content_bytes, mime_type="image/png"):
-    """Upload one image, return its public direct URL (or None).
+    """Return an inline data: URI for the image.
 
-    Uses Composio's GOOGLEDRIVE_UPLOAD_FILE if it exists on this account,
-    else falls back to a raw multipart POST via the proxy.
+    We USED to upload to Drive and serve through a /img/<id> proxy, but
+    Composio's proxy wraps request bodies in JSON, so the uploaded Drive
+    file ended up being the multipart wrapper, not the image. Rather than
+    fight that, we skip Drive entirely: shrink the image to ~15KB, encode
+    as base64, store the data URI directly in the sheet cell. The deck
+    renders data: URIs natively — no network, no auth, no breakage.
+
+    Cell limit is 50k chars; a 500px-wide JPEG @ Q70 lands comfortably
+    under that.
     """
+    import base64 as _b64
+    import io as _io
+    try:
+        from PIL import Image as _Image
+        img = _Image.open(_io.BytesIO(content_bytes))
+        if img.mode in ("RGBA", "LA", "P"):
+            img = img.convert("RGB")
+        # Shrink to fit cell budget. Try progressively smaller widths /
+        # qualities until the base64 string is under ~45k chars.
+        for max_w, quality in [(640, 78), (500, 72), (420, 68), (360, 60)]:
+            buf = _io.BytesIO()
+            if img.width > max_w:
+                work = img.copy()
+                work.thumbnail((max_w, max_w * 4))
+            else:
+                work = img
+            work.save(buf, format="JPEG", quality=quality, optimize=True)
+            data = buf.getvalue()
+            b64 = _b64.b64encode(data).decode("ascii")
+            if len(b64) < 45_000:
+                return f"data:image/jpeg;base64,{b64}"
+        # Fell through: last attempt result is the best we have.
+        return f"data:image/jpeg;base64,{b64}"
+    except Exception as exc:
+        print(f"[drive_upload] inline encode failed ({exc}); "
+              "falling back to Drive upload path")
+
+    # Legacy Drive upload path (kept as a backup even though it's known
+    # unreliable right now):
     folder = _find_or_create_folder()
     ext = filename.rsplit(".", 1)[-1].lower() if "." in filename else "png"
     safe_name = f"{uuid.uuid4().hex[:8]}_{filename[:60]}"

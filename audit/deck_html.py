@@ -405,26 +405,40 @@ def _render_finding(row, page_no, total_pages, client_display):
         if raw:
             support = _re_img.sub(r"IMG:\s*\S+\s*", "", support).strip()
 
-        def _to_proxy(u):
+        def _extract_file_id(u):
             m = _re_img.match(r"GDRIVE_IMG:([A-Za-z0-9_-]+)", u)
-            if m:
-                return f"/img/{m.group(1)}"
+            if m: return m.group(1)
             m = _re_img.search(r"drive\.google\.com/(?:uc\?[^ ]*id=|thumbnail\?id=|d/)([A-Za-z0-9_-]+)", u)
-            if m:
-                return f"/img/{m.group(1)}"
+            if m: return m.group(1)
             m = _re_img.search(r"lh3\.googleusercontent\.com/d/([A-Za-z0-9_-]+)", u)
-            if m:
-                return f"/img/{m.group(1)}"
-            return u
+            if m: return m.group(1)
+            return None
 
-        base = _os_img.environ.get("PUBLIC_BASE_URL", "").rstrip("/")
-        img_urls = []
+        import base64 as _b64
         for u in raw:
-            proxied = _to_proxy(u)
-            if proxied.startswith("/img/") and base:
-                img_urls.append(base + proxied)
+            # Inline data URI — pass straight through.
+            if u.startswith("data:"):
+                img_urls.append(u)
+                continue
+            fid = _extract_file_id(u)
+            if fid:
+                # Inline as data URI — the /img proxy returned the wrong
+                # content-type (application/json) and all public hotlink
+                # URLs resolve to application/octet-stream which browsers
+                # don't render as images. Base64 inline always works.
+                try:
+                    from audit.drive_upload import fetch_bytes as _fb
+                    body, mime = _fb(fid)
+                    if body:
+                        b64 = _b64.b64encode(body).decode("ascii")
+                        img_urls.append(f"data:{mime or 'image/png'};base64,{b64}")
+                        continue
+                except Exception as exc:
+                    print(f"[deck] inline img failed {fid}: {exc}")
+                # Last resort: raw URL (may still show broken; onerror hides it)
+                img_urls.append(f"https://drive.google.com/uc?export=view&id={fid}")
             else:
-                img_urls.append(proxied)
+                img_urls.append(u)
 
     # Supporting stat — big blue number, first sentence dark bold, rest muted.
     # HARD RULE (per CS): the Supporting Stats box is for a STAT, not a
