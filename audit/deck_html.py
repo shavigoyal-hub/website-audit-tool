@@ -516,7 +516,7 @@ def _render_finding(row, page_no, total_pages, client_display):
             <div class="card-body">{_html.escape(costs)}</div>
           </div>
           {f"<div class='card card-sup'>{sup_html}</div>" if sup_html else ""}
-          {(f"<div class='card card-img'>" + "".join(f"<img src='{u}' alt='screenshot' loading='lazy' />" for u in img_urls[:3]) + "</div>") if img_urls else ""}
+          {(f"<div class='card card-img'>" + "".join(f"<img src='{u}' alt='' loading='lazy' onerror='this.parentNode&&this.parentNode.removeChild(this)' />" for u in img_urls[:3]) + "</div>") if img_urls else ""}
         </div>
       </div>
       <div class="footer">

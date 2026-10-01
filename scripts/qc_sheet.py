@@ -115,6 +115,15 @@ def qc(sid):
                 problems.append((r["row"], f"col-{col_label}",
                     f"Source citation leaked: {_SRC_RE.search(val).group(0)!r}"))
 
+    # 4b. Broken screenshot markers. IMG: GDRIVE_IMG:<id> or IMG: https://drive…
+    # — these render as broken-image icons in the deck when the file isn't
+    # publicly fetchable. User rule: no broken screenshots in deliverables.
+    for r in rows:
+        for col_label, val in [("H", r["costs_h"]), ("I", r["support_i"])]:
+            if re.search(r"IMG:\s*(?:GDRIVE_IMG:|https?://)", val, re.I):
+                problems.append((r["row"], f"col-{col_label}",
+                    "contains IMG: marker — verify screenshot renders before shipping"))
+
     # 5. Support (I) leads with stat or is empty
     for r in rows:
         v = r["support_i"].strip()
