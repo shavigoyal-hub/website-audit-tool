@@ -317,9 +317,25 @@ def _apply_judgement(row, judgement):
             new[k_row] = v
     # Force canonical category for known keys — LLM tends to say 'Pages' for
     # thin_content etc., which is too generic.
-    forced = _CANONICAL_CATEGORY.get(row.get("key"))
+    key = row.get("key") or ""
+    forced = _CANONICAL_CATEGORY.get(key)
     if forced:
         new["category"] = forced
+    # Lock hook_ctx + hook_stat for Lead-primary catalog keys so the LLM
+    # can't drift them into ranking-flavoured copy ('Google may lower your
+    # ranking…'). We want 'more leads once X' / 'leads lost when X' framing
+    # on the finding slide header for every Lead-primary row.
+    try:
+        from audit.hook_copy import HOOK_COPY as _HC
+        from audit.report_sheets import _LEAD_KEYS_MASTER as _LK
+        if key in _LK and key in _HC:
+            cat_spec = _HC[key]
+            if cat_spec.get("hook_ctx"):
+                new["hook_ctx"] = cat_spec["hook_ctx"]
+            if cat_spec.get("hook_stat"):
+                new["hook_stat"] = cat_spec["hook_stat"]
+    except Exception:
+        pass
     insight = judgement.get("insight")
     if isinstance(insight, str):
         insight = insight.strip()
