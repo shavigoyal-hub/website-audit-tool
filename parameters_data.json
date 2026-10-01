@@ -149,6 +149,16 @@
     "priority": "Medium",
     "support": "Google PAA carousel drives approx 5% CTR uplift on match; source: Semrush 2024 SERP study."
   },
+  "favicon_cms_default": {
+    "costs": "A CMS default favicon tells every searcher the site isn't maintained. In the mobile SERP it shows next to the title — your result looks like a template, competitors look like real businesses.",
+    "hook_ctx": "leads lost when your favicon is the WordPress/CMS default logo instead of your own brand mark.",
+    "hook_stat": "-20%",
+    "in_lead_sum": "YES",
+    "label": "WordPress-logo favicon",
+    "primary_signal": "Lead",
+    "priority": "Critical",
+    "support": "Replace with a square brand mark (≥96px) exported from your logo."
+  },
   "favicon_default": {
     "costs": "Default favicons signal an unbranded, generic site in the tab and in Google search.",
     "hook_ctx": "SERP click-through when the favicon is the platform default.",
