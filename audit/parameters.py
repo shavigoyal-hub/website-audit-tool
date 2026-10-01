@@ -16,7 +16,7 @@ import re
 
 import requests
 
-from audit.sf_csv import _col, is_html, _num
+from audit.sf_csv import _col, is_html, _num, is_non_seo
 
 UA = {"User-Agent": "Mozilla/5.0 (compatible; GushworkAuditBot/1.0; +https://gushwork.ai)"}
 
@@ -237,14 +237,40 @@ def evaluate(df, live_url):
         home_html = og_req.text or ""
         home_html_lower = home_html.lower()
 
-        # Structured data — chat consistently flags 'no ld+json anywhere'.
-        # If the homepage has zero ld+json blocks, most likely so does the
-        # rest of the site.
-        if "application/ld+json" not in home_html_lower:
-            issues.append(_issue("structured_data", "Schema", "High",
-                                 "Homepage has no ld+json structured data (no Organization / Product / Service / FAQPage)",
-                                 "Without any schema, Google can't render rich results and LLMs miss key business context.",
-                                 reference=origin + "/"))
+        # Structured data — sample a handful of SEO pages (not just the
+        # homepage) so the finding reflects the WHOLE site, not just one URL.
+        # If zero pages ship ld+json, flag it site-wide with multiple
+        # example URLs so CS can see this isn't a one-page omission.
+        _schema_sample = [origin + "/"]
+        try:
+            _addr_sample = addr[~is_non_seo(df) & is_html(df)].tolist()
+            # Prefer different URL depths: 1 homepage + 3 inner pages
+            seen_paths = {"/"}
+            for u in _addr_sample:
+                p = re.sub(r"^https?://[^/]+", "", u).split("?")[0]
+                if p and p not in seen_paths:
+                    _schema_sample.append(u)
+                    seen_paths.add(p)
+                if len(_schema_sample) >= 4:
+                    break
+        except Exception:
+            pass
+        _pages_with_schema = []
+        _pages_without_schema = []
+        for _u in _schema_sample:
+            _r = _get(_u) if _u != origin + "/" else og_req
+            if _r is None or _r.status_code != 200:
+                continue
+            if "application/ld+json" in (_r.text or "").lower():
+                _pages_with_schema.append(_u)
+            else:
+                _pages_without_schema.append(_u)
+        if _pages_without_schema and not _pages_with_schema:
+            issues.append(_issue(
+                "structured_data", "Schema", "High",
+                "No page ships any ld+json schema (no Organization, Service, Product, FAQPage, or BreadcrumbList)",
+                "Without any schema, Google can't render rich results and LLMs miss key business context.",
+                reference=_pages_without_schema))
         # Conversion path (form / mailto / tel / clear CTA button link).
         has_form   = bool(re.search(r"<form[\s>]", home_html, re.I))
         has_mailto = "mailto:" in home_html_lower
