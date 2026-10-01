@@ -610,8 +610,8 @@
     "support": "Global Lingo B2B survey 2023: 59% of buyers won't purchase after grammar issues."
   },
   "structured_data": {
-    "costs": "No rich results on Google and no signal for LLMs like ChatGPT or Perplexity. Searchers pick someone else.",
-    "hook_ctx": "more leads with structured data. You have none.",
+    "costs": "No schema anywhere on the site means no rich results on Google and no signal for LLMs like ChatGPT or Perplexity. Searchers pick someone else.",
+    "hook_ctx": "more leads with structured data. No page on your site ships any.",
     "hook_stat": "0.05",
     "in_lead_sum": "YES",
     "label": "No schema",
