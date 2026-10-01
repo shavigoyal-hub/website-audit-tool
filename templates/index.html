@@ -155,7 +155,7 @@
 
     <div id="appendBox" style="display:none; margin-top:24px; padding-top:20px; border-top:1px dashed #e5e7eb;">
       <label>Chatbot</label>
-      <p class="hint">Add findings: <code>&lt;url&gt; &lt;description&gt;</code> — the bot figures out how many findings you meant. Or edit the master catalog: <code>change duplicate title primary signal to lead</code>, <code>set favicon default priority to Medium</code>, etc.</p>
+      <p class="hint">Add findings: <code>&lt;url&gt; &lt;description&gt;</code> — the bot figures out how many findings you meant. Edit the catalog: <code>change duplicate title primary signal to lead</code>. Attach a screenshot to an existing row: upload the image + <code>attach ss to Content Visibility</code> (or <code>attach to row 5</code>).</p>
       <textarea id="appendPrompt" rows="4" style="width:100%;padding:11px 14px;border:1px solid #d1d5db;border-radius:8px;font-size:13px;background:#fafafa;margin-bottom:8px;font-family:inherit;resize:vertical" placeholder="https://clearwaterprocessing.com/our-services/ flat architecture&#10;https://clearwaterprocessing.com/ no top menu&#10;https://clearwaterprocessing.com/ no about page"></textarea>
       <label style="display:block;font-size:12px;color:#64748b;margin-bottom:6px">Attach screenshots (optional, shown on the finding's slide)</label>
       <input type="file" id="appendImages" accept="image/*" multiple style="font-size:12px;margin-bottom:12px" />
@@ -333,6 +333,10 @@
         if (data.ok && data.action === "edit_parameter") {
           out.style.color = "#166534";
           out.innerHTML = `✓ ${data.message}<div style="margin-top:6px;color:#475569;font-size:11px">${(data.edits_applied || []).map(e => `• ${e}`).join("<br>")}</div>`;
+          document.getElementById("appendPrompt").value = "";
+        } else if (data.ok && data.action === "attach_to_row") {
+          out.style.color = "#166534";
+          out.innerHTML = `✓ ${data.message}`;
           document.getElementById("appendPrompt").value = "";
         } else if (data.ok && data.action === "add_finding") {
           out.style.color = "#166534";

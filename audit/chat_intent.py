@@ -59,12 +59,17 @@ message; classify it and return STRICT JSON with ONE of these shapes:
    (Lead/CTR/Rank), hook_stat, hook_ctx, costs, support, in_lead_sum
    (YES/blank).
 
-   The user names the parameter by its label OR its snake_case key. Map
-   free-text like 'duplicate title' or 'title duplicate' to
-   'title_duplicate'. If unsure which key they mean, prefer the closest
-   label match. Only emit keys from the catalog list below.
+3. Attaching an uploaded screenshot/image to an EXISTING finding row:
+   {"action": "attach_to_row",
+    "target": "<category phrase OR row number>"}
 
-3. Ambiguous / unrelated:
+   Trigger: user attached one or more images AND the message says
+   something like 'attach to <category>', 'add screenshot to
+   <finding name>', 'attach ss to Content Visibility', 'add image to
+   row 5'. The target is matched case-insensitive against the category
+   column — longest prefix match wins. A pure number means the row index.
+
+4. Ambiguous / unrelated:
    {"action": "unknown", "reason": "<short reason>"}
 
 RULES:
@@ -72,6 +77,9 @@ RULES:
   - Never invent keys not in the catalog.
   - For add_finding, do not summarise / rephrase — pass the hint through
     close to verbatim, the downstream framer will polish it.
+  - For attach_to_row, the target must be the user's phrasing — don't
+    rename it. The downstream matcher will fuzzy-match it against the
+    actual row categories.
 """
 
 
@@ -130,6 +138,12 @@ def _sanitise(data, prompt):
         if not findings:
             return _fallback(prompt)
         return {"action": "add_finding", "findings": findings}
+
+    if action == "attach_to_row":
+        target = str(data.get("target", "")).strip()
+        if not target:
+            return _fallback(prompt)
+        return {"action": "attach_to_row", "target": target}
 
     if action == "edit_parameter":
         edits = []

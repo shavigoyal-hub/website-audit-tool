@@ -315,6 +315,72 @@ def chat_route():
                 "commit_url": result.get("commit_url"),
             })
 
+        if intent["action"] == "attach_to_row":
+            # Upload every attached image, find the matching row by target
+            # (row number OR fuzzy category match), append IMG: markers to
+            # that row's support cell (I).
+            if not sheet_url:
+                return jsonify({"error": "sheet_url required"}), 400
+            from audit.drive_upload import upload_image
+            from audit.report_sheets import (
+                _composio_execute, _extract_first_range, _extract_sheet_id)
+            markers = []
+            for fs in request.files.getlist("images"):
+                content = fs.read()
+                if not content:
+                    continue
+                marker = upload_image(fs.filename or "screenshot.png", content,
+                                       mime_type=fs.mimetype or "image/png")
+                if marker:
+                    markers.append(marker)
+            if not markers:
+                return jsonify({"ok": False, "action": "attach_to_row",
+                                 "message": "No image attached — upload a screenshot and tell me which row."}), 400
+            sid = _extract_sheet_id(sheet_url)
+            v = _extract_first_range(_composio_execute("GOOGLESHEETS_BATCH_GET", {
+                "spreadsheet_id": sid, "ranges": ["Observations!A1:I50"]})) or []
+            target = str(intent["target"]).strip()
+            row_num = None
+            if target.isdigit():
+                row_num = int(target)
+            else:
+                target_lc = target.lower()
+                best_score, best_row = 0, None
+                for i, r in enumerate(v[1:], start=2):
+                    if not r or not r[0]:
+                        continue
+                    cat_lc = str(r[0]).strip().lower()
+                    # scoring: substring hit wins, else token overlap
+                    if target_lc in cat_lc or cat_lc in target_lc:
+                        score = min(len(target_lc), len(cat_lc))
+                    else:
+                        toks_t = set(target_lc.split())
+                        toks_c = set(cat_lc.split())
+                        score = len(toks_t & toks_c)
+                    if score > best_score:
+                        best_score = score
+                        best_row = i
+                row_num = best_row
+            if not row_num or row_num >= len(v) + 1:
+                return jsonify({"ok": False, "action": "attach_to_row",
+                                 "message": f"Could not match row '{target}'. "
+                                             "Try the exact category name or a row number."}), 400
+            existing = (v[row_num - 1][8] if row_num - 1 < len(v) and len(v[row_num - 1]) > 8 else "") or ""
+            new_support = (existing.rstrip() + "\n" + "\n".join(f"IMG: {m}" for m in markers)).strip()
+            _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
+                "spreadsheet_id": sid, "sheet_name": "Observations",
+                "first_cell_location": f"I{row_num}",
+                "valueInputOption": "USER_ENTERED",
+                "values": [[new_support]],
+            })
+            cat = str(v[row_num - 1][0] if row_num - 1 < len(v) else "")
+            return jsonify({
+                "ok": True, "action": "attach_to_row",
+                "row": row_num, "category": cat,
+                "markers": markers,
+                "message": f"Attached {len(markers)} image(s) to row {row_num} ({cat}).",
+            })
+
         if intent["action"] == "unknown":
             return jsonify({
                 "ok": False, "action": "unknown",
