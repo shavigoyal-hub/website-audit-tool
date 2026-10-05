@@ -759,6 +759,19 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             intro_heading = "Increase your leads by 15%"
             intro_formula = "Same pages, same website → more leads"
 
+        # Derive the uplift illustration from the actual lead-sum. 10 ×
+        # (1 + total_pct/100), rounded to the nearest integer. Was hardcoded
+        # '10 leads → 14 leads' regardless — misleading when total_pct was
+        # 24% (true answer: 10 → 12) or 48% (true answer: 10 → 15).
+        try:
+            _total_frac = float(str(intro_stat).lstrip("+").rstrip("%")) / 100.0
+        except (ValueError, TypeError):
+            _total_frac = 0.35
+        _tgt_leads = max(11, round(10 * (1 + _total_frac)))
+        _uplift_sentence = (
+            f"If you get 10 leads a month today 10 leads → {_tgt_leads} leads. "
+            "Same pages, same website. Before any ranking gains."
+        )
         intro_row = [
             "Intro — cover slide",
             "Same pages. Same website.",
@@ -766,7 +779,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             intro_stat,
             intro_heading,
             intro_formula,
-            "If you get 10 leads a month today 10 leads → 14 leads. Same pages, same website. Before any ranking gains.",
+            _uplift_sentence,
             "",
         ]
 
