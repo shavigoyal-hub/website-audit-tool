@@ -88,7 +88,10 @@
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
             <td>
-              {% if r.sheet_url %}<a class="link" href="{{ r.sheet_url }}" target="_blank">Open →</a>
+              {% if r.sheet_url %}
+                <a class="link" href="{{ r.sheet_url }}" target="_blank">Open →</a>
+                <br>
+                <a class="link" href="/?sheet={{ r.sheet_url|urlencode }}" style="font-size:11px">Edit via chatbot →</a>
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
             <td>
