@@ -87,8 +87,11 @@ LAST_ENQUEUE_ERROR = ""
 
 # Row-index cache populated by claim_next, consumed by mark_done /
 # mark_error so those don't need a second whole-sheet read (which was
-# tripping the 429 per-user Sheets read quota).
+# tripping the 429 per-user Sheets read quota). Values are (row, ts) —
+# anything older than 2h is pruned on next access so a worker crashing
+# mid-job doesn't leak the entry forever.
 _CLAIMED_ROWS = {}
+_CLAIMED_TTL_SEC = 7200
 
 
 def enqueue(client, live_url, source=""):
@@ -160,7 +163,6 @@ def get(job_id):
         return row
     # Retry after clearing the module-level cache so a stale warm lambda
     # can re-resolve the correct sheet.
-    global _CACHED_ID
     from audit import history as _hist
     _hist._CACHED_ID = None
     return _lookup()
@@ -192,8 +194,13 @@ def claim_next(worker_id):
             r[5] = worker_id
             r[6] = ts
             # Remember where this job lives so mark_done / mark_error can
-            # skip the follow-up _find_row read.
-            _CLAIMED_ROWS[r[0]] = i
+            # skip the follow-up _find_row read. Prune stale entries first.
+            import time as _time
+            _now_ts = _time.time()
+            for _k, _v in list(_CLAIMED_ROWS.items()):
+                if isinstance(_v, tuple) and _now_ts - _v[1] > _CLAIMED_TTL_SEC:
+                    _CLAIMED_ROWS.pop(_k, None)
+            _CLAIMED_ROWS[r[0]] = (i, _now_ts)
             return dict(zip(JOB_HEADER, r))
     return None
 
@@ -203,9 +210,7 @@ def mark_done(job_id, sheet_url, crawler="", pages="",
     sid = _find_sheet()
     if not sid:
         return False
-    # claim_next caches the row index in _CLAIMED_ROWS so we skip the
-    # whole-sheet read here — one Composio call instead of two.
-    row = _CLAIMED_ROWS.pop(job_id, None) or _find_row(sid, job_id)
+    row = _pop_claimed_row(job_id) or _find_row(sid, job_id)
     if not row:
         return False
     try:
@@ -228,11 +233,19 @@ def mark_done(job_id, sheet_url, crawler="", pages="",
         return False
 
 
+def _pop_claimed_row(job_id):
+    """Pull the cached row index for a job, unwrapping the (row, ts) tuple."""
+    v = _CLAIMED_ROWS.pop(job_id, None)
+    if isinstance(v, tuple):
+        return v[0]
+    return v  # legacy bare-int cache entry, or None
+
+
 def mark_error(job_id, err):
     sid = _find_sheet()
     if not sid:
         return False
-    row = _CLAIMED_ROWS.pop(job_id, None) or _find_row(sid, job_id)
+    row = _pop_claimed_row(job_id) or _find_row(sid, job_id)
     if not row:
         return False
     try:

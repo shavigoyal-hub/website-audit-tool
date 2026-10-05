@@ -340,7 +340,7 @@ def chat_route():
                                  "message": "No image attached — upload a screenshot and tell me which row."}), 400
             sid = _extract_sheet_id(sheet_url)
             v = _extract_first_range(_composio_execute("GOOGLESHEETS_BATCH_GET", {
-                "spreadsheet_id": sid, "ranges": ["Observations!A1:I50"]})) or []
+                "spreadsheet_id": sid, "ranges": ["Observations!A1:I"]})) or []
             target = str(intent["target"]).strip()
             row_num = None
             if target.isdigit():
@@ -423,6 +423,7 @@ def _do_append_findings(sheet_url, pairs, request):
     from audit.llm_frame import frame as _llm_frame
 
     results, errors = [], []
+    images_attached = False  # avoid double-attaching if first finding fails
     for url, hint in pairs:
         line = f"{url} {hint}".strip()
         analysis = audit_url(url, hint) if url else {
@@ -432,7 +433,10 @@ def _do_append_findings(sheet_url, pairs, request):
         }
         row_label = analysis["label"]
         row_priority = "Medium"
-        overrides = _llm_frame(url, hint)
+        # Copy the LLM-frame dict so mutations don't leak between loop
+        # iterations (frame() may return a shared/cached dict).
+        _frame = _llm_frame(url, hint)
+        overrides = dict(_frame) if _frame else None
         if overrides:
             analysis["framed_by"] = "llm"
             analysis["label"] = overrides.get("label") or analysis["label"]
@@ -441,10 +445,16 @@ def _do_append_findings(sheet_url, pairs, request):
             overrides.setdefault("status_label", overrides.get("label"))
             if overrides.get("verified") is False:
                 analysis["evidence"] = "LLM couldn't verify from HTML — added on your say-so"
-        if image_urls and not results:
+        # Attach images only ONCE, on the first attempt. Was tracking
+        # `not results` which stays True if the first append errored, so
+        # the second finding got the images instead (and if both succeeded
+        # we'd have attached to row 1 — fine — but errors meant row 2 got
+        # them, then row 3 again, duplicating).
+        if image_urls and not images_attached:
             marker = "\n".join(f"IMG: {u}" for u in image_urls)
             overrides = overrides or {}
             overrides["support"] = ((overrides.get("support") or "") + "\n" + marker).strip()
+            images_attached = True
         row, err = report_sheets.append_finding(
             sheet_url, url, row_label, priority=row_priority,
             category=None, finding_key=analysis["key"],

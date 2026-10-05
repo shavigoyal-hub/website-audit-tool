@@ -12,17 +12,38 @@ from audit.hook_copy import STATUS_LABEL
 
 # ── Status pill palette based on label wording ────────────────────────────
 def _pill_class(label):
-    low = (label or "").lower()
-    if any(k in low for k in ("no ", "missing", "404", "5xx", "noindex",
-                              "render error", "critical", "cls high",
-                              "lcp >", "perf <", "error")):
-        return "pill-red"
-    if any(k in low for k in ("competing", "duplicate", "long", "truncated",
-                              "stuffed", "medium", "heavy", "blocking",
-                              "wrong", "few", "over-length", "js-only",
-                              "warning")):
+    """Word-boundary matching on the pill label so 'Known schema' doesn't
+    match 'no', 'Following links' doesn't match 'low', etc.
+    """
+    import re as _rp
+    low = (label or "").lower().strip()
+    if not low:
         return "pill-amber"
-    if any(k in low for k in ("ok", "1 h1", "single", "good", "passed", "single h1")):
+    tokens = set(_rp.findall(r"[a-z0-9]+", low))
+
+    def has_token(k):
+        return k in tokens
+
+    def has_phrase(p):
+        return _rp.search(r"\b" + _rp.escape(p) + r"\b", low) is not None
+
+    # Red — hard failure signals
+    if (has_token("no") or has_token("missing") or has_token("noindex")
+            or has_token("404") or has_token("5xx") or has_token("error")
+            or has_token("critical") or has_phrase("render error")
+            or has_phrase("cls high") or has_phrase("lcp >")
+            or has_phrase("perf <")):
+        return "pill-red"
+    # Amber — degraded / needs attention
+    if (has_token("competing") or has_token("duplicate") or has_token("long")
+            or has_token("truncated") or has_token("stuffed")
+            or has_token("medium") or has_token("heavy") or has_token("blocking")
+            or has_token("wrong") or has_token("few") or has_token("warning")
+            or has_phrase("over-length") or has_phrase("js-only")):
+        return "pill-amber"
+    # Green — passed / healthy
+    if (has_token("ok") or has_token("good") or has_token("passed")
+            or has_token("single") or has_phrase("1 h1")):
         return "pill-green"
     return "pill-amber"
 

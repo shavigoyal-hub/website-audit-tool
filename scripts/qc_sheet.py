@@ -174,12 +174,32 @@ def qc(sid):
         parsed_terms = [(float(pct), lbl.strip()) for pct, lbl in m if lbl.strip().lower() != "more leads"]
         total_m = re.search(r"=\s*\+?([\d.]+)%\s+More leads", wf_line)
         intro_total = float(total_m.group(1)) if total_m else None
-        # Compare each term to its individual row E cell
-        for pct, label in parsed_terms:
-            match_row = None
+        # Compare each term to its individual row E cell.
+        # Fuzzy match: exact lower-case, else token-overlap >= 2 — a CS
+        # reviewer who renames 'H1 Tags' → 'Missing H1' between runs
+        # shouldn't trip the QC.
+        def _match_row(label):
+            lbl = label.strip().lower()
+            toks_l = set(lbl.split())
+            best = (0, None)
             for rr in rows:
-                if rr["cat"].strip().lower() == label.strip().lower():
-                    match_row = rr; break
+                cat = rr["cat"].strip().lower()
+                if not cat:
+                    continue
+                if cat == lbl:
+                    return rr  # exact wins immediately
+                score = 0
+                if lbl in cat or cat in lbl:
+                    score = max(len(lbl), 3)
+                else:
+                    toks_c = set(cat.split())
+                    score = len(toks_l & toks_c)
+                if score > best[0]:
+                    best = (score, rr)
+            return best[1] if best[0] >= 2 else None
+
+        for pct, label in parsed_terms:
+            match_row = _match_row(label)
             if not match_row:
                 problems.append((0, "intro",
                     f"Intro term '{label}' has no matching row in Observations"))

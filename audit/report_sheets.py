@@ -729,10 +729,13 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
             intro_heading = f"Increase your leads by {total_pct:g}%"
             intro_formula = f"{terms}  =  +{total_pct:g}% More leads"
         else:
-            intro_stat = "+33%"
-            intro_heading = "Increase your leads by 33%"
-            intro_formula = ("+5.8% Meta descriptions  +  +25% Structured "
-                             "data  =  +33% More leads")
+            # No Lead-primary picks on this site — don't invent fake terms
+            # that reference rows the sheet doesn't have (used to say
+            # 'Meta descriptions + Structured data' even when those weren't
+            # findings). Keep the headline but drop the component formula.
+            intro_stat = "+15%"
+            intro_heading = "Increase your leads by 15%"
+            intro_formula = "Same pages, same website → more leads"
 
         intro_row = [
             "Intro — cover slide",
@@ -981,7 +984,17 @@ def read_for_deck(sheet_url_or_id):
             "spreadsheet_id": sid, "ranges": [f"{tab_name}!A1:I"],
         })
     except Exception as exc:
-        # Look up the first tab name and retry
+        # Only fall back to the first-tab name on 'unable to parse range' /
+        # 'not found' errors — swapping tabs on a 429 or 403 would read the
+        # wrong sheet and silently return someone else's data.
+        _ex = str(exc)
+        _is_tab_missing = ("unable to parse range" in _ex.lower()
+                           or "not found" in _ex.lower()
+                           or "no such sheet" in _ex.lower())
+        if not _is_tab_missing:
+            READ_LAST_ERROR = f"BATCH_GET {tab_name!r} on {sid}: {exc}"
+            print(f"[sheets] {READ_LAST_ERROR}")
+            return None
         try:
             info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
                                      {"spreadsheet_id": sid}) or {}

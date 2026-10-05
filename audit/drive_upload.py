@@ -95,8 +95,14 @@ def upload_image(filename, content_bytes, mime_type="image/png"):
         if img.mode in ("RGBA", "LA", "P"):
             img = img.convert("RGB")
         # Shrink to fit cell budget. Try progressively smaller widths /
-        # qualities until the base64 string is under ~45k chars.
-        for max_w, quality in [(640, 78), (500, 72), (420, 68), (360, 60)]:
+        # qualities until the base64 string is under ~45k chars. If even
+        # the smallest preset doesn't fit (tall mobile screenshots do
+        # this), harder-downscale rather than returning an oversize URI
+        # that would blow Sheets' 50 000-char cell limit.
+        presets = [(640, 78), (500, 72), (420, 68), (360, 60),
+                   (280, 55), (220, 50), (180, 45)]
+        b64 = ""
+        for max_w, quality in presets:
             buf = _io.BytesIO()
             if img.width > max_w:
                 work = img.copy()
@@ -108,8 +114,12 @@ def upload_image(filename, content_bytes, mime_type="image/png"):
             b64 = _b64.b64encode(data).decode("ascii")
             if len(b64) < 45_000:
                 return f"data:image/jpeg;base64,{b64}"
-        # Fell through: last attempt result is the best we have.
-        return f"data:image/jpeg;base64,{b64}"
+        # Last preset was still too big. Return None so the caller doesn't
+        # try to write a 50k+ URI into a Sheets cell (which would fail
+        # BATCH_UPDATE and lose the attach entirely).
+        print(f"[drive_upload] image too large to inline ({len(b64)} chars "
+              "after smallest preset); skipping attach")
+        return None
     except Exception as exc:
         print(f"[drive_upload] inline encode failed ({exc}); "
               "falling back to Drive upload path")

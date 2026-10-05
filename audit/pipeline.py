@@ -333,12 +333,16 @@ _CONVERSION_SKIP_KEYS = {
 
 
 _VERIFY_CHECKS = {
-    # key -> callable(html) -> True if tag IS present
-    "h1_missing":    lambda h: bool(re.search(r"<h1\b[^>]*>[^<\s]", h, re.I | re.S)),
+    # key -> callable(html) -> True if tag IS present with non-empty content.
+    # Each matcher tolerates whitespace / newlines after the opening tag so
+    # '<h1>  Welcome</h1>' or '<h1>\n  Hi</h1>' count as present, but
+    # '<h1></h1>' (immediate close) does NOT.
+    "h1_missing":    lambda h: bool(re.search(
+        r"<h1\b[^>]*>\s*[^<\s]", h, re.I | re.S)),
     "title_missing": lambda h: bool(re.search(
         r"<title[^>]*>\s*[^<\s]", h, re.I | re.S)),
     "meta_missing":  lambda h: bool(re.search(
-        r'<meta[^>]+name=["\']description["\'][^>]+content=["\'][^"\']+',
+        r'<meta[^>]+name=["\']description["\'][^>]+content=["\']\s*[^"\'\s]',
         h, re.I)),
 }
 
@@ -366,12 +370,15 @@ def _verify_on_page(findings):
                 confirmed.append(url); continue
             try:
                 r = _rq.get(url, headers=_UA, timeout=10, allow_redirects=True)
-                if r.status_code != 200 or checker(r.text):
-                    # tag IS present now — drop from finding
+                if r.status_code == 200 and checker(r.text):
+                    # tag IS present on the live page — drop as false positive
                     continue
+                # Any other outcome (403 bot block, 404, 5xx, non-200): keep
+                # the URL. We can only drop a flag when we PROVE the tag now
+                # exists — never because the probe failed.
                 confirmed.append(url)
             except Exception:
-                confirmed.append(url)  # can't verify -> keep
+                confirmed.append(url)  # network error — keep
         if not confirmed:
             continue
         new = dict(f); new["examples"] = confirmed
@@ -511,6 +518,33 @@ def run(live_url):
                  "priority": i["priority"], "impact": i["impact"],
                  "reference": i["reference"]}
                 for i in site["issues"]]
+
+    # Belt-and-braces: the sf_csv path runs through _apply_url_rules, but
+    # psi_rows (from PSI) and site_obs (parameters + deep_analyzer +
+    # llm_sweep) bypass it, so feeds/tags/categories URLs could leak into
+    # LCP / schema / nav findings. Strip them from the reference/observation
+    # strings on those two sources too.
+    _junk_re = re.compile("|".join(DEFAULT_EXCLUDE_URL_PATTERNS), re.I)
+
+    def _strip_junk_urls(rows_list):
+        kept = []
+        for r in rows_list:
+            ref = r.get("reference") or ""
+            if isinstance(ref, (list, tuple)):
+                ref_lines = [str(x) for x in ref]
+            else:
+                ref_lines = str(ref).split("\n")
+            clean = [ln for ln in ref_lines if ln.strip() and not _junk_re.search(ln)]
+            if not clean and ref_lines:
+                # Every reference line was junk — drop the whole row.
+                continue
+            new = dict(r)
+            new["reference"] = "\n".join(clean) if clean else (ref if isinstance(ref, str) else "")
+            kept.append(new)
+        return kept
+
+    psi_rows = _strip_junk_urls(psi_rows)
+    site_obs = _strip_junk_urls(site_obs)
 
     rows, _notes = observations.build_rows(findings, psi_rows, site_obs)
 
