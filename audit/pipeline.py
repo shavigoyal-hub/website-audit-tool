@@ -388,6 +388,96 @@ def _verify_on_page(findings):
     return out
 
 
+def _expand_thin_content(findings, live_url, max_pages=40):
+    """When the crawl discovered very few thin pages, probe the sitemap for
+    SEO pages with under 300 words and merge the real list into the
+    existing thin_content finding (or create one if the crawl didn't flag
+    any). Skips non-SEO paths and bails fast if the sitemap doesn't exist.
+    """
+    import re as _re
+    try:
+        import requests as _rq
+    except Exception:
+        return findings
+    try:
+        from audit.sf_csv import NON_SEO_PATTERNS as _NSP
+    except Exception:
+        _NSP = []
+    _non_seo_re = _re.compile("|".join(_re.escape(p) for p in _NSP), _re.I) \
+        if _NSP else None
+    _junk_re = _re.compile("|".join(DEFAULT_EXCLUDE_URL_PATTERNS), _re.I)
+    _UA = {"User-Agent": "Mozilla/5.0 (compatible; GushworkAuditBot/1.0; "
+                          "+https://gushwork.ai)"}
+    _origin_m = _re.match(r"(https?://[^/]+)", live_url)
+    if not _origin_m:
+        return findings
+    origin = _origin_m.group(1)
+
+    sitemap_urls = []
+    for p in ("/sitemap.xml", "/page-sitemap.xml", "/post-sitemap.xml",
+              "/sitemap_index.xml"):
+        try:
+            r = _rq.get(origin + p, headers=_UA, timeout=10)
+        except Exception:
+            continue
+        if r.status_code != 200:
+            continue
+        for u in _re.findall(r"<loc>\s*(https?://[^<\s]+)\s*</loc>", r.text or ""):
+            if u.endswith(".xml"):
+                # follow nested sitemap once
+                try:
+                    r2 = _rq.get(u, headers=_UA, timeout=10)
+                    sitemap_urls.extend(_re.findall(r"<loc>\s*(https?://[^<\s]+)\s*</loc>", r2.text or ""))
+                except Exception:
+                    pass
+            else:
+                sitemap_urls.append(u)
+    # Scope: SEO pages only, non-junk, same origin, dedupe
+    sitemap_urls = list({u for u in sitemap_urls
+                        if origin in u
+                        and not _junk_re.search(u)
+                        and not (_non_seo_re and _non_seo_re.search(u))})
+    if len(sitemap_urls) <= 3:
+        return findings  # tiny site — crawler already covered it
+
+    # Probe up to max_pages for word count
+    thin_urls = []
+    for u in sitemap_urls[:max_pages]:
+        try:
+            r = _rq.get(u, headers=_UA, timeout=8)
+            if r.status_code != 200:
+                continue
+            body = _re.sub(r"<(script|style|nav|footer|header)[^>]*>.*?</\1>",
+                           "", r.text, flags=_re.S | _re.I)
+            text = _re.sub(r"<[^>]+>", " ", body)
+            words = len(_re.findall(r"\b\w{3,}\b", text))
+            if words < 300:
+                thin_urls.append(u)
+        except Exception:
+            continue
+    if not thin_urls:
+        return findings
+
+    # Merge into existing thin_content finding, else append a new one.
+    for f in findings:
+        if f.get("key") == "thin_content":
+            existing = set(f.get("examples") or [])
+            for u in thin_urls:
+                existing.add(u)
+            f["examples"] = list(existing)
+            if "count" in f:
+                f["count"] = len(existing)
+            return findings
+    # No existing finding → add one with these URLs.
+    findings.append({
+        "key": "thin_content", "count": len(thin_urls),
+        "examples": thin_urls,
+        "evidence": ("Thin Content (probed)",
+                     ["Address"], [[u] for u in thin_urls]),
+    })
+    return findings
+
+
 def _apply_url_rules(findings):
     """Filter finding-URL evidence per Direct-chat audit rules.
 
@@ -464,6 +554,11 @@ def run(live_url):
     # positive. Re-fetch each flagged URL with a full browser UA and drop
     # entries where the tag is actually present.
     findings = _verify_on_page(findings)
+    # Thin-content coverage: when the crawl only touched a handful of pages
+    # (SF scope limit, 403s, sitemap only), the thin_content finding
+    # under-counts. Fetch the sitemap and probe a wider set so audits don't
+    # ship with 'Thin content on 1 page' when the real answer is 6-10.
+    findings = _expand_thin_content(findings, live_url_norm)
     reps = sf_csv.representative_pages(df, custom_patterns=page_type_patterns)
 
     psi_live = manual_psi or pagespeed.fetch_many(reps, "mobile", psi_key)

@@ -177,24 +177,39 @@ def _check_fragment_only_nav(html, origin, findings):
 
 
 def _check_duplicate_homepage(origin, home_html, findings):
-    """Compare / and /home body sizes — if same, they're duplicate."""
+    """Flag when /home or /home/ serves near-identical content to / AND the
+    canonical doesn't already point back to /. If the canonical IS /, this
+    is an intentional duplicate that CMSs often ship (WordPress 'Home'
+    sample page) — not a finding.
+    """
+    _root = origin.rstrip("/") + "/"
     for path in ("/home", "/home/"):
         r = _get(origin + path)
         if not r or r.status_code != 200:
             continue
-        # Simple heuristic: if content-length within 5% and both have same H1
+        # Size similarity
         root_size = len(home_html or "")
         alt_size = len(r.text or "")
         if root_size == 0 or alt_size == 0:
             continue
         ratio = abs(root_size - alt_size) / max(root_size, alt_size)
-        if ratio < 0.05:
-            findings.append(_issue(
-                "duplicate_homepage", "Homepage", "High",
-                f"{origin}{path} serves near-identical content to {origin}/",
-                "Duplicate homepage variants split link equity and confuse canonicalisation.",
-                reference=f"{origin}/ vs {origin}{path}"))
-            return
+        if ratio >= 0.05:
+            continue
+        # Canonical check: if /home's canonical resolves to the actual
+        # homepage, the duplicate is already consolidated. Don't flag.
+        _canon = re.search(
+            r'<link[^>]+rel=["\']canonical["\'][^>]+href=["\']([^"\']+)',
+            r.text or "", re.I)
+        if _canon:
+            _target = _canon.group(1).strip().rstrip("/") + "/"
+            if _target.lower() in (_root.lower(), origin.rstrip("/").lower() + "/"):
+                return  # intentional, canonical consolidates — skip
+        findings.append(_issue(
+            "duplicate_homepage", "Homepage", "High",
+            f"{origin}{path} serves near-identical content to {origin}/ and its canonical doesn't point back to /",
+            "Duplicate homepage variants split link equity and confuse canonicalisation.",
+            reference=f"{origin}/ vs {origin}{path}"))
+        return
 
 
 # ── Public entry ─────────────────────────────────────────────────────

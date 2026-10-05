@@ -315,9 +315,47 @@ def _apply_judgement(row, judgement):
             v = v.strip()
         if v:
             new[k_row] = v
+    # SEO-page scoping: for content/ranking keys, strip any non-SEO page
+    # (contact/login/cart/privacy/thank-you/author/etc.) that the LLM may
+    # have listed as an example in the observation. Those pages don't need
+    # to rank, so flagging a title/meta/h1 issue on them is noise.
+    key = row.get("key") or ""
+    _SEO_RANK_KEYS = {
+        "title_missing", "title_duplicate", "title_duplicate_sitewide",
+        "title_long", "title_short", "title_stuffed", "title_all_caps",
+        "meta_missing", "meta_long", "meta_short", "meta_duplicate",
+        "meta_fragment",
+        "h1_missing", "h1_multiple", "h1_duplicate",
+        "thin_content", "near_duplicate",
+        "canonical_missing", "canonical_not_self",
+        "spelling_grammar", "url_long",
+    }
+    if key in _SEO_RANK_KEYS and new.get("observation"):
+        try:
+            from audit.sf_csv import NON_SEO_PATTERNS as _NSP
+            import re as _rnon
+            _nonseo_re = _rnon.compile("|".join(_rnon.escape(p) for p in _NSP), _rnon.I)
+            obs = new["observation"]
+            # Pattern: "<Problem> on <N> pages: <path1>, <path2>, ..."
+            m = _rnon.match(r"^(.*?pages?:\s*)(.*?)(\s*$|\s*eg[:.])", obs,
+                             _rnon.I | _rnon.S)
+            if m:
+                prefix, paths_str, tail = m.group(1), m.group(2), m.group(3)
+                paths = [p.strip() for p in paths_str.split(",")]
+                keep = [p for p in paths if p and not _nonseo_re.search(p)]
+                if len(keep) < len(paths) and keep:
+                    # Rebuild with filtered list + updated count
+                    import re as _rn2
+                    new_prefix = _rn2.sub(r"on \d+ pages?:", f"on {len(keep)} pages:", prefix)
+                    new["observation"] = (new_prefix + ", ".join(keep) + tail).rstrip()
+                elif not keep:
+                    # Every example was a non-SEO page → drop the whole row.
+                    new["category"] = "SKIP"
+        except Exception:
+            pass
+
     # Force canonical category for known keys — LLM tends to say 'Pages' for
     # thin_content etc., which is too generic.
-    key = row.get("key") or ""
     forced = _CANONICAL_CATEGORY.get(key)
     if forced:
         new["category"] = forced
