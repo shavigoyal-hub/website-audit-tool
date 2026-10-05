@@ -123,11 +123,23 @@ def classify(prompt):
 
 
 def _sanitise(data, prompt):
-    """Validate the LLM's JSON, dropping bogus edits."""
-    action = str((data or {}).get("action", "")).strip().lower()
+    """Validate the LLM's JSON, dropping bogus edits. Never raises — any
+    bad shape (None, list, string instead of dict) falls back to the
+    regex-only parser.
+    """
+    if not isinstance(data, dict):
+        return _fallback(prompt)
+    action = str(data.get("action", "")).strip().lower()
     if action == "add_finding":
         findings = []
         for f in (data.get("findings") or []):
+            # LLM has returned non-dict entries (plain strings, nulls) —
+            # treat those as a hint-only fallback entry.
+            if not isinstance(f, dict):
+                hint = str(f or "").strip()
+                if hint:
+                    findings.append({"url": "", "hint": hint})
+                continue
             url = str(f.get("url", "")).strip()
             hint = str(f.get("hint", "")).strip()
             if url and not url.startswith(("http://", "https://")):
@@ -148,6 +160,8 @@ def _sanitise(data, prompt):
     if action == "edit_parameter":
         edits = []
         for e in (data.get("edits") or []):
+            if not isinstance(e, dict):
+                continue
             key = str(e.get("key", "")).strip().lower()
             field = str(e.get("field", "")).strip().lower()
             value = str(e.get("value", "")).strip()
@@ -174,7 +188,7 @@ def _sanitise(data, prompt):
         return {"action": "edit_parameter", "edits": edits}
 
     return {"action": "unknown",
-            "reason": data.get("reason") or "LLM couldn't classify"}
+            "reason": str(data.get("reason") or "LLM couldn't classify")}
 
 
 def _fallback(prompt):

@@ -211,10 +211,13 @@ def _render_intro(row, client_display):
     subtitle = subtitle.split("\n", 1)[0].strip()
     formula   = row.get("found") or ""
     # If the sheet stored a #ERROR!/#REF! (Sheets parsed a leading '+X%' as
-    # a formula and blew up), fall back to a clean default so the deck
-    # doesn't show '#ERROR!' where the formula card should be.
+    # a formula and blew up), or the cell is empty, fall back to a neutral
+    # headline instead of inventing component terms the audit didn't find.
+    # The old fallback printed '+5.8% Meta descriptions × +25% Structured
+    # data = +33% More leads' REGARDLESS of what the audit actually
+    # discovered — misleading when the site has neither finding.
     if formula.strip().upper().startswith("#") or formula.strip() == "":
-        formula = "+5.8% Meta descriptions  ×  +25% Structured data  =  +33% More leads"
+        formula = "Same pages, same website → more leads"
     example   = row.get("costs") or ""
 
     # Intro headline — highlight the stat portion in blue.

@@ -660,7 +660,29 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
 
         # Merge findings by category first so we can build a dynamic
         # intro-slide formula from the actual top-lift findings this run.
-        obs_rows = [r for r in obs_rows if r.get("key", "") not in SKIP_KEYS]
+        # SKIP matching: exact membership + prefix patterns so LLM-sweep
+        # paraphrases of a skipped topic ('llm_html_entities_in_titles',
+        # 'llm_broken_image_references', 'llm_ai_generated_content_homepage'
+        # etc.) still get dropped — the original llm_sweep normalises keys
+        # with a regex so we can't enumerate every variant.
+        def _is_skipped(k):
+            if k in SKIP_KEYS:
+                return True
+            kl = k.lower()
+            for pat in ("llm_html_entities", "llm_broken_image",
+                         "llm_ai_generated", "llm_ai_content",
+                         "llm_placeholder", "llm_lorem",
+                         "llm_viewport", "llm_pinch_zoom",
+                         "llm_thank_you", "llm_confirmation",
+                         "llm_duplicate_form", "llm_form_id",
+                         "llm_editor_leftover", "llm_cms_slug",
+                         "llm_generated_slug", "llm_url_issue",
+                         "llm_naked_", "llm_http_naked",
+                         "llm_url_variants"):
+                if pat in kl:
+                    return True
+            return False
+        obs_rows = [r for r in obs_rows if not _is_skipped(r.get("key", ""))]
         obs_rows = _drop_og_findings(obs_rows)
         obs_rows = _merge_findings_by_category(obs_rows)
 
@@ -1060,9 +1082,11 @@ def read_for_deck(sheet_url_or_id):
     obs_rows = []
     def _g(row, i):
         v = row[i].strip() if i < len(row) and row[i] is not None else ""
-        # Belt-and-braces: '#ERROR!' / '#REF!' / '#NAME?' sometimes leak in
-        # when a formula fails. Never let those reach the deck.
-        if v.startswith("#") and v.endswith("!") and 4 <= len(v) <= 12:
+        # Belt-and-braces: Sheets error sentinels (#ERROR!, #REF!, #NAME?,
+        # #NUM!, #DIV/0!, #N/A, #VALUE!) sometimes leak in when a formula
+        # fails. Never let those reach the deck.
+        if (v.startswith("#") and 3 <= len(v) <= 12
+                and all(c.isalnum() or c in "#/!?" for c in v)):
             return ""
         # Strip leading apostrophe (Sheets text-mode marker). We prefix
         # certain writes with ' to force text render (percentages that
@@ -1347,21 +1371,20 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
     from audit.hook_copy import for_row as _hf
     copy = _hf(finding_key, default_obs=label, default_costs="", priority=priority)
     overrides = overrides or {}
+    # Use the shared sanitizer so bare decimals ('0.058') get converted to
+    # '+5.8%' and prefixes with trailing text ('+8.5% CTR lift') get the
+    # non-% tail stripped — the two helpers used to diverge, which is how
+    # catalog decimals were landing as text-mode '0.058' in E.
     def _clean_stat(s):
-        """Strip any trailing text after the %. Sheets can then parse as %.
-
-        LLM sometimes returns 'hook_stat: -24% conversions' which USER_ENTERED
-        parses as arithmetic and fails with #ERROR!."""
         import re as _rss
         s = (s or "").strip()
+        # Prefix match first: strip trailing text after the %.
         m = _rss.match(r"^([+\-]?\d+(?:\.\d+)?%)", s)
         if m:
             return m.group(1)
-        m = _rss.match(r"^(\d+x)$", s)
-        if m:
-            return m.group(1)
-        # Non-parseable → force text mode with a leading apostrophe.
-        return "'" + s if s and not s.startswith("'") else s
+        # Delegates everything else (bare decimals, Nx, formula-start chars)
+        # to the module-level sanitiser.
+        return _clean_stat_row(s)
 
     hook_stat = _clean_stat(overrides.get("hook_stat") or copy["hook_stat"])
     hook_ctx  = overrides.get("hook_ctx")  or copy["hook_ctx"]

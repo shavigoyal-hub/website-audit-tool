@@ -47,7 +47,9 @@ _SRC_RE = re.compile(
     re.I,
 )
 _URL_RE = re.compile(r"https?://\S+")
-_ERR_RE = re.compile(r"^#[A-Z]+[!?]?$")
+# Google Sheets error sentinels: #ERROR!, #REF!, #NAME?, #NUM!, #NULL!,
+# #DIV/0!, #N/A, #VALUE!. All start with # and are short-form.
+_ERR_RE = re.compile(r"^#[A-Z/0-9]+[!?]?$")
 
 
 def parse_pct(s):
@@ -124,9 +126,13 @@ def qc(sid):
                 problems.append((r["row"], f"col-{col_label}",
                     "contains IMG: marker — verify screenshot renders before shipping"))
 
-    # 5. Support (I) leads with stat or is empty
+    # 5. Support (I) leads with stat or is empty.
+    # Strip any inline IMG: markers before checking — chatbot-attached
+    # screenshots live in the same cell and shouldn't fail the stat-lead
+    # rule when the actual prose does start with a stat.
+    _img_re = re.compile(r"\s*IMG:\s*\S+\s*", re.I)
     for r in rows:
-        v = r["support_i"].strip()
+        v = _img_re.sub(" ", r["support_i"]).strip()
         if not v:
             continue
         starts_with_stat = bool(re.match(
