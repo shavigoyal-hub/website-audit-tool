@@ -246,6 +246,29 @@ def evaluate(live_url):
             # the user's hard rule: never talk about feeds pages.
             if _JUNK_URL.search(obs.lower()) or "feeds" in obs.lower():
                 continue
+            # Evidence rule (added after matrixmspllc shipped a 'Content
+            # Visibility Issue' row with no URL and no concrete observation):
+            # a sweep finding MUST have at least one URL in its reference
+            # AND an observation of at least 25 characters that reads like
+            # a real finding, not a category stub. Drops the LLM's
+            # placeholder slots that would otherwise force CS to blank
+            # them manually.
+            if ref_lines and not any(l.startswith("http") for l in ref_lines):
+                # Reference has lines but none are URLs (e.g. 'Several pages'
+                # non-URL text). Treat as evidence-free.
+                ref_lines = []
+            if not ref_lines or len(obs) < 25:
+                continue
+            # Observations that are just a Category restatement ('Content
+            # Visibility Issue', 'Site Architecture Problem') — reject if
+            # observation has no verb and no number.
+            _has_verb = bool(re.search(
+                r"\b(?:has|have|is|are|lack|lacks|missing|returns?|shows?|"
+                r"carries?|renders?|points?|uses?|share|share s|contain|"
+                r"over|under|above|below|drops?|loses?)\b", obs, re.I))
+            _has_number = bool(re.search(r"\d", obs))
+            if not (_has_verb or _has_number):
+                continue
             findings.append({
                 "key":         key,
                 "category":    str(f.get("category", "")).strip() or "Manual review",
