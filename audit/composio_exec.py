@@ -107,6 +107,16 @@ def execute(slug, arguments, retry=3):
                     last_err = f"{slug}: {err.get('message', err)} [{err.get('slug', '')}]"
                 else:
                     last_err = f"{slug}: {err or resp.text[:300]}"
+                # Google Sheets 429 (per-user read-request quota, 60/min).
+                # Back off and retry the SAME uid rather than falling through
+                # to the next user — the limit is per account, not per call.
+                if "[429]" in last_err or "Quota exceeded" in last_err or "RATE_LIMIT" in last_err.upper():
+                    if attempt < retry:
+                        # Exponential: 2s, 5s, 12s so a transient 60/min
+                        # burst clears within one retry window.
+                        delay = min(2 ** attempt + attempt * 1.5, 15)
+                        time.sleep(delay)
+                        continue
                 break  # don't retry the same uid — try next
             except Exception as exc:
                 last_err = f"{slug}: {exc}"

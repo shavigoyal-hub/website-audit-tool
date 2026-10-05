@@ -85,6 +85,11 @@ def _find_row(sid, job_id):
 
 LAST_ENQUEUE_ERROR = ""
 
+# Row-index cache populated by claim_next, consumed by mark_done /
+# mark_error so those don't need a second whole-sheet read (which was
+# tripping the 429 per-user Sheets read quota).
+_CLAIMED_ROWS = {}
+
 
 def enqueue(client, live_url, source=""):
     """Fast append-only enqueue. Avoids the slow _ensure_tab + _read_rows
@@ -186,6 +191,9 @@ def claim_next(worker_id):
             r[4] = "running"
             r[5] = worker_id
             r[6] = ts
+            # Remember where this job lives so mark_done / mark_error can
+            # skip the follow-up _find_row read.
+            _CLAIMED_ROWS[r[0]] = i
             return dict(zip(JOB_HEADER, r))
     return None
 
@@ -193,35 +201,51 @@ def claim_next(worker_id):
 def mark_done(job_id, sheet_url, crawler="", pages="",
               composio_calls="", psi_calls="", cost_usd=""):
     sid = _find_sheet()
-    row = _find_row(sid, job_id) if sid else None
+    if not sid:
+        return False
+    # claim_next caches the row index in _CLAIMED_ROWS so we skip the
+    # whole-sheet read here — one Composio call instead of two.
+    row = _CLAIMED_ROWS.pop(job_id, None) or _find_row(sid, job_id)
     if not row:
         return False
-    _cx("GOOGLESHEETS_BATCH_UPDATE", {
-        "spreadsheet_id": sid, "sheet_name": JOBS_TAB,
-        "first_cell_location": f"E{row}",
-        "valueInputOption": "USER_ENTERED",
-        "values": [["done", "", "", _now(), sheet_url or "", "",
-                    crawler or "",
-                    pages if pages != "" else "",
-                    composio_calls if composio_calls != "" else "",
-                    psi_calls if psi_calls != "" else "",
-                    cost_usd if cost_usd != "" else ""]],
-    })
-    return True
+    try:
+        _cx("GOOGLESHEETS_BATCH_UPDATE", {
+            "spreadsheet_id": sid, "sheet_name": JOBS_TAB,
+            "first_cell_location": f"E{row}",
+            "valueInputOption": "USER_ENTERED",
+            "values": [["done", "", "", _now(), sheet_url or "", "",
+                        crawler or "",
+                        pages if pages != "" else "",
+                        composio_calls if composio_calls != "" else "",
+                        psi_calls if psi_calls != "" else "",
+                        cost_usd if cost_usd != "" else ""]],
+        })
+        return True
+    except Exception as exc:
+        # On 429 (quota), swallow — the audit sheet was already built, we
+        # just can't tag the job row. Better than crashing the worker loop.
+        print(f"[jobs] mark_done quota/err: {exc}")
+        return False
 
 
 def mark_error(job_id, err):
     sid = _find_sheet()
-    row = _find_row(sid, job_id) if sid else None
+    if not sid:
+        return False
+    row = _CLAIMED_ROWS.pop(job_id, None) or _find_row(sid, job_id)
     if not row:
         return False
-    _cx("GOOGLESHEETS_BATCH_UPDATE", {
-        "spreadsheet_id": sid, "sheet_name": JOBS_TAB,
-        "first_cell_location": f"E{row}",
-        "valueInputOption": "USER_ENTERED",
-        "values": [["error", "", "", _now(), "", (err or "")[:3000]]],
-    })
-    return True
+    try:
+        _cx("GOOGLESHEETS_BATCH_UPDATE", {
+            "spreadsheet_id": sid, "sheet_name": JOBS_TAB,
+            "first_cell_location": f"E{row}",
+            "valueInputOption": "USER_ENTERED",
+            "values": [["error", "", "", _now(), "", (err or "")[:3000]]],
+        })
+        return True
+    except Exception as exc:
+        print(f"[jobs] mark_error quota/err: {exc}")
+        return False
 
 
 def list_recent(n=25, statuses=None):
