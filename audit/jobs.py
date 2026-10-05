@@ -83,26 +83,52 @@ def _find_row(sid, job_id):
     return None
 
 
+LAST_ENQUEUE_ERROR = ""
+
+
 def enqueue(client, live_url, source=""):
+    """Fast append-only enqueue. Avoids the slow _ensure_tab + _read_rows
+    round-trips that were timing out Vercel's lambda window — uses the
+    append endpoint instead so Google places the row at the first blank.
+    """
+    global LAST_ENQUEUE_ERROR
+    LAST_ENQUEUE_ERROR = ""
     sid = _find_sheet()
     if not sid:
+        LAST_ENQUEUE_ERROR = "no history sheet id"
         return None
-    _ensure_tab(sid)
-    rows = _read_rows(sid)
-    row_num = (len(rows) + 1) if rows else 1
     jid = uuid.uuid4().hex[:8]
+    row = [jid, _now(), client, live_url,
+           "pending", "", "", "", "", "",
+           "", "", "", "", "", source or ""]
+    # Try append first — one API call, no reads.
     try:
+        _cx("GOOGLESHEETS_SPREADSHEETS_VALUES_APPEND", {
+            "spreadsheet_id": sid,
+            "range": f"{JOBS_TAB}!A1",
+            "valueInputOption": "USER_ENTERED",
+            "insertDataOption": "INSERT_ROWS",
+            "values": [row],
+        })
+        return jid
+    except Exception as exc:
+        LAST_ENQUEUE_ERROR = f"append: {exc}"[:300]
+        print(f"[jobs] enqueue append failed: {exc}")
+    # Fallback: ensure tab exists and retry with BATCH_UPDATE at next row.
+    try:
+        _ensure_tab(sid)
+        rows = _read_rows(sid)
+        row_num = (len(rows) + 1) if rows else 1
         _cx("GOOGLESHEETS_BATCH_UPDATE", {
             "spreadsheet_id": sid, "sheet_name": JOBS_TAB,
             "first_cell_location": f"A{row_num}",
             "valueInputOption": "USER_ENTERED",
-            "values": [[jid, _now(), client, live_url,
-                        "pending", "", "", "", "", "",
-                        "", "", "", "", "", source or ""]],
+            "values": [row],
         })
         return jid
     except Exception as exc:
-        print(f"[jobs] enqueue: {exc}")
+        LAST_ENQUEUE_ERROR = f"batch_update: {exc}"[:300]
+        print(f"[jobs] enqueue fallback failed: {exc}")
         return None
 
 

@@ -129,8 +129,10 @@ def run_audit():
         # Reporting tool can list the audits queued from inside it.
         jid = jobs.enqueue(client_name, live_url, source=request.host)
         if not jid:
+            # Surface the underlying error so Vercel-side issues are debuggable
+            reason = getattr(jobs, "LAST_ENQUEUE_ERROR", "") or "unknown"
             return jsonify({
-                "error": "Could not enqueue job — history sheet unreachable.",
+                "error": f"Could not enqueue job — {reason}",
             }), 500
         return jsonify({
             "ok": True, "version": VERSION,
