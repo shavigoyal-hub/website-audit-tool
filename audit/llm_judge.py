@@ -321,14 +321,15 @@ def _apply_judgement(row, judgement):
     forced = _CANONICAL_CATEGORY.get(key)
     if forced:
         new["category"] = forced
-    # Lock hook_ctx + hook_stat for Lead-primary catalog keys so the LLM
-    # can't drift them into ranking-flavoured copy ('Google may lower your
-    # ranking…'). We want 'more leads once X' / 'leads lost when X' framing
-    # on the finding slide header for every Lead-primary row.
+    # Lock hook_ctx + hook_stat to the catalog for EVERY known key — not
+    # just Lead-primary. The finding slide hero says 'STAT metric-description'
+    # and the LLM kept rewriting the metric-description with the finding
+    # TITLE ('-25% Generic H1 tag on homepage') instead of what the stat
+    # actually measures. The catalog hook_ctx is the one place that always
+    # explains what the number means.
     try:
         from audit.hook_copy import HOOK_COPY as _HC
-        from audit.report_sheets import _LEAD_KEYS_MASTER as _LK
-        if key in _LK and key in _HC:
+        if key in _HC:
             cat_spec = _HC[key]
             if cat_spec.get("hook_ctx"):
                 new["hook_ctx"] = cat_spec["hook_ctx"]

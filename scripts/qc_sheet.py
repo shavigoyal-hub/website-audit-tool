@@ -153,6 +153,30 @@ def qc(sid):
             problems.append((r["row"], "col-E",
                 f"Hook Stat doesn't parse: {r['stat_e']!r}"))
 
+    # 6b. hook_ctx (col F) must say WHAT the stat measures — not just
+    # restate the finding title. Catches rows like '-25% Generic H1 tag on
+    # homepage' where the reader has no idea whether that's ranking, CTR,
+    # leads, or traffic. hook_ctx should contain at least one metric word.
+    _METRIC_WORDS = (
+        "lead", "leads", "ranking", "rankings", "rank", "indexation",
+        "crawl", "coverage", "visibility", "ctr", "click-through",
+        "click", "clicks", "impression", "impressions", "snippet",
+        "serp", "conversion", "conversions", "bounce", "traffic",
+        "citation", "citations", "share", "equity", "authority",
+    )
+    for r in rows:
+        ctx = (r["ctx_f"] or "").lower()
+        # Strip the leading stat portion (produced by the F formula) before
+        # checking — e.g. '-25% ranking loss when …' should pass the check
+        # on 'ranking', not on the '%' from the stat.
+        ctx_body = re.sub(r"^\s*[+\-]?\d+(?:[.,]\d+)?%\s*", "", ctx)
+        if not ctx_body.strip():
+            continue
+        if not any(w in ctx_body for w in _METRIC_WORDS):
+            problems.append((r["row"], "col-F",
+                f"Hook Context doesn't name a metric (leads/ranking/CTR/…): "
+                f"{(r['ctx_f'] or '')[:60]!r}"))
+
     # 7. What We Found: has URL or Sitewide
     for r in rows:
         g = r["found_g"]
