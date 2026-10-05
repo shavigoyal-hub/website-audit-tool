@@ -551,7 +551,7 @@
   },
   "schema_article_missing": {
     "costs": "Missing Article schema hides author, publish date and rich snippets in search and news.",
-    "hook_ctx": "more organic traffic on articles with Article / BlogPosting schema.",
+    "hook_ctx": "more leads from article pages when they ship Article / BlogPosting schema.",
     "hook_stat": "0.05",
     "in_lead_sum": "YES",
     "label": "No Article schema",
