@@ -247,11 +247,23 @@ def build_deck():
 
         # On-the-fly deck URL — Vercel's /tmp file isn't reachable from the
         # next request, so we point at /deck?sheet=… which re-renders live.
+        # Must live on the audit-tool host (which has /deck). If the request
+        # arrived via a wrapper domain (e.g. seo-reporting-five.vercel.app
+        # proxying through this app), request.host_url points at the
+        # wrapper — and the wrapper has NO /deck route, so clicking the
+        # link from history gives a 404. PUBLIC_DECK_HOST env var lets us
+        # pin the canonical host; falls back to a hardcoded default.
         from urllib.parse import quote
-        # Built on the host AND the mount prefix the request came through, so
-        # a deck made inside SEO Reporting opens inside it too.
-        deck_url = (request.host_url.rstrip("/") + request.script_root
-                    + f"/deck?sheet={quote(sheet_url, safe=':/?&=')}")
+        _canonical_host = os.environ.get("PUBLIC_DECK_HOST", "").rstrip("/")
+        if not _canonical_host:
+            # Known Vercel URL for this audit tool. Only kicks in when the
+            # request host DOESN'T have /deck mounted (wrapper domains).
+            _req_host = (request.host or "").lower()
+            if "website-audit-tool" in _req_host or "localhost" in _req_host:
+                _canonical_host = request.host_url.rstrip("/") + request.script_root
+            else:
+                _canonical_host = "https://website-audit-tool-iota-ten.vercel.app"
+        deck_url = f"{_canonical_host}/deck?sheet={quote(sheet_url, safe=':/?&=')}"
         # Auto-QC the sheet before shipping the deck. If it finds issues,
         # attach them to the response so the reviewer sees them, but still
         # return the deck URL — the reviewer can decide whether to ship.
