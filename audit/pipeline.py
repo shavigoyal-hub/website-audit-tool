@@ -558,7 +558,8 @@ def run(live_url):
     # (SF scope limit, 403s, sitemap only), the thin_content finding
     # under-counts. Fetch the sitemap and probe a wider set so audits don't
     # ship with 'Thin content on 1 page' when the real answer is 6-10.
-    findings = _expand_thin_content(findings, live_url_norm)
+    _lu_norm_early = live_url if live_url.endswith("/") else live_url + "/"
+    findings = _expand_thin_content(findings, _lu_norm_early)
     reps = sf_csv.representative_pages(df, custom_patterns=page_type_patterns)
 
     psi_live = manual_psi or pagespeed.fetch_many(reps, "mobile", psi_key)
