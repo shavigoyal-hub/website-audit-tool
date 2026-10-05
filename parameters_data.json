@@ -49,6 +49,16 @@
     "priority": "Medium",
     "support": "Google helpful content: contact info is a core E-E-A-T signal."
   },
+  "content_visibility": {
+    "costs": "Google indexes what Googlebot renders, not what the user's browser renders. Content hidden from the live-test doesn't count toward ranking.",
+    "hook_ctx": "leads lost when Google's render pass misses the content the user actually sees.",
+    "hook_stat": "-30%",
+    "in_lead_sum": "YES",
+    "label": "Content Visibility (render gap)",
+    "primary_signal": "Lead",
+    "priority": "Critical",
+    "support": "Serve critical copy in the initial HTML or hydrate before Googlebot's render-queue timeout (~5 min on mobile)."
+  },
   "crawl_budget_wasted": {
     "costs": "Wasted crawl budget delays discovery of new money pages.",
     "hook_ctx": "index efficiency wasted on redirect, error and noindex URLs.",
