@@ -553,7 +553,7 @@ def _render_finding(row, page_no, total_pages, client_display):
             <div class="card-label">What it costs you</div>
             <div class="card-body">{_html.escape(costs)}</div>
           </div>
-          {f"<div class='card card-sup'>{sup_html}</div>" if sup_html else ""}
+          {f"<div class='card card-sup'>{sup_html}</div>" if (sup_html and not img_urls) else ""}
           {(f"<div class='card card-img'>" + "".join(f"<img src='{u}' alt='' loading='lazy' onerror='this.parentNode&&this.parentNode.removeChild(this)' />" for u in img_urls[:3]) + "</div>") if img_urls else ""}
         </div>
       </div>
@@ -789,9 +789,15 @@ html, body {
 .card.card-img {
   background: #fff; padding: 8px; display: flex; flex-direction: column;
   gap: 8px; align-items: center;
+  /* Must honor the parent card-col width + stay inside the slide bounds. */
+  min-width: 0; max-width: 100%; overflow: hidden; box-sizing: border-box;
 }
 .card.card-img img {
-  max-width: 100%; max-height: 220px; object-fit: contain;
+  display: block;
+  width: 100%;       /* fill the card width exactly */
+  max-width: 100%;
+  max-height: 420px; /* a tall mobile GSC screenshot gets more room */
+  object-fit: contain;
   border-radius: 6px; border: 1px solid #e2e8f0;
 }
 .card-head { display: flex; justify-content: space-between; margin-bottom: 8px; }
