@@ -789,14 +789,18 @@ html, body {
 .card.card-img {
   background: #fff; padding: 8px; display: flex; flex-direction: column;
   gap: 8px; align-items: center;
-  /* Must honor the parent card-col width + stay inside the slide bounds. */
+  /* Hard-fit inside the right column AND the slide body. The slide has
+     ~5.4in usable height; the costs card eats ~1.5in, so the image card
+     gets ~3.4in = ~325px. */
   min-width: 0; max-width: 100%; overflow: hidden; box-sizing: border-box;
+  flex: 1 1 auto;
+  min-height: 0;    /* flex child must allow shrink or 100% overflows */
+  max-height: 3.4in;
 }
 .card.card-img img {
   display: block;
-  width: 100%;       /* fill the card width exactly */
-  max-width: 100%;
-  max-height: 420px; /* a tall mobile GSC screenshot gets more room */
+  width: auto; max-width: 100%;
+  height: 100%; max-height: 100%;
   object-fit: contain;
   border-radius: 6px; border: 1px solid #e2e8f0;
 }

@@ -153,6 +153,19 @@ def qc(sid):
             problems.append((r["row"], "col-E",
                 f"Hook Stat doesn't parse: {r['stat_e']!r}"))
 
+    # 6a. 'What it costs you' (col H) should be 1-2 short sentences, not a
+    # 4-sentence paragraph. User rule — paragraph-length costs push the
+    # screenshot card off the slide.
+    for r in rows:
+        costs = r["costs_h"].strip()
+        if not costs:
+            continue
+        _sentences = [s for s in re.split(r"[.!?](?:\s|$)", costs) if s.strip()]
+        if len(costs) > 220 or len(_sentences) > 2:
+            problems.append((r["row"], "col-H",
+                f"What it costs you is too long ({len(costs)} chars, "
+                f"{len(_sentences)} sentences — keep it to ≤2 sentences / ~200 chars)"))
+
     # 6b. hook_ctx (col F) must say WHAT the stat measures — not just
     # restate the finding title. Catches rows like '-25% Generic H1 tag on
     # homepage' where the reader has no idea whether that's ranking, CTR,
