@@ -604,8 +604,65 @@ def run(live_url):
         from audit import llm_sweep as _sweep
         sweep_issues = _sweep.evaluate(live_url_norm)
         if sweep_issues:
-            print(f"[pipeline] llm_sweep emitted {len(sweep_issues)} findings")
-        site["issues"].extend(sweep_issues)
+            # Topic-level dedupe. Rule-based findings (sf_csv + parameters +
+            # deep_analyzer) always win; LLM-sweep can only ADD a topic the
+            # rule set hasn't already covered. Keeps 'Homepage Title',
+            # 'Homepage title quality', and 'Weak title tag' from all
+            # shipping as separate rows for the same underlying issue.
+            def _topic(key_or_obs):
+                k = (key_or_obs or "").lower()
+                if "title" in k:    return "title"
+                if "meta" in k and "description" in k: return "meta"
+                if "meta" in k:     return "meta"
+                if "h1" in k:       return "h1"
+                if "h2" in k or "h3" in k: return "heading"
+                if "thin" in k or "content_depth" in k or "near_duplicate" in k:
+                    return "content"
+                if "schema" in k or "ld+json" in k or "structured" in k:
+                    return "schema"
+                if "lcp" in k or "cls" in k or "perf" in k or "page speed" in k:
+                    return "speed"
+                if "render" in k or "visibility" in k:
+                    return "render"
+                if "nav" in k or "menu" in k or "architecture" in k or "flat" in k:
+                    return "nav"
+                if "canonical" in k:        return "canonical"
+                if "sitemap" in k:          return "sitemap"
+                if "robots" in k:           return "robots"
+                if "cta" in k or "above-fold" in k or "above fold" in k:
+                    return "cta"
+                if "favicon" in k:          return "favicon"
+                if "about" in k:            return "about"
+                if "contact" in k:          return "contact"
+                if "url" in k and ("long" in k or "slug" in k or "length" in k):
+                    return "url_length"
+                if "duplicate" in k and "page" in k and "home" not in k:
+                    return "dup_page"
+                if "duplicate" in k and ("home" in k or "variant" in k):
+                    return "dup_home"
+                return None
+            # Topics already covered by the rule set
+            covered = set()
+            for src in (findings, site["issues"]):
+                for f in src:
+                    t = _topic(f.get("key", "")) or _topic(f.get("category", "")) or _topic(f.get("observation", ""))
+                    if t:
+                        covered.add(t)
+            kept = []
+            seen_in_sweep = set()
+            for f in sweep_issues:
+                t = _topic(f.get("key", "")) or _topic(f.get("category", "")) or _topic(f.get("observation", ""))
+                if t in covered:
+                    print(f"[dedupe] drop sweep '{f.get('category', '')}' — topic '{t}' already covered")
+                    continue
+                if t and t in seen_in_sweep:
+                    print(f"[dedupe] drop sweep '{f.get('category', '')}' — duplicate topic '{t}' in sweep")
+                    continue
+                if t:
+                    seen_in_sweep.add(t)
+                kept.append(f)
+            print(f"[pipeline] llm_sweep emitted {len(sweep_issues)}, kept {len(kept)} after dedupe")
+            site["issues"].extend(kept)
     except Exception as exc:
         print(f"[pipeline] llm_sweep skipped: {exc}")
 

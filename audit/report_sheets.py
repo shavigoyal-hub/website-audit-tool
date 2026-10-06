@@ -1485,6 +1485,39 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
             "values": values,
         })
     except Exception as exc:
+        _msg = str(exc)
+        # Sheets' grid defaults to the max row count of the initial build.
+        # When CS trims empty tail rows the grid shrinks, so a new chatbot
+        # finding at row N+1 trips 'Range exceeds grid limits'. Resize the
+        # grid and retry once.
+        if "exceeds grid limits" in _msg or "Range" in _msg and "grid" in _msg:
+            try:
+                from audit.composio_exec import proxy as _p
+                _info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                                           {"spreadsheet_id": sid}) or {}
+                _obs_id = None
+                for s in (_info.get("sheets") or []):
+                    if ((s.get("properties") or {}).get("title")) == "Observations":
+                        _obs_id = (s.get("properties") or {}).get("sheetId"); break
+                if _obs_id is not None:
+                    _p(
+                        endpoint=f"https://sheets.googleapis.com/v4/spreadsheets/{sid}:batchUpdate",
+                        method="POST",
+                        body={"requests": [{"updateSheetProperties": {
+                            "properties": {"sheetId": _obs_id,
+                                           "gridProperties": {"rowCount": target_row + 20,
+                                                              "columnCount": 26}},
+                            "fields": "gridProperties.rowCount,gridProperties.columnCount",
+                        }}]},
+                    )
+                    _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
+                        "spreadsheet_id": sid, "sheet_name": "Observations",
+                        "first_cell_location": f"A{target_row}",
+                        "valueInputOption": "USER_ENTERED", "values": values,
+                    })
+                    return target_row, None
+            except Exception as exc2:
+                return None, f"write failed (grid resize retry also failed): {exc2}"
         return None, f"write failed: {exc}"
     return target_row, None
 
