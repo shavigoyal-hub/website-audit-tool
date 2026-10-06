@@ -1200,6 +1200,11 @@ def _recompute_intro_from_rows(obs_rows):
     scale = 35.0 / raw_sum if raw_sum > 35 else 1.0
     scaled = [(round(p * scale, 1), c) for p, c in picks]
     total = round(sum(p for p, _ in scaled), 1)
+    # Keep original (unsorted) scaled list for per-category lookup, THEN sort
+    # a copy for the display ordering on the intro slide. If both ops touch
+    # the same list, the per-cat map ends up re-sorted and that's fine, but
+    # the lookup still works because it's keyed by category name.
+    scaled_by_cat = {c.lower(): p for p, c in scaled}
     scaled.sort(key=lambda t: -t[0])
     top = scaled[:4]
     more_n = len(scaled) - len(top)
@@ -1213,6 +1218,24 @@ def _recompute_intro_from_rows(obs_rows):
     intro["costs"]     = (f"If you get 10 leads a month today 10 leads → "
                           f"{target_leads} leads. Same pages, same website. "
                           "Before any ranking gains.")
+
+    # Push the SAME scaled numbers down into each matching finding row's
+    # hook_stat + hook_ctx so the individual slide hero says the same '+8.8%'
+    # the intro promises. Without this, intro says '+34.9%' but a finding
+    # slide still shows '+25% leads' from pre-scaling — contradiction.
+    for r in findings:
+        cat = (r.get("category") or "").strip().lower()
+        p = scaled_by_cat.get(cat)
+        if p is None:
+            continue
+        new_stat = f"+{p:g}%"
+        r["hook_stat"] = new_stat
+        # Rewrite hook_ctx leading '+N%' prefix if present so the slide
+        # heading stays coherent ('+8.8% ranking loss when ...').
+        _ctx = (r.get("hook_ctx") or "").strip()
+        _ctx_body = _re.sub(r"^\s*[+\-]?\d+(?:[.,]\d+)?%\s*", "", _ctx)
+        if _ctx_body != _ctx:
+            r["hook_ctx"] = f"{new_stat} {_ctx_body}"
 
 
 def _write_slide_review_tab(spreadsheet_id, header, intro_row, ending_row):

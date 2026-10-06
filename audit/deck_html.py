@@ -694,20 +694,22 @@ html, body {
   font-weight: 500; letter-spacing: -0.01em;
 }
 
-.intro-right { flex: 0 0 5.6in; }
+.intro-right { flex: 0 0 5.6in; min-width: 0; max-width: 5.6in; overflow: hidden; }
 .intro-formula {
-  display: flex; align-items: stretch; gap: 12px; flex-wrap: nowrap;
-  margin-bottom: 22px;
+  display: flex; align-items: stretch; gap: 8px; flex-wrap: wrap;
+  margin-bottom: 22px; max-width: 100%;
 }
 .formula-card {
-  flex: 1; border: 1px solid var(--sep); border-radius: 12px;
-  padding: 16px 18px; background: var(--white);
+  flex: 1 1 1.1in; min-width: 0; max-width: 100%;
+  border: 1px solid var(--sep); border-radius: 12px;
+  padding: 12px 14px; background: var(--white);
   display: flex; flex-direction: column; gap: 4px;
+  overflow: hidden;
 }
 .formula-card.hi { background: var(--card-blue); border-color: #cadaff; }
-.formula-num { font-size: 20pt; font-weight: 700; color: var(--blue); line-height: 1; letter-spacing: -0.02em; }
-.formula-label { font-size: 10pt; color: var(--muted); font-weight: 500; }
-.formula-op { display: flex; align-items: center; padding: 0 4px; color: var(--muted); font-size: 16pt; }
+.formula-num { font-size: 16pt; font-weight: 700; color: var(--blue); line-height: 1; letter-spacing: -0.02em; white-space: nowrap; }
+.formula-label { font-size: 9pt; color: var(--muted); font-weight: 500; overflow-wrap: break-word; }
+.formula-op { display: flex; align-items: center; padding: 0 2px; color: var(--muted); font-size: 14pt; }
 
 .uplift-card {
   border: 1px solid var(--sep); border-radius: 14px;

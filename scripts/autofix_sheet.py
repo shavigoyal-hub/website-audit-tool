@@ -233,6 +233,92 @@ def autofix(sid):
                 _write(sid, r["row"], col, stripped)
                 fixes.append(f"row {r['row']} {col}: source citation stripped")
 
+    # ─── Fix 7b: Category / observation topic mismatch ───────────────────
+    # If category says 'Meta Descriptions' but obs+ctx talks about title
+    # tags (and never mentions meta description), the LLM swapped topics.
+    # Re-canonicalize category to match what the content actually describes.
+    def _topic_of(text):
+        t = (text or "").lower()
+        # Order matters: check more-specific tokens first.
+        if "meta description" in t or "meta descriptions" in t:
+            return "meta"
+        if "title tag" in t or "title tags" in t or "duplicate title" in t:
+            return "title"
+        if "h1" in t:
+            return "h1"
+        if "schema" in t or "structured data" in t:
+            return "schema"
+        if "sitemap" in t:
+            return "sitemap"
+        if "robots.txt" in t:
+            return "robots"
+        if "canonical" in t:
+            return "canonical"
+        if "lcp" in t or "page speed" in t or "load" in t and "slow" in t:
+            return "speed"
+        if "cls" in t or "layout shift" in t:
+            return "cls"
+        if "thin content" in t or "thin page" in t:
+            return "thin"
+        if "duplicate content" in t:
+            return "dup_content"
+        if "cta" in t or "above-fold" in t or "above the fold" in t:
+            return "cta"
+        return None
+
+    _CAT_TOPIC = {
+        "meta descriptions": "meta",
+        "duplicate meta descriptions": "meta",
+        "title tags": "title",
+        "duplicate titles": "title",
+        "missing h1": "h1",
+        "schema markup": "schema",
+        "homepage schema": "schema",
+        "xml sitemap": "sitemap",
+        "robots.txt": "robots",
+        "robots.txt blocking": "robots",
+        "canonical tags": "canonical",
+        "page speed": "speed",
+        "page speed (lcp)": "speed",
+        "layout shift (cls)": "cls",
+        "thin pages": "thin",
+        "duplicate content": "dup_content",
+        "above-fold cta": "cta",
+    }
+    _TOPIC_TO_CAT = {
+        "meta": "Meta Descriptions",
+        "title": "Title Tags",
+        "h1": "Missing H1",
+        "schema": "Schema Markup",
+        "sitemap": "XML Sitemap",
+        "robots": "Robots.txt",
+        "canonical": "Canonical Tags",
+        "speed": "Page Speed",
+        "cls": "Layout Shift (CLS)",
+        "thin": "Thin Pages",
+        "dup_content": "Duplicate Content",
+        "cta": "Above-Fold CTA",
+    }
+    for r in rows:
+        cat_norm = r["cat"].strip().lower()
+        cat_topic = _CAT_TOPIC.get(cat_norm)
+        if not cat_topic:
+            continue
+        content_topic = _topic_of(f"{r['obs']} {r['ctx_f']}")
+        if content_topic and content_topic != cat_topic:
+            new_cat = _TOPIC_TO_CAT.get(content_topic)
+            # Specialize: duplicate variant if obs says 'duplicate'
+            obs_l = r["obs"].lower()
+            if content_topic == "title" and "duplicate" in obs_l:
+                new_cat = "Duplicate Titles"
+            if content_topic == "meta" and "duplicate" in obs_l:
+                new_cat = "Duplicate Meta Descriptions"
+            if new_cat and new_cat.lower() != cat_norm:
+                _write(sid, r["row"], "A", new_cat)
+                fixes.append(f"row {r['row']} A: category {r['cat']!r} → {new_cat!r} "
+                             f"(content topic '{content_topic}')")
+                r["cat"] = new_cat  # so Fix 7 duplicate check uses updated value
+
     # ─── Fix 7: Duplicate category names (case-insensitive) ──────────────
     seen = {}
     for r in rows:
