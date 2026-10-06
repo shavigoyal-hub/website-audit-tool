@@ -95,6 +95,20 @@ def qc(sid):
                 problems.append((r["row"], "category",
                     "Sitewide-dup-title finding but category isn't 'Duplicate Titles'"))
 
+    # 1b. No two rows should share a category (case-insensitive). The LLM
+    # occasionally labels overlapping findings 'Homepage Title Quality' and
+    # 'Homepage title quality' — two slides, same heading, confusing deck.
+    _seen_cats = {}
+    for r in rows:
+        cat = r["cat"].strip().lower()
+        if not cat:
+            continue
+        if cat in _seen_cats:
+            problems.append((r["row"], "category",
+                f"Duplicate category — same as row {_seen_cats[cat]}: '{r['cat']}'"))
+        else:
+            _seen_cats[cat] = r["row"]
+
     # 2. Sheets error sentinels
     for r in rows:
         for col_label, val in [("D", r["impact"]), ("F", r["ctx_f"]),
