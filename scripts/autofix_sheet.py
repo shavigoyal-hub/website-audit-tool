@@ -1,0 +1,292 @@
+"""QC + auto-correction layer. Runs the same checks as scripts/qc_sheet.py
+but applies safe fixes in place for every issue the catalog can resolve.
+
+Fixable classes:
+  - Sheets error sentinel (#ERROR!, #REF!, #N/A, …) → blank the cell
+  - 'Site-wide' leak in G → rewrite to 'Sitewide | <label>' for known site-wide
+    keys, else to '{harvested URL from observation} | <label>'
+  - Non-parseable Hook Stat (E) → _clean_stat_row (bare decimals → %, strips
+    trailing text, etc.)
+  - Hook Context missing a metric word → rebuild formula with catalog hook_ctx
+    if the row's category maps to a known key, else prepend 'ranking loss when '
+  - Support doesn't lead with a stat → replace from catalog if key known;
+    otherwise blank it (deck already hides empty support cards)
+  - Source citation in H or I → run the hook_copy scrubber regex
+  - Duplicate category (case-insensitive) → suffix the later row with ' (N)'
+
+Classes NOT fixed (needs human judgment, left as warnings):
+  - 'What it costs you' too long (col-H > 220 chars / >2 sentences)
+  - IMG: marker in cell (always warn — image may or may not be valid)
+  - Intro-vs-components mismatch (v95 render-time recompute handles it)
+
+Usage:
+  COMPOSIO_API_KEY=... python3 scripts/autofix_sheet.py <sheet-id-or-url> [...]
+Returns 0 even when it couldn't fix something — exit non-zero only on hard
+error.
+"""
+import os
+import re
+import sys
+import time
+
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+
+from audit.hook_copy import HOOK_COPY, STATUS_LABEL
+from audit.report_sheets import (
+    _composio_execute, _extract_first_range, _extract_sheet_id,
+    _clean_stat_row,
+)
+try:
+    from audit.report_sheets import _SITEWIDE_KEYS
+except ImportError:
+    _SITEWIDE_KEYS = set()
+
+
+# ─── category → canonical catalog key (same table the recompute uses) ────────
+_CATEGORY_TO_KEY = {
+    "page speed": "lcp_high", "page speed (lcp)": "lcp_high",
+    "thin pages": "thin_content", "thin content": "thin_content",
+    "homepage content quality": "thin_content", "pages": "thin_content",
+    "above-fold cta": "cta_missing", "cta": "cta_missing",
+    "homepage title": "homepage_title_weak",
+    "homepage title quality": "homepage_title_weak",
+    "sitemap": "sitemap_missing", "xml sitemap": "sitemap_missing",
+    "duplicate titles": "title_duplicate_sitewide",
+    "title tags": "title_duplicate",
+    "missing h1": "h1_missing", "h1 tags": "h1_missing",
+    "meta descriptions": "meta_missing", "meta description": "meta_missing",
+    "schema markup": "structured_data", "homepage schema": "structured_data",
+    "content visibility": "content_visibility",
+    "content visibility (render gap)": "content_visibility",
+    "render blocked": "render_blocked",
+    "missing title": "title_missing",
+    "top navigation": "flat_architecture",
+    "duplicate h1 across pages": "h1_duplicate",
+    "multiple h1 on same page": "h1_multiple",
+    "short titles": "title_short",
+    "long urls": "url_long", "url length": "url_long",
+    "canonical tags": "canonical_not_self",
+    "canonical host mismatch": "canonical_not_self",
+    "favicon": "favicon_missing",
+    "about / company page": "about_missing",
+    "contact page": "contact_missing",
+}
+
+_ERR_RE   = re.compile(r"^#[A-Z/0-9]+[!?]?$")
+_URL_RE   = re.compile(r"https?://\S+")
+_METRIC_WORDS = (
+    "lead", "leads", "ranking", "rankings", "rank", "indexation",
+    "crawl", "coverage", "visibility", "ctr", "click-through",
+    "click", "clicks", "impression", "impressions", "snippet",
+    "serp", "conversion", "conversions", "bounce", "traffic",
+    "citation", "citations", "share", "equity", "authority",
+)
+_STAT_START_RE = re.compile(
+    r"^\s*(?:[+\-]?\d+(?:[.,-]\d+)?\s*(?:%|x)|"
+    r"\d+\s+of\s+\d+|only\s+\d+\s+of\s+\d+|"
+    r"\d[\d,]{2,}|"
+    r"\d+\s+(?:seconds|sec|min|hours?|days?|ms|sites?|users?|pages?|"
+    r"visitors?|clicks?|leads?|percent|out\s+of))",
+    re.I,
+)
+_IMG_RE = re.compile(r"\s*IMG:\s*\S+\s*", re.I)
+
+
+def _retry(fn, *a, **k):
+    for att in range(6):
+        try: return fn(*a, **k)
+        except Exception as e:
+            if "429" in str(e) and att < 5: time.sleep(8 * (att + 1)); continue
+            raise
+
+
+def _write(sid, row, col, val, mode="USER_ENTERED"):
+    _retry(_composio_execute, "GOOGLESHEETS_BATCH_UPDATE", {
+        "spreadsheet_id": sid, "sheet_name": "Observations",
+        "first_cell_location": f"{col}{row}",
+        "valueInputOption": mode, "values": [[val]]})
+
+
+def _formula(r, ctx):
+    ctx = ctx.replace('"', '""')
+    return (f'=IF(E{r}="","{ctx}",'
+            f'IFERROR(TEXT(E{r},"+#.#%;-#.#%;0%")&" "&"{ctx}",'
+            f'E{r}&" "&"{ctx}"))')
+
+
+def _key_for(category):
+    return _CATEGORY_TO_KEY.get((category or "").strip().lower())
+
+
+def autofix(sid):
+    """Returns (fixes_applied, warnings_left)."""
+    v = _retry(_extract_first_range, _composio_execute("GOOGLESHEETS_BATCH_GET", {
+        "spreadsheet_id": sid, "ranges": ["Observations!A1:I50"],
+    })) or []
+    rows = []
+    for i, r in enumerate(v[1:], start=2):
+        if not r or not any(str(c).strip() for c in r):
+            continue
+        get = lambda i2: str(r[i2] if i2 < len(r) else "").strip()
+        rows.append({
+            "row": i, "cat": get(0), "obs": get(1), "prio": get(2),
+            "impact": get(3), "stat_e": get(4), "ctx_f": get(5),
+            "found_g": get(6), "costs_h": get(7), "support_i": get(8),
+        })
+
+    fixes = []
+    warnings = []
+
+    # ─── Fix 1: #ERROR / #N/A sentinels in D,F,G,H,I → blank ────────────
+    for r in rows:
+        for col, val in [("D", r["impact"]), ("F", r["ctx_f"]),
+                          ("G", r["found_g"]), ("H", r["costs_h"]),
+                          ("I", r["support_i"])]:
+            if _ERR_RE.match(val):
+                _write(sid, r["row"], col, "")
+                fixes.append(f"row {r['row']} {col}: blanked sentinel {val!r}")
+
+    # ─── Fix 2: 'Site-wide' leak in G ────────────────────────────────────
+    for r in rows:
+        if "site-wide" not in r["found_g"].lower():
+            continue
+        key = _key_for(r["cat"])
+        label = (STATUS_LABEL.get(key) or (r["cat"], ""))[0] or "Issue"
+        if key in _SITEWIDE_KEYS:
+            new_g = f"Sitewide | {label}"
+        else:
+            # Harvest URLs from observation
+            urls = _URL_RE.findall(r["obs"])
+            if urls:
+                new_g = "\n".join(f"{u} | {label}" for u in urls[:5])
+            else:
+                new_g = f"Sitewide | {label}"
+        _write(sid, r["row"], "G", new_g)
+        fixes.append(f"row {r['row']} G: 'Site-wide' → {new_g[:40]!r}")
+
+    # ─── Fix 3: Hook Stat (E) unparseable → _clean_stat_row ──────────────
+    for r in rows:
+        e = r["stat_e"]
+        if not e or _clean_stat_row(e) == e.lstrip("'"):
+            continue
+        cleaned = _clean_stat_row(e)
+        if cleaned != e:
+            _write(sid, r["row"], "E", cleaned)
+            fixes.append(f"row {r['row']} E: {e!r} → {cleaned!r}")
+
+    # ─── Fix 4: Hook Context (F) missing a metric word ───────────────────
+    for r in rows:
+        ctx = (r["ctx_f"] or "").lower()
+        ctx_body = re.sub(r"^\s*[+\-]?\d+(?:[.,]\d+)?%\s*", "", ctx)
+        if not ctx_body.strip():
+            continue
+        if any(w in ctx_body for w in _METRIC_WORDS):
+            continue
+        # Try catalog
+        key = _key_for(r["cat"])
+        if key and HOOK_COPY.get(key, {}).get("hook_ctx"):
+            new_ctx = HOOK_COPY[key]["hook_ctx"]
+        else:
+            # Generic fallback: prepend 'ranking loss when '
+            raw = re.sub(r"^\s*[+\-]?\d+(?:[.,]\d+)?%\s*", "", r["ctx_f"]).strip()
+            new_ctx = f"ranking loss when {raw[0].lower() + raw[1:]}" if raw else "ranking loss."
+        _write(sid, r["row"], "F", _formula(r["row"], new_ctx))
+        fixes.append(f"row {r['row']} F: metric-less ctx replaced")
+
+    # ─── Fix 5: Support (I) doesn't lead with a stat ─────────────────────
+    for r in rows:
+        sup_wo_img = _IMG_RE.sub(" ", r["support_i"]).strip()
+        if not sup_wo_img:
+            continue
+        if _STAT_START_RE.match(sup_wo_img):
+            continue
+        key = _key_for(r["cat"])
+        if key and HOOK_COPY.get(key, {}).get("support"):
+            cat_sup = HOOK_COPY[key]["support"]
+            if _STAT_START_RE.match(cat_sup):
+                # Preserve any IMG: markers from the original cell
+                imgs = _IMG_RE.findall(r["support_i"])
+                new_i = cat_sup
+                if imgs:
+                    new_i += "\n" + "\n".join(imgs)
+                _write(sid, r["row"], "I", new_i)
+                fixes.append(f"row {r['row']} I: non-stat support → catalog stat")
+                continue
+        # No usable catalog stat → warn, don't blank (preserve user content)
+        warnings.append(f"row {r['row']} I: non-stat support, no catalog match "
+                        f"({sup_wo_img[:50]!r})")
+
+    # ─── Fix 6: Source citations in H / I ────────────────────────────────
+    _SRC = (r"Google(?:\s+Search\s+Central)?", r"Moz", r"Backlinko", r"Ahrefs",
+            r"Semrush", r"AWR", r"Web\.dev", r"Deloitte(?:/Google)?",
+            r"HubSpot", r"Nielsen", r"Neil\s+Patel", r"Search\s+Engine\s+Journal",
+            r"Wikipedia", r"Yoast", r"Chartbeat", r"Portent")
+    src_alt = "|".join(_SRC)
+    prefix_re = re.compile(r"^\s*(?:" + src_alt + r")\b[^:;—–.\n]{0,120}[:;—–]\s*",
+                           re.I)
+    for r in rows:
+        for col, val in [("H", r["costs_h"]), ("I", r["support_i"])]:
+            if prefix_re.search(val):
+                stripped = prefix_re.sub("", val).strip()
+                if stripped and stripped[0].islower():
+                    stripped = stripped[0].upper() + stripped[1:]
+                _write(sid, r["row"], col, stripped)
+                fixes.append(f"row {r['row']} {col}: source citation stripped")
+
+    # ─── Fix 7: Duplicate category names (case-insensitive) ──────────────
+    seen = {}
+    for r in rows:
+        cat = r["cat"].strip().lower()
+        if not cat:
+            continue
+        if cat not in seen:
+            seen[cat] = r["row"]
+            continue
+        # Later occurrence — suffix with ' (dup N)' so the deck slide
+        # header is distinguishable but the data stays.
+        n = sum(1 for v in seen.values() if v != r["row"]) + 1
+        new_cat = f"{r['cat']} (dup {n})"
+        _write(sid, r["row"], "A", new_cat)
+        fixes.append(f"row {r['row']} A: duplicate category → {new_cat!r}")
+
+    # ─── Non-fixable warnings (needs human) ──────────────────────────────
+    for r in rows:
+        costs = r["costs_h"].strip()
+        if not costs: continue
+        _sentences = [s for s in re.split(r"[.!?](?:\s|$)", costs) if s.strip()]
+        if len(costs) > 220 or len(_sentences) > 2:
+            warnings.append(f"row {r['row']} H: too long "
+                            f"({len(costs)} chars, {len(_sentences)} sentences) — human edit required")
+        for col, val in [("H", r["costs_h"]), ("I", r["support_i"])]:
+            if re.search(r"IMG:\s*(?:GDRIVE_IMG:|https?://)", val, re.I):
+                warnings.append(f"row {r['row']} {col}: IMG: marker present — "
+                                "verify screenshot renders before shipping")
+
+    return fixes, warnings
+
+
+def main():
+    if len(sys.argv) < 2:
+        print(__doc__)
+        sys.exit(2)
+    for arg in sys.argv[1:]:
+        sid = _extract_sheet_id(arg) or arg
+        print(f"\n=== autofix {sid} ===")
+        try:
+            fixes, warnings = autofix(sid)
+        except Exception as exc:
+            print(f"  ERROR: {exc}")
+            continue
+        print(f"  applied {len(fixes)} fix(es):")
+        for line in fixes:
+            print(f"    ✓ {line}")
+        if warnings:
+            print(f"  {len(warnings)} warning(s) left for human review:")
+            for line in warnings:
+                print(f"    ⚠ {line}")
+        else:
+            print("  no warnings left")
+
+
+if __name__ == "__main__":
+    main()

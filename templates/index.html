@@ -418,14 +418,21 @@
           if (data.deck_url) {
             links = `<a href="${data.deck_url}" target="_blank" style="color:#166534;font-weight:700">🖼 Open Deck</a>`;
           }
+          let autofixBlock = "";
+          if (data.autofix_applied && data.autofix_applied.length) {
+            const items = data.autofix_applied.map(p => `<li style="margin:2px 0">${p}</li>`).join("");
+            autofixBlock = `<details style="margin-top:12px;padding:8px 10px;background:#ecfeff;border:1px solid #67e8f9;border-radius:6px;color:#164e63">`
+                         + `<summary style="cursor:pointer;font-weight:600">🔧 ${data.autofix_applied.length} auto-fix(es) applied</summary>`
+                         + `<ul style="font-size:12px;margin:6px 0 0 20px">${items}</ul></details>`;
+          }
           let qcBlock = "";
           if (data.qc_problems && data.qc_problems.length) {
             const items = data.qc_problems.map(p => `<li style="margin:2px 0">${p}</li>`).join("");
             qcBlock = `<details style="margin-top:12px;padding:8px 10px;background:#fef3c7;border:1px solid #fbbf24;border-radius:6px;color:#78350f">`
-                    + `<summary style="cursor:pointer;font-weight:600">⚠ ${data.qc_problems.length} QC warning(s) — click to review before sharing</summary>`
+                    + `<summary style="cursor:pointer;font-weight:600">⚠ ${data.qc_problems.length} QC warning(s) still open — needs human review</summary>`
                     + `<ul style="font-size:12px;margin:6px 0 0 20px">${items}</ul></details>`;
           }
-          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}${qcBlock}`;
+          result.innerHTML = `✅ <strong>${data.message}</strong><br><br>${links}${autofixBlock}${qcBlock}`;
         } else {
           result.className = "error";
           result.style.background = "#fef2f2";

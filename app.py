@@ -264,19 +264,33 @@ def build_deck():
             else:
                 _canonical_host = "https://website-audit-tool-iota-ten.vercel.app"
         deck_url = f"{_canonical_host}/deck?sheet={quote(sheet_url, safe=':/?&=')}"
-        # Auto-QC the sheet before shipping the deck. If it finds issues,
-        # attach them to the response so the reviewer sees them, but still
-        # return the deck URL — the reviewer can decide whether to ship.
+        # Auto-correction + QC gate before shipping the deck.
+        # 1. autofix runs first — repairs every class the catalog can
+        #    resolve (sentinels, Site-wide leaks, non-stat supports,
+        #    source citations, duplicate categories, metric-less ctx).
+        # 2. QC runs on the fixed sheet. Anything still flagged needs a
+        #    human — surfaced in the response + UI.
         qc_problems = []
+        autofix_fixes = []
         try:
+            from scripts.autofix_sheet import autofix as _autofix
             from scripts.qc_sheet import qc as _qc
             from audit.report_sheets import _extract_sheet_id as _sid
             _pid = _sid(sheet_url) or sheet_url
+            try:
+                fixes, _warn = _autofix(_pid)
+                autofix_fixes = fixes
+                if fixes:
+                    print(f"[autofix] applied {len(fixes)} fix(es) on {sheet_url}:")
+                    for line in fixes[:20]:
+                        print(f"  ✓ {line}")
+            except Exception as exc:
+                print(f"[autofix] skipped: {exc}")
             for row, cat, msg in _qc(_pid):
                 loc = f"row {row}" if row else "sheet"
                 qc_problems.append(f"{loc} [{cat}]: {msg}")
             if qc_problems:
-                print(f"[qc] {len(qc_problems)} deck-build issues on {sheet_url}:")
+                print(f"[qc] {len(qc_problems)} deck-build issues on {sheet_url} after autofix:")
                 for line in qc_problems[:20]:
                     print(f"  {line}")
         except Exception as exc:
@@ -287,8 +301,10 @@ def build_deck():
             "version": VERSION,
             "deck_url": deck_url,
             "message": f"Deck built ({len(obs_rows)} pages)."
-                       + (f" · {len(qc_problems)} QC warning(s)" if qc_problems else ""),
+                       + (f" · {len(autofix_fixes)} auto-fix(es)" if autofix_fixes else "")
+                       + (f" · {len(qc_problems)} QC warning(s) still open" if qc_problems else ""),
             "qc_problems": qc_problems,
+            "autofix_applied": autofix_fixes,
         }
         try:
             history.update_deck(sheet_url, deck_url, "")
