@@ -1144,7 +1144,75 @@ def read_for_deck(sheet_url_or_id):
             "support":     _g(row, 8),
             "reference":   "",
         })
+
+    # Auto-recompute intro from the CURRENT finding rows every deck render.
+    # The intro was computed once at sheet-build time, so any row added
+    # later (chatbot find, CS manual edit) didn't update it — this is why
+    # 'lead sum missing a row' kept recurring. Scanning here means the
+    # deck always matches whatever rows live in the sheet right now.
+    _recompute_intro_from_rows(obs_rows)
+
     return {"meta": {}, "obs_rows": obs_rows}
+
+
+def _recompute_intro_from_rows(obs_rows):
+    """Mutate obs_rows in place: rewrite the intro slide's hook_stat +
+    hook_ctx + found + costs to reflect the lead-sum derived from the
+    actual finding rows currently in the sheet. Any Lead-primary category
+    is included; the raw sum caps at 35% proportionally.
+    """
+    import re as _re
+    # Known category → Lead-sum weight (baseline %, used for scaling)
+    _LEAD_CATEGORY_WEIGHTS = {
+        "page speed": 24, "page speed (lcp)": 24,
+        "thin pages": 25, "thin content": 25, "homepage content quality": 25,
+        "pages": 25,
+        "above-fold cta": 35, "cta": 35,
+        "homepage title": 35, "homepage title quality": 35,
+        "sitemap": 20, "xml sitemap": 20,
+        "duplicate titles": 15, "title tags": 15,
+        "missing h1": 15, "homepage h1 quality": 25, "h1 tags": 15,
+        "meta descriptions": 5.8, "meta description": 5.8,
+        "schema markup": 5, "homepage schema": 5,
+        "content visibility": 30, "content visibility (render gap)": 30,
+        "render blocked": 35, "render blocking": 35,
+        "missing title": 35, "title tags missing": 35,
+        "top navigation": 15,
+    }
+    intro = next((r for r in obs_rows if r["slide_type"] == "intro"), None)
+    if intro is None:
+        return
+    findings = [r for r in obs_rows if r["slide_type"] == "finding"]
+    picks = []
+    seen = set()
+    for r in findings:
+        cat = (r.get("category") or "").strip().lower()
+        if not cat or cat in seen:
+            continue
+        weight = _LEAD_CATEGORY_WEIGHTS.get(cat)
+        if weight is None:
+            continue
+        seen.add(cat)
+        picks.append((weight, r.get("category") or ""))
+    if not picks:
+        return  # keep the sheet-built intro as-is (0 Lead rows is unusual)
+    raw_sum = sum(p for p, _ in picks)
+    scale = 35.0 / raw_sum if raw_sum > 35 else 1.0
+    scaled = [(round(p * scale, 1), c) for p, c in picks]
+    total = round(sum(p for p, _ in scaled), 1)
+    scaled.sort(key=lambda t: -t[0])
+    top = scaled[:4]
+    more_n = len(scaled) - len(top)
+    terms = "  +  ".join(f"+{p:g}% {c}" for p, c in top)
+    if more_n > 0:
+        terms += f"  +  ({more_n} more)"
+    target_leads = max(11, round(10 * (1 + total / 100.0)))
+    intro["hook_stat"] = f"+{total:g}%"
+    intro["hook_ctx"]  = f"Increase your leads by {total:g}%"
+    intro["found"]     = f"{terms}  =  +{total:g}% More leads"
+    intro["costs"]     = (f"If you get 10 leads a month today 10 leads → "
+                          f"{target_leads} leads. Same pages, same website. "
+                          "Before any ranking gains.")
 
 
 def _write_slide_review_tab(spreadsheet_id, header, intro_row, ending_row):
