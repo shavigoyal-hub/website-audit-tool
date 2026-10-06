@@ -694,8 +694,20 @@ def history_ui():
             "crawler": "",
             "cost_usd": h.get("cost_usd") or "",
         })
+    # Resolve the audit-tool canonical host so Build Deck / Edit via chatbot
+    # links work even when history-ui is accessed via a proxy wrapper
+    # (seo-reporting-five.vercel.app /api/audit/*). Relative /deck or /?sheet
+    # URLs on a wrapper would resolve to the wrapper's root — broken.
+    _audit_host = os.environ.get("PUBLIC_DECK_HOST", "").rstrip("/")
+    if not _audit_host:
+        _req_host = (request.host or "").lower()
+        if "website-audit-tool" in _req_host or "localhost" in _req_host:
+            _audit_host = request.host_url.rstrip("/") + request.script_root
+        else:
+            _audit_host = "https://website-audit-tool-iota-ten.vercel.app"
     return render_template("history.html", runs=merged,
-                           jobs_sheet_url=_jobs_mod.get_url() if hasattr(_jobs_mod, "get_url") else "")
+                           jobs_sheet_url=_jobs_mod.get_url() if hasattr(_jobs_mod, "get_url") else "",
+                           audit_host=_audit_host)
 
 
 @app.route("/health")

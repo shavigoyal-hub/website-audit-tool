@@ -91,12 +91,12 @@
               {% if r.sheet_url %}
                 <a class="link" href="{{ r.sheet_url }}" target="_blank">Open →</a>
                 <br>
-                <a class="link" href="/?sheet={{ r.sheet_url|urlencode }}" style="font-size:11px">Edit via chatbot →</a>
+                <a class="link" href="{{ audit_host }}/?sheet={{ r.sheet_url|urlencode }}" target="_blank" style="font-size:11px">Edit via chatbot →</a>
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
             <td>
               {% if r.deck_url %}<a class="link" href="{{ r.deck_url }}" target="_blank">Open →</a>
-              {% elif r.sheet_url %}<a class="link" href="/deck?sheet={{ r.sheet_url }}" target="_blank">Build →</a>
+              {% elif r.sheet_url %}<a class="link" href="{{ audit_host }}/deck?sheet={{ r.sheet_url|urlencode }}" target="_blank">Build →</a>
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
           </tr>
