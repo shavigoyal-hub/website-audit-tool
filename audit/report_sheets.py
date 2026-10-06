@@ -1192,6 +1192,15 @@ def _recompute_intro_from_rows(obs_rows):
         weight = _LEAD_CATEGORY_WEIGHTS.get(cat)
         if weight is None:
             continue
+        # Only sum into the lead formula if the slide's own hook_ctx
+        # frames the outcome in lead terms. Was including every category
+        # in the weights map regardless of how its slide reads — so
+        # 'Homepage title quality' (ctx = 'CTR loss when titles get
+        # truncated') was counted toward +N% leads even though its own
+        # headline never mentions leads. Contradicted the intro story.
+        ctx_l = (r.get("hook_ctx") or "").lower()
+        if "lead" not in ctx_l and "leads" not in ctx_l:
+            continue
         seen.add(cat)
         picks.append((weight, r.get("category") or ""))
     if not picks:
