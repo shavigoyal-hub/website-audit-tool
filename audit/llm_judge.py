@@ -373,6 +373,17 @@ def _apply_judgement(row, judgement):
                 new["hook_ctx"] = cat_spec["hook_ctx"]
             if cat_spec.get("hook_stat"):
                 new["hook_stat"] = cat_spec["hook_stat"]
+            # Also lock costs. The LLM paraphrases catalog copy into
+            # generic safety-speak ('Thin content can lead to decreased
+            # trust and lower search rankings, resulting in fewer leads
+            # and revenue.') — reads like boilerplate and loses the
+            # catalog's specificity ("Money-decision pages don't earn
+            # enough trust to rank if they're thin, so they don't drive
+            # leads."). Lock to catalog whenever one exists.
+            if cat_spec.get("costs"):
+                new["costs"] = cat_spec["costs"]
+            if cat_spec.get("support") and not (new.get("support") or "").strip():
+                new["support"] = cat_spec["support"]
     except Exception:
         pass
     insight = judgement.get("insight")

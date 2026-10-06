@@ -380,6 +380,38 @@ def autofix(sid):
         fixes.append(f"row {r['row']} F: 'none' claim contradicts {len(url_lines)} "
                      f"found URLs → catalog ctx")
 
+    # ─── Fix 10: LLM safety-speak hook_ctx / costs → catalog ─────────────
+    # Patterns the LLM reaches for when paraphrasing: 'may lower', 'can
+    # lead to', 'resulting in', 'impacting visibility', 'due to
+    # insufficient', 'decreased trust', 'ensure that', 'leverage'.
+    # These produce vague corporate copy ('Google may lower your ranking
+    # due to insufficient content, impacting visibility and leads.')
+    # instead of the catalog's punchy line. Replace from catalog whenever
+    # the row's category maps to a known key.
+    _LLM_SPEAK_RE = re.compile(
+        r"\b(?:may\s+lower|can\s+lead\s+to|lead\s+to\s+decreased|"
+        r"resulting\s+in|impacting\s+visibility|impacting\s+leads|"
+        r"due\s+to\s+insufficient|decreased\s+trust|"
+        r"ensure\s+that|leverag(?:e|ing)|utiliz(?:e|ing)|"
+        r"it\s+is\s+important\s+to|in\s+order\s+to\s+improve)\b",
+        re.I)
+    for r in rows:
+        key = _key_for(r["cat"])
+        if not key or key not in HOOK_COPY:
+            continue
+        cat = HOOK_COPY[key]
+        # Fix hook_ctx
+        ctx_wo_stat = re.sub(r"^\s*[+\-]?\d+(?:[.,]\d+)?%\s*", "", r["ctx_f"])
+        if _LLM_SPEAK_RE.search(ctx_wo_stat) and cat.get("hook_ctx"):
+            _write(sid, r["row"], "F", _formula(r["row"], cat["hook_ctx"]))
+            fixes.append(f"row {r['row']} F: LLM-speak ctx → catalog "
+                         f"({ctx_wo_stat[:40]!r})")
+        # Fix costs
+        if _LLM_SPEAK_RE.search(r["costs_h"]) and cat.get("costs"):
+            _write(sid, r["row"], "H", cat["costs"])
+            fixes.append(f"row {r['row']} H: LLM-speak costs → catalog "
+                         f"({r['costs_h'][:40]!r})")
+
     # ─── Non-fixable warnings (needs human) ──────────────────────────────
     for r in rows:
         costs = r["costs_h"].strip()

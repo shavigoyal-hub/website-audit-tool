@@ -206,6 +206,42 @@ def evaluate(live_url):
             # Namespace so we can tell rule vs sweep findings apart later
             if not key.startswith("llm_"):
                 key = f"llm_{key}"
+            # If the sweep finding is semantically a known catalog topic
+            # (thin content, title, meta, schema, sitemap, h1, canonical,
+            # robots), remap to the catalog key so llm_judge locks the
+            # catalog's clean hook_ctx + stat onto the row. Was leaving
+            # 'llm_thin_content_page' as-is → judge lock skipped → slide
+            # hero became 'Google may lower your ranking due to insufficient
+            # content, impacting visibility and leads.' (LLM safety-speak)
+            # instead of catalog's 'more leads once thin pages get real
+            # depth.'
+            _probe = f"{str(f.get('category','')).strip().lower()} {obs.lower()}"
+            _REMAP = (
+                ("thin",            "thin_content"),
+                ("duplicate title", "title_duplicate"),
+                ("missing title",   "title_missing"),
+                ("title tag",       "title_missing"),
+                ("duplicate meta",  "meta_duplicate"),
+                ("meta description","meta_missing"),
+                ("missing h1",      "h1_missing"),
+                ("multiple h1",     "h1_multiple"),
+                ("schema markup",   "structured_data"),
+                ("structured data", "structured_data"),
+                ("faq schema",      "faq_missing"),
+                ("sitemap",         "sitemap_missing"),
+                ("robots.txt",      "robots_missing"),
+                ("canonical",       "canonical_missing"),
+                ("duplicate content","near_duplicate"),
+                ("noindex",         "non_indexable"),
+            )
+            try:
+                from audit.hook_copy import HOOK_COPY as _HC_remap
+                for _probe_sub, _cat_key in _REMAP:
+                    if _probe_sub in _probe and _cat_key in _HC_remap:
+                        key = _cat_key
+                        break
+            except Exception:
+                pass
             obs = str(f.get("observation", "")).strip()
             if not obs:
                 continue
