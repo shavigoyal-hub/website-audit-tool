@@ -172,8 +172,8 @@ HOOK_COPY = {
     # ── Meta descriptions ─────────────────────────────────────────────────
     "meta_missing": {
         "hook_stat": "+5.8%",
-        "hook_ctx":  "more leads with a meta description. You have none on the pages that matter.",
-        "costs":     "Google writes your snippet — and picks the wrong sentence. On a decision-heavy site, that snippet decides who trusts you enough to click.",
+        "hook_ctx":  "more leads with a written meta description on the pages that matter.",
+        "costs":     "Google writes the snippet for you — often picking a line that doesn't sell the click. On a decision-heavy site, that snippet decides who trusts you enough to click.",
         "support":   "",
     },
     "meta_long": {
