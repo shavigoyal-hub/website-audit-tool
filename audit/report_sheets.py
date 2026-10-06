@@ -1380,7 +1380,40 @@ def append_finding(sheet_url_or_id, url, label, priority="Medium",
     for i, r in enumerate(rows, start=1):
         if r and str(r[0] if r else "").strip().startswith("Ending") and i <= target_row:
             target_row = i
-            break
+    # Pre-emptively ensure the Observations grid has enough rows for the
+    # write. CS often trims empty tail rows (Sheets' native delete), which
+    # shrinks the grid to the last-non-empty row. A subsequent append then
+    # trips 'Range exceeds grid limits'. Resize before the write.
+    try:
+        from audit.composio_exec import proxy as _p_pre
+        _info_pre = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                                       {"spreadsheet_id": sid}) or {}
+        _obs_id_pre = None
+        _cur_rows = None
+        for s in (_info_pre.get("sheets") or []):
+            _props = s.get("properties") or {}
+            if _props.get("title") == "Observations":
+                _obs_id_pre = _props.get("sheetId")
+                _cur_rows = ((_props.get("gridProperties") or {}).get("rowCount"))
+                break
+        if (_obs_id_pre is not None and _cur_rows is not None
+                and _cur_rows < target_row + 1):
+            _p_pre(
+                endpoint=f"https://sheets.googleapis.com/v4/spreadsheets/{sid}:batchUpdate",
+                method="POST",
+                body={"requests": [{"updateSheetProperties": {
+                    "properties": {"sheetId": _obs_id_pre,
+                                   "gridProperties": {
+                                       "rowCount": max(target_row + 20, 20),
+                                       "columnCount": 26,
+                                       "frozenRowCount": 1,
+                                       "frozenColumnCount": 1}},
+                    "fields": "gridProperties.rowCount,gridProperties.columnCount,gridProperties.frozenRowCount,gridProperties.frozenColumnCount",
+                }}]},
+            )
+            print(f"[append_finding] grid resized {_cur_rows} -> {target_row + 20}")
+    except Exception as _exc_resize:
+        print(f"[append_finding] pre-resize failed (non-fatal): {_exc_resize}")
     from audit.hook_copy import for_row as _hf
     copy = _hf(finding_key, default_obs=label, default_costs="", priority=priority)
     overrides = overrides or {}
