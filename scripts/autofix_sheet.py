@@ -335,6 +335,51 @@ def autofix(sid):
         _write(sid, r["row"], "A", new_cat)
         fixes.append(f"row {r['row']} A: duplicate category → {new_cat!r}")
 
+    # ─── Fix 8: Costs (H) starts with a coordinating conjunction ─────────
+    # "And picks the wrong sentence." / "But rankings suffer." — reads as a
+    # fragment because the LLM paraphrased mid-paragraph and the opening
+    # clause got dropped. Strip the conjunction and recase.
+    _CONJ_RE = re.compile(r"^\s*(?:and|but|so|or|yet|also)\b[\s,]+", re.I)
+    for r in rows:
+        costs = r["costs_h"]
+        if not costs or not _CONJ_RE.match(costs):
+            continue
+        stripped = _CONJ_RE.sub("", costs).strip()
+        if stripped:
+            stripped = stripped[0].upper() + stripped[1:]
+            _write(sid, r["row"], "H", stripped)
+            fixes.append(f"row {r['row']} H: dropped leading conjunction "
+                         f"({costs[:30]!r} → {stripped[:30]!r})")
+            r["costs_h"] = stripped
+
+    # ─── Fix 9: hook_ctx asserts 'none/no' but Found column has URLs ─────
+    # Ctx says 'You have none on the pages that matter' but col G lists
+    # several URLs with real statuses — contradiction. Rebuild ctx from
+    # catalog hook_ctx so the headline matches reality.
+    _ABS_NONE_RE = re.compile(
+        r"\b(?:you\s+have\s+none|none\s+of\s+your|no\s+pages\s+have|"
+        r"zero\s+pages|not\s+a\s+single)\b", re.I)
+    for r in rows:
+        ctx = r["ctx_f"]
+        if not ctx or not _ABS_NONE_RE.search(ctx):
+            continue
+        # Count URL lines in Found column
+        found_lines = [l.strip() for l in (r["found_g"] or "").split("\n")
+                        if l.strip()]
+        url_lines = [l for l in found_lines if l.startswith(("http", "/"))
+                     or "|" in l]
+        if len(url_lines) < 2:
+            continue  # 0-1 found lines, 'none' may be literally true
+        key = _key_for(r["cat"])
+        cat_ctx = (HOOK_COPY.get(key) or {}).get("hook_ctx")
+        if not cat_ctx:
+            warnings.append(f"row {r['row']} F: ctx says 'none' but found "
+                            f"{len(url_lines)} URLs — no catalog ctx to rebuild")
+            continue
+        _write(sid, r["row"], "F", _formula(r["row"], cat_ctx))
+        fixes.append(f"row {r['row']} F: 'none' claim contradicts {len(url_lines)} "
+                     f"found URLs → catalog ctx")
+
     # ─── Non-fixable warnings (needs human) ──────────────────────────────
     for r in rows:
         costs = r["costs_h"].strip()
