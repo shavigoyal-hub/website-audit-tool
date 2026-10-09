@@ -1128,6 +1128,17 @@ def read_for_deck(sheet_url_or_id):
     elif intro_row_data is None and n >= 3:
         combined.append((data_rows[-1], "ending"))
 
+    # Filter out autofix-renamed duplicate rows ('… (dup N)') from the
+    # deck — they're kept in the sheet for traceability, but a slide for
+    # them would double-up on the real category's slide.
+    _filtered = []
+    for row, stype in combined:
+        _cat = str(row[0] if len(row) > 0 else "").strip().lower()
+        if stype == "finding" and (" (dup " in _cat or _cat.startswith("skip")):
+            continue
+        _filtered.append((row, stype))
+    combined = _filtered
+
     for i, (row, stype) in enumerate(combined):
         obs_rows.append({
             "slide_no":    i + 1,
