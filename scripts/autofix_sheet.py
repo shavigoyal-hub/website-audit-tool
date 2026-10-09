@@ -48,6 +48,7 @@ _CATEGORY_TO_KEY = {
     "thin pages": "thin_content", "thin content": "thin_content",
     "homepage content quality": "thin_content", "pages": "thin_content",
     "above-fold cta": "cta_missing", "cta": "cta_missing",
+    "missing cta": "cta_missing",
     "homepage title": "homepage_title_weak",
     "homepage title quality": "homepage_title_weak",
     "sitemap": "sitemap_missing", "xml sitemap": "sitemap_missing",
@@ -379,6 +380,52 @@ def autofix(sid):
         _write(sid, r["row"], "F", _formula(r["row"], cat_ctx))
         fixes.append(f"row {r['row']} F: 'none' claim contradicts {len(url_lines)} "
                      f"found URLs → catalog ctx")
+
+    # ─── Fix 11: '(no URL supplied)' / 'no URL' in Found column ──────────
+    # LLM sometimes writes a placeholder like '(no URL supplied)' into
+    # col G when it can't find the evidence URL. The deck renders this
+    # as a broken link ('https://website-audit-tool.../(no%20URL%20supplied)').
+    # Replace with the sheet's homepage URL (Meta tab live_url) when the
+    # category is a sitewide/homepage check, else blank it.
+    _NO_URL_RE = re.compile(
+        r"\(?\s*no\s+url\s+(?:supplied|provided|given|available)\s*\)?",
+        re.I)
+    # Pull live_url from Meta tab once
+    _live_url = ""
+    try:
+        _meta = _retry(_extract_first_range, _composio_execute(
+            "GOOGLESHEETS_BATCH_GET",
+            {"spreadsheet_id": sid, "ranges": ["Meta!A1:B20"]})) or []
+        for r_m in _meta:
+            if r_m and len(r_m) >= 2 and str(r_m[0]).strip().lower() in ("live_url", "live url"):
+                _live_url = str(r_m[1]).strip()
+                break
+    except Exception:
+        pass
+    for r in rows:
+        g = r["found_g"]
+        if not g or not _NO_URL_RE.search(g):
+            continue
+        # Replace placeholder with homepage URL + preserve any status label
+        # after the placeholder on the same line.
+        new_lines = []
+        changed = False
+        for ln in g.splitlines():
+            if _NO_URL_RE.search(ln):
+                changed = True
+                tail = _NO_URL_RE.sub("", ln).strip(" |")
+                if _live_url:
+                    new_lines.append(f"{_live_url} | {tail}" if tail else _live_url)
+                # If no live_url, drop the line
+            else:
+                new_lines.append(ln)
+        if changed:
+            new_g = "\n".join(new_lines).strip()
+            if new_g:
+                _write(sid, r["row"], "G", new_g)
+                fixes.append(f"row {r['row']} G: '(no URL supplied)' → homepage")
+            else:
+                warnings.append(f"row {r['row']} G: '(no URL supplied)' and no live_url to substitute")
 
     # ─── Fix 10: LLM safety-speak hook_ctx / costs → catalog ─────────────
     # Patterns the LLM reaches for when paraphrasing: 'may lower', 'can

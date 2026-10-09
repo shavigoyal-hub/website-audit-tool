@@ -276,6 +276,12 @@ HOOK_COPY = {
         "costs":     "Pages with noindex cannot rank and are invisible to organic traffic.",
         "support":   "",
     },
+    "content_visibility": {
+        "hook_stat": "+30%",
+        "hook_ctx":  "more leads once the key page's content is visible to Google in raw HTML.",
+        "costs":     "If the content only appears after JS runs, Google indexes an empty shell — the page doesn't earn ranking signals.",
+        "support":   "Google renders JS but with a delay — pages that need rendering lose ranking signal weight for days or weeks.",
+    },
     "canonical_missing": {
         "hook_stat": "-25%",
         "hook_ctx":  "authority leaked when there is no canonical tag.",
