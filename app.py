@@ -504,6 +504,45 @@ def _do_append_findings(sheet_url, pairs, request):
     })
 
 
+@app.route("/edit-cell", methods=["POST"])
+def edit_cell_route():
+    """Fast cell write — sheet_url + row (int) + col (A..I) + value.
+
+    If value is 'APPEND:<text>', the text is appended to the cell's
+    existing content with a newline separator. Any other value is
+    overwritten in place. Used for quick CS edits the chatbot can't
+    express yet (append URL to Found column, clear support cell).
+    """
+    try:
+        from audit.report_sheets import (
+            _composio_execute, _extract_first_range, _extract_sheet_id)
+        sheet_url = request.form.get("sheet_url", "").strip()
+        row = int(request.form.get("row", "0"))
+        col = request.form.get("col", "").strip().upper()
+        value = request.form.get("value", "")
+        if not sheet_url or row < 2 or col not in "ABCDEFGHI":
+            return jsonify({"error": "sheet_url, row>=2, col A-I required"}), 400
+        sid = _extract_sheet_id(sheet_url)
+        if value.startswith("APPEND:"):
+            append = value[len("APPEND:"):]
+            cur = _extract_first_range(_composio_execute(
+                "GOOGLESHEETS_BATCH_GET",
+                {"spreadsheet_id": sid,
+                 "ranges": [f"Observations!{col}{row}:{col}{row}"]})) or []
+            existing = str(cur[0][0]).strip() if cur and cur[0] else ""
+            value = (existing + "\n" + append).strip() if existing else append
+        _composio_execute("GOOGLESHEETS_BATCH_UPDATE", {
+            "spreadsheet_id": sid, "sheet_name": "Observations",
+            "first_cell_location": f"{col}{row}",
+            "valueInputOption": "USER_ENTERED",
+            "values": [[value]],
+        })
+        return jsonify({"ok": True, "cell": f"{col}{row}",
+                        "new_value_preview": value[:120]})
+    except Exception:
+        return jsonify({"error": traceback.format_exc()[:800]}), 500
+
+
 @app.route("/append-finding", methods=["POST"])
 def append_finding_route():
     """Append manual findings to the reviewed sheet.

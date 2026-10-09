@@ -390,7 +390,8 @@ def autofix(sid):
     _NO_URL_RE = re.compile(
         r"\(?\s*no\s+url\s+(?:supplied|provided|given|available)\s*\)?",
         re.I)
-    # Pull live_url from Meta tab once
+    # Pull live_url from Meta tab, falling back to the most common host
+    # found in any other row's Found column (col G).
     _live_url = ""
     try:
         _meta = _retry(_extract_first_range, _composio_execute(
@@ -402,6 +403,17 @@ def autofix(sid):
                 break
     except Exception:
         pass
+    if not _live_url:
+        from collections import Counter
+        hosts = Counter()
+        for r_scan in rows:
+            for ln in (r_scan["found_g"] or "").splitlines():
+                m = re.match(r"https?://([^/\s|]+)", ln.strip())
+                if m:
+                    hosts[m.group(1).lower().lstrip("www.")] += 1
+        if hosts:
+            top_host = hosts.most_common(1)[0][0]
+            _live_url = f"https://www.{top_host}"
     for r in rows:
         g = r["found_g"]
         if not g or not _NO_URL_RE.search(g):
