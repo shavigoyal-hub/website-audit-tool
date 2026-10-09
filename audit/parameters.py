@@ -131,7 +131,36 @@ def evaluate(df, live_url):
                                  "robots.txt returns 200 but is empty — carries no crawl directives",
                                  "A missing / empty robots.txt removes control over crawler access."))
         else:
-            blocked = re.search(r"(?im)^\s*user-agent:\s*\*\s*[\s\S]*?^\s*disallow:\s*/\s*$", body)
+            # Parse per-UA groups properly. A naive lazy regex (prior version)
+            # would match the first 'User-agent: *' and then ANY later
+            # 'Disallow: /' line — including one that actually belongs to a
+            # different UA (e.g. 'User-agent: PetalBot\nDisallow: /'). That
+            # false-positived momantech.com. Scope the check to the '*' block
+            # and let an 'Allow: /' override the Disallow.
+            def _is_blocked_for_all(txt):
+                # Split into UA blocks: each block begins at a 'user-agent:' line.
+                blocks = re.split(r"(?im)^\s*user-agent:\s*", txt)[1:]
+                for blk in blocks:
+                    ua_line, _, rest = blk.partition("\n")
+                    if ua_line.strip() != "*":
+                        continue
+                    # Stop at the next directive section (blank line is NOT a
+                    # separator per RFC, so we rely on the split above already
+                    # putting other UAs in different blocks).
+                    disallow_all = False
+                    allow_all = False
+                    for ln in rest.splitlines():
+                        ln = ln.strip()
+                        if not ln or ln.startswith("#"):
+                            continue
+                        m_d = re.match(r"(?i)^disallow:\s*/\s*$", ln)
+                        m_a = re.match(r"(?i)^allow:\s*/\s*$", ln)
+                        if m_d: disallow_all = True
+                        if m_a: allow_all = True
+                    if disallow_all and not allow_all:
+                        return True
+                return False
+            blocked = _is_blocked_for_all(body)
             has_sitemap_ref = bool(re.search(r"(?im)^\s*sitemap:\s*http", body))
             if blocked:
                 issues.append(_issue("robots_block", "Robots.txt", "Critical",
