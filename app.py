@@ -760,7 +760,36 @@ def history_ui():
             _audit_host = request.host_url.rstrip("/") + request.script_root
         else:
             _audit_host = "https://website-audit-tool-iota-ten.vercel.app"
+
+    # Volume by ISO week (last 12 weeks) for the trend graph. We bucket on
+    # the Monday of each row's created_utc / timestamp. Rows with no date
+    # fall into an 'unknown' bucket we don't plot.
+    import datetime as _dt
+    from collections import OrderedDict
+    weeks = OrderedDict()
+    today = _dt.datetime.utcnow().date()
+    monday = today - _dt.timedelta(days=today.weekday())
+    for i in range(11, -1, -1):
+        wk_start = monday - _dt.timedelta(weeks=i)
+        weeks[wk_start.isoformat()] = 0
+    for r in merged:
+        ts = r.get("created_utc") or ""
+        if not ts or len(ts) < 10:
+            continue
+        try:
+            d = _dt.date.fromisoformat(ts[:10])
+        except Exception:
+            continue
+        wk = d - _dt.timedelta(days=d.weekday())
+        key = wk.isoformat()
+        if key in weeks:
+            weeks[key] += 1
+    weekly = [{"week": k, "count": v,
+                "label": _dt.date.fromisoformat(k).strftime("%b %d")}
+               for k, v in weeks.items()]
     return render_template("history.html", runs=merged,
+                           total_count=len(merged),
+                           weekly=weekly,
                            jobs_sheet_url=_jobs_mod.get_url() if hasattr(_jobs_mod, "get_url") else "",
                            audit_host=_audit_host)
 
