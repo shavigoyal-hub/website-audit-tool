@@ -15,7 +15,7 @@ import os
 from audit.composio_exec import execute as _cx
 
 HISTORY_TITLE = "Gushwork Website Audit Tool — History"
-HISTORY_TAB   = "History"
+HISTORY_TAB   = "Audit History v2"
 
 # Baked-in default so the tool works on Vercel without needing the
 # HISTORY_SHEET_ID env var to be set. This is the sheet the Composio
