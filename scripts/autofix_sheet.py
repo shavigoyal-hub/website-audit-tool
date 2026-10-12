@@ -439,6 +439,48 @@ def autofix(sid):
             else:
                 warnings.append(f"row {r['row']} G: '(no URL supplied)' and no live_url to substitute")
 
+    # ─── Fix 12: title_long ↔ title_short mislabel ───────────────────────
+    # Row's Found column status is 'Too short' / 'Short' (title_short label)
+    # but observation + hook_ctx + costs were written from title_long
+    # template ('truncated', 'CTR loss when titles get truncated'). Also
+    # catches the inverse (status 'Truncated' / 'Too long' but ctx says
+    # 'short'). Rewrites ctx + costs + hook_stat from the correct catalog
+    # entry based on the Found-column status word, which is the ground
+    # truth (set by sf_csv / pipeline rules, not the LLM).
+    _TITLE_LONG_FRAMES = ("truncat", "too long", " long title", "titles that are long")
+    _TITLE_SHORT_FRAMES = ("too short", " short title", "short titles", "under 30 chars", "under-describe")
+    for r in rows:
+        cat_l = r["cat"].strip().lower()
+        if "title" not in cat_l: continue
+        g_l = (r["found_g"] or "").lower()
+        ctx_l = (r["ctx_f"] or "").lower()
+        costs_l = (r["costs_h"] or "").lower()
+        g_short = "too short" in g_l or "| short" in g_l
+        g_long  = "truncat" in g_l or "too long" in g_l or "| long" in g_l
+        if not (g_short ^ g_long): continue  # ambiguous — skip
+        ctx_frames_long  = any(w in ctx_l + " " + costs_l for w in _TITLE_LONG_FRAMES)
+        ctx_frames_short = any(w in ctx_l + " " + costs_l for w in _TITLE_SHORT_FRAMES)
+        correct_key = None
+        if g_short and ctx_frames_long and not ctx_frames_short:
+            correct_key = "title_short"
+        elif g_long and ctx_frames_short and not ctx_frames_long:
+            correct_key = "title_long"
+        if not correct_key: continue
+        spec = HOOK_COPY.get(correct_key) or {}
+        if spec.get("hook_ctx"):
+            _write(sid, r["row"], "F", _formula(r["row"], spec["hook_ctx"]))
+        if spec.get("hook_stat"):
+            _write(sid, r["row"], "E", _clean_stat_row(spec["hook_stat"]))
+        if spec.get("costs"):
+            _write(sid, r["row"], "H", spec["costs"])
+        if spec.get("support"):
+            # only replace support if it's non-stat or empty; preserve IMG markers
+            imgs = _IMG_RE.findall(r["support_i"])
+            sup = spec["support"]
+            if imgs: sup += "\n" + "\n".join(imgs)
+            _write(sid, r["row"], "I", sup)
+        fixes.append(f"row {r['row']}: title_long/short mislabel → {correct_key}")
+
     # ─── Fix 10: LLM safety-speak hook_ctx / costs → catalog ─────────────
     # Patterns the LLM reaches for when paraphrasing: 'may lower', 'can
     # lead to', 'resulting in', 'impacting visibility', 'due to
