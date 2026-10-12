@@ -109,32 +109,10 @@
       if (d.version) document.getElementById("versionBadge").textContent = "v" + d.version;
     }).catch(()=>{});
 
-    fetch(BASE + "/history?n=15").then(r=>r.json()).then(d=>{
-      // Link the header to the /history-ui page rather than the raw Google Sheet.
-      // Under SEO Reporting the app lives at /api/audit; a bare "/history-ui"
-      // there is that tool's own (missing) page, not this one.
-      document.getElementById("historyAll").href = BASE + "/history-ui";
-      const list = document.getElementById("historyList");
-      if (!d.runs || !d.runs.length) return;
-      d.runs.forEach(run => {
-        const row = document.createElement("div");
-        row.style.cssText = "display:flex;flex-wrap:wrap;gap:8px;font-size:12px;padding:8px 10px;border:1px solid #f3f4f6;border-radius:8px;background:#fafafa;align-items:center;";
-        const client = run.client || "—";
-        const ts = (run.timestamp || "").replace("T"," ").replace("Z"," UTC");
-        const cost = run.cost_usd ? `$${Number(run.cost_usd).toFixed(4)}` : "";
-        const pages = run.pages ? `${run.pages}p` : "";
-        row.innerHTML = `
-          <span style="font-weight:600;color:#111;min-width:140px">${client}</span>
-          <span style="color:#6b7280;font-size:11px">${ts}</span>
-          ${run.sheet_url ? `<a href="${run.sheet_url}" target="_blank" style="color:#6366f1;font-weight:600">Sheet</a>` : ""}
-          ${run.deck_url  ? `<a href="${run.deck_url}"  target="_blank" style="color:#6366f1;font-weight:600">Deck</a>` : ""}
-          ${run.pdf_url   ? `<a href="${run.pdf_url}"   target="_blank" style="color:#6366f1;font-weight:600">PDF</a>` : ""}
-          ${cost ? `<span style="color:#059669;font-size:11px;margin-left:auto">${cost} · ${pages}</span>` : ""}
-        `;
-        list.appendChild(row);
-      });
-      document.getElementById("historyBox").style.display = "block";
-    }).catch(()=>{});
+    // Recent-audits list was removed from the landing — only the "Open full
+    // history" link remains. Point it at /history-ui so clicking it opens
+    // the dedicated page.
+    document.getElementById("historyAll").href = BASE + "/history-ui";
   </script>
 
   <div class="card">
@@ -178,9 +156,10 @@
 
     <div id="deckResult"></div>
 
-    <div id="historyBox" style="display:block;margin-top:28px;padding-top:24px;border-top:1px solid #f3f4f6;">
-      <h3 style="font-size:12px;font-weight:700;color:#9ca3af;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:14px;">Recent Audits <a id="historyAll" style="float:right;font-size:11px;font-weight:600;color:#6366f1;text-decoration:none">Open full history →</a></h3>
-      <div id="historyList" style="display:flex;flex-direction:column;gap:8px;"></div>
+    <!-- Recent Audits box removed from the landing — only the full history
+         page shows past runs now. The link below opens it. -->
+    <div style="margin-top:22px;padding-top:18px;border-top:1px solid #f3f4f6;text-align:right;">
+      <a id="historyAll" style="font-size:12px;font-weight:600;color:#6366f1;text-decoration:none">Open full history →</a>
     </div>
 
     <div class="steps">
