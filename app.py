@@ -790,8 +790,21 @@ def history_ui():
     weekly = [{"week": k, "count": v,
                 "label": _dt.date.fromisoformat(k).strftime("%b %d")}
                for k, v in weeks.items()]
+
+    # Status bifurcation — count DONE / ERROR / RUNNING / PENDING across the
+    # merged list so the top of the page shows how many succeeded, how many
+    # errored, how many are in flight. History-sourced rows carry no job
+    # status so they're treated as 'done' (the sheet exists → audit landed).
+    status_counts = {"done": 0, "error": 0, "running": 0, "pending": 0}
+    for r in merged:
+        s = (r.get("status") or "done").lower()
+        if s in status_counts:
+            status_counts[s] += 1
+        else:
+            status_counts["done"] += 1
     return render_template("history.html", runs=merged,
                            total_count=len(merged),
+                           status_counts=status_counts,
                            weekly=weekly,
                            jobs_sheet_url=_jobs_mod.get_url() if hasattr(_jobs_mod, "get_url") else "",
                            audit_host=_audit_host)

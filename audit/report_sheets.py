@@ -1113,19 +1113,33 @@ def read_for_deck(sheet_url_or_id):
     # + ending (from Slide Review or last Observations row).
     combined = []
     n = len(data_rows)
+    # Detect whether the first/last rows actually look like intro/ending
+    # content (category literally mentions 'intro'/'ending'/'cta'/'cover'),
+    # or whether this sheet was populated with findings only. In the latter
+    # case, DON'T steal rows 0 and -1 as intro/ending — every row is a
+    # finding, and we skip intro/ending slides entirely rather than
+    # dropping two valid findings.
+    def _looks_like_meta(row, kind):
+        cat = str(row[0] if len(row) > 0 else "").strip().lower()
+        if kind == "intro":
+            return any(k in cat for k in ("intro", "cover", "headline"))
+        if kind == "ending":
+            return any(k in cat for k in ("ending", "closing", "cta", "next step"))
+        return False
     if intro_row_data is not None:
         combined.append((intro_row_data, "intro"))
         findings = data_rows
+    elif n >= 2 and _looks_like_meta(data_rows[0], "intro"):
+        combined.append((data_rows[0], "intro"))
+        findings = data_rows[1:-1] if (n >= 3 and _looks_like_meta(data_rows[-1], "ending")) else data_rows[1:]
     else:
-        # Legacy: first data row was intro, last was ending
-        if n >= 2:
-            combined.append((data_rows[0], "intro"))
-        findings = data_rows[1:-1] if n >= 3 else (data_rows[1:] if n >= 2 else [])
+        # Finding-only sheet — every row is a finding slide.
+        findings = data_rows
     for f in findings:
         combined.append((f, "finding"))
     if ending_row_data is not None:
         combined.append((ending_row_data, "ending"))
-    elif intro_row_data is None and n >= 3:
+    elif intro_row_data is None and n >= 3 and _looks_like_meta(data_rows[-1], "ending"):
         combined.append((data_rows[-1], "ending"))
 
     # Filter out autofix-renamed duplicate rows ('… (dup N)') from the
