@@ -719,8 +719,11 @@ def history_ui():
     History (past audits) into one sortable table so CS can find and
     reopen any past run without hunting through the Google Sheet."""
     from audit import jobs as _jobs_mod
-    jobs_rows = _jobs_mod.list_recent(50)
-    hist_rows = history.list_recent(50)
+    # Pull everything so the Total card + weekly chart reflect reality,
+    # not an arbitrary 50-row window. The sheet-filter dedupe below keeps
+    # the merged list unique by sheet_url.
+    jobs_rows = _jobs_mod.list_recent(500)
+    hist_rows = history.list_recent(500)
     # Merge on sheet_url so a completed job also carries its deck URL.
     by_sheet = {r.get("sheet_url", ""): r for r in hist_rows if r.get("sheet_url")}
     merged = []
