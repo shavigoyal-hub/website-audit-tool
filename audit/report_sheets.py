@@ -1126,6 +1126,18 @@ def read_for_deck(sheet_url_or_id):
         if kind == "ending":
             return any(k in cat for k in ("ending", "closing", "cta", "next step"))
         return False
+    # Synthetic intro/ending rows (all empty, correct arity) — used when the
+    # sheet contains only finding rows so the deck still gets a hero slide
+    # at the top and a closing slide at the end. _recompute_intro_from_rows
+    # fills the intro's hook_stat / hook_ctx / found / costs from the
+    # finding rows below.
+    _SYNTH_INTRO  = ["Intro — cover slide", "", "", "", "+15%",
+                     "Increase your leads by 15%",
+                     "Same pages, same website → more leads",
+                     "If you get 10 leads a month today 10 leads → 12 leads. "
+                     "Same pages, same website. Before any ranking gains.", ""]
+    _SYNTH_ENDING = ["Ending — closing CTA", "", "", "", "",
+                     "Every month you wait, you lose out on 4 extra leads", "", "", ""]
     if intro_row_data is not None:
         combined.append((intro_row_data, "intro"))
         findings = data_rows
@@ -1133,14 +1145,19 @@ def read_for_deck(sheet_url_or_id):
         combined.append((data_rows[0], "intro"))
         findings = data_rows[1:-1] if (n >= 3 and _looks_like_meta(data_rows[-1], "ending")) else data_rows[1:]
     else:
-        # Finding-only sheet — every row is a finding slide.
+        # Finding-only sheet — synthesize an intro slide so the deck still
+        # opens on a hero. Every row stays a finding.
+        combined.append((_SYNTH_INTRO, "intro"))
         findings = data_rows
     for f in findings:
         combined.append((f, "finding"))
     if ending_row_data is not None:
         combined.append((ending_row_data, "ending"))
-    elif intro_row_data is None and n >= 3 and _looks_like_meta(data_rows[-1], "ending"):
+    elif n >= 3 and _looks_like_meta(data_rows[-1], "ending"):
         combined.append((data_rows[-1], "ending"))
+    else:
+        # Finding-only sheet — synthesize an ending slide too.
+        combined.append((_SYNTH_ENDING, "ending"))
 
     # Filter out autofix-renamed duplicate rows ('… (dup N)') from the
     # deck — they're kept in the sheet for traceability, but a slide for
