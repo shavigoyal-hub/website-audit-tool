@@ -60,6 +60,7 @@
             <th>When</th>
             <th>Site</th>
             <th>Status</th>
+            <th>Source</th>
             <th>Pages</th>
             <th>Cost</th>
             <th>Sheet</th>
@@ -80,6 +81,15 @@
             <td>
               <span class="status st-{{ r.status or 'pending' }}">{{ (r.status or 'pending')|upper }}</span>
               {% if r.worker %}<div class="kv">{{ r.worker }}</div>{% endif %}
+            </td>
+            <td>
+              {% if r.source %}
+                <span class="kv" style="font-weight:600;color:#4b5563">{{ r.source }}</span>
+              {% elif r.id %}
+                <span class="kv" style="font-weight:600;color:#166534">crawl</span>
+              {% else %}
+                <span class="kv" style="font-weight:600;color:#1e40af">chat / tool</span>
+              {% endif %}
             </td>
             <td>{{ r.pages or '—' }}</td>
             <td>

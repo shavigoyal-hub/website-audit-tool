@@ -741,6 +741,7 @@ def history_ui():
             "client": h.get("client") or "",
             "live_url": h.get("live_url") or "",
             "status": "done",
+            "source": "chat / tool",  # history-only rows didn't go through the crawl pipeline
             "worker": "",
             "sheet_url": h.get("sheet_url") or "",
             "deck_url": h.get("deck_url") or "",
