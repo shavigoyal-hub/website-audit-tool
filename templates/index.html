@@ -110,9 +110,14 @@
     }).catch(()=>{});
 
     // Recent-audits list was removed from the landing — only the "Open full
-    // history" link remains. Point it at /history-ui so clicking it opens
-    // the dedicated page.
-    document.getElementById("historyAll").href = BASE + "/history-ui";
+    // history" link remains. Defer href assignment to DOMContentLoaded
+    // because the <a id="historyAll"> is declared later in the body —
+    // getElementById would return null if we ran synchronously here, and
+    // the resulting TypeError was silently killing the click target.
+    document.addEventListener("DOMContentLoaded", function () {
+      var el = document.getElementById("historyAll");
+      if (el) el.href = BASE + "/history-ui";
+    });
   </script>
 
   <div class="card">
@@ -159,7 +164,7 @@
     <!-- Recent Audits box removed from the landing — only the full history
          page shows past runs now. The link below opens it. -->
     <div style="margin-top:22px;padding-top:18px;border-top:1px solid #f3f4f6;text-align:right;">
-      <a id="historyAll" style="font-size:12px;font-weight:600;color:#6366f1;text-decoration:none">Open full history →</a>
+      <a id="historyAll" href="{{ request.script_root }}/history-ui" style="font-size:12px;font-weight:600;color:#6366f1;text-decoration:none">Open full history →</a>
     </div>
 
     <div class="steps">
