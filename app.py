@@ -307,6 +307,10 @@ def build_deck():
             "autofix_applied": autofix_fixes,
         }
         try:
+            # Auto-register the sheet in history if it wasn't crawled through
+            # /run (e.g. created via chat or manually). Idempotent — no-op
+            # when the sheet is already recorded.
+            history.ensure_registered(sheet_url, client=client_display)
             history.update_deck(sheet_url, deck_url, "")
         except Exception as exc:
             print(f"[history] update_deck failed: {exc}")
@@ -497,6 +501,13 @@ def _do_append_findings(sheet_url, pairs, request):
                         "message": errors[0]["error"]}), 400
     msg_bits = [f"row {r['row']}: {r['analysis']['label']} ({r['analysis']['evidence']})"
                 for r in results]
+    # Any sheet touched via chat should land on history-ui too, so sheets
+    # created outside the crawl pipeline (chat / wrapper / manual) show up
+    # alongside crawled audits. Idempotent — skips if already registered.
+    try:
+        history.ensure_registered(sheet_url)
+    except Exception as exc:
+        print(f"[history] ensure_registered(chat) failed: {exc}")
     return jsonify({
         "ok": True, "action": "add_finding",
         "added": len(results), "results": results, "errors": errors,
@@ -537,6 +548,10 @@ def edit_cell_route():
             "valueInputOption": "USER_ENTERED",
             "values": [[value]],
         })
+        try:
+            history.ensure_registered(sheet_url)
+        except Exception as exc:
+            print(f"[history] ensure_registered(edit-cell) failed: {exc}")
         return jsonify({"ok": True, "cell": f"{col}{row}",
                         "new_value_preview": value[:120]})
     except Exception:

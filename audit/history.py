@@ -156,6 +156,44 @@ def append_run(client, live_url, sheet_url, metrics=None):
         return None
 
 
+def ensure_registered(sheet_url, live_url="", client=""):
+    """Add sheet_url to history if it isn't already there.
+
+    Used by /build-deck and /chat so sheets that were created outside the
+    crawl pipeline (via chat, manually, via the SEO Reporting wrapper's
+    chatbot) still appear on history-ui. Live URL + client are derived from
+    the sheet title when not passed in.
+    """
+    if not sheet_url:
+        return False
+    sid = _find_history_sheet()
+    if not sid:
+        return False
+    rows = _read_rows(sid)
+    for r in rows:
+        if len(r) > 3 and str(r[3]).strip() == sheet_url.strip():
+            return False  # already registered
+    # Derive missing fields from the sheet title ("<Client> SEO Audit — <date>")
+    if not client or not live_url:
+        try:
+            from audit.report_sheets import _extract_sheet_id
+            tgt_sid = _extract_sheet_id(sheet_url) or sheet_url
+            info = _cx("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                      {"spreadsheet_id": tgt_sid}) or {}
+            title = (info.get("properties") or {}).get("title", "")
+            import re as _re
+            m = _re.match(r"^(.+?)\s+(?:—|-)\s+SEO Audit", title) \
+                or _re.match(r"^(.+?)\s+SEO Audit", title)
+            if m and not client:
+                client = m.group(1).strip()
+            if not live_url and client and "." in client:
+                live_url = "https://" + client
+        except Exception as exc:
+            print(f"[history] derive meta failed: {exc}")
+    return append_run(client or "chat-created",
+                       live_url or "", sheet_url, metrics=None) is not None
+
+
 def update_deck(sheet_url, deck_url="", pdf_url=""):
     """Find the row matching sheet_url and write Deck URL / PDF URL into it."""
     sid = _find_history_sheet()
