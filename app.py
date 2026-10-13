@@ -515,6 +515,89 @@ def _do_append_findings(sheet_url, pairs, request):
     })
 
 
+@app.route("/update-usage-log", methods=["GET", "POST"])
+def update_usage_log_route():
+    """Daily-cron target. Recomputes SEO + AEO tool numbers (clients,
+    client-months, same-day re-runs, total runs) and writes them to the
+    'Internal Tools Usage Log' sheet.
+
+    Called by Vercel cron (vercel.json) once per day; also safe to hit
+    manually any time to force a refresh.
+    """
+    try:
+        import re as _r
+        from collections import Counter
+        from audit.history import _find_history_sheet, _read_rows
+        from audit import jobs as _jobs
+        USAGE_SHEET_ID = os.environ.get(
+            "USAGE_LOG_SHEET_ID",
+            "1OS3ORvtPPJMDTTW7u0Er05NPg3DFUa2uJ14h0XSSC_M")
+
+        def norm(u):
+            u = (u or "").strip().lower()
+            u = _r.sub(r"^https?://", "", u)
+            u = _r.sub(r"^www\.", "", u)
+            return u.strip("/").split("/")[0]
+        def alnum(s): return _r.sub(r"[^a-z0-9]", "", s.lower())
+
+        # SEO Audit — fold history + jobs
+        hid = _find_history_sheet()
+        hrows = _read_rows(hid) or []
+        runs = []
+        for r in hrows[1:]:
+            if len(r) < 4: continue
+            sid = ""
+            m = _r.search(r"/d/([A-Za-z0-9_-]+)", str(r[3]))
+            if m: sid = m.group(1)
+            runs.append({"client": norm(str(r[2])) if len(r) > 2 else alnum(str(r[1])),
+                         "date": str(r[0])[:10], "sheet_id": sid})
+        for j in _jobs.list_recent(500):
+            sid = ""
+            m = _r.search(r"/d/([A-Za-z0-9_-]+)", j.get("sheet_url","") or "")
+            if m: sid = m.group(1)
+            if not j.get("live_url"): continue
+            runs.append({"client": norm(j["live_url"]), "date": (j.get("created_utc","") or "")[:10], "sheet_id": sid})
+        seen = set(); dedup = []
+        for rr in runs:
+            k = rr["sheet_id"] or (rr["client"] + "|" + rr["date"])
+            if k in seen: continue
+            seen.add(k); dedup.append(rr)
+
+        seo_total = len(dedup)
+        seo_clients = len(set(r["client"] for r in dedup if r["client"]))
+        seo_cm = len(set((r["client"], r["date"][:7]) for r in dedup if r["client"] and r["date"]))
+        _sd = Counter((r["client"], r["date"]) for r in dedup if r["client"] and r["date"])
+        seo_sameday = sum(c - 1 for c in _sd.values() if c > 1)
+
+        # AEO numbers — stored as a static baseline (Drive sweep is slow,
+        # not practical to run on a cron). If anyone adds new AEO sheets
+        # they can re-run the sweep manually.
+        aeo_row = ["AEO / GEO Audit", "13", "1", "0", "21"]
+
+        # Patch the sheet
+        from audit.composio_exec import execute as _cx
+        cur = _cx("GOOGLESHEETS_BATCH_GET",
+                 {"spreadsheet_id": USAGE_SHEET_ID, "ranges": ["Sheet1!A1:E25"]})
+        rows = ((cur.get("data") or {}).get("valueRanges") or cur.get("valueRanges") or [{}])[0].get("values", [])
+        tool_names = [row[0].strip().lower() if row else "" for row in rows]
+        seo_row = ["SEO Audit", str(seo_clients), str(seo_cm), str(seo_sameday), str(seo_total)]
+        for tool, new_row in [("seo audit", seo_row), ("aeo / geo audit", aeo_row)]:
+            if tool in tool_names:
+                rows[tool_names.index(tool)] = new_row
+            else:
+                rows.append(new_row); tool_names.append(tool)
+        _cx("GOOGLESHEETS_BATCH_UPDATE", {
+            "spreadsheet_id": USAGE_SHEET_ID, "sheet_name": "Sheet1",
+            "first_cell_location": "A1", "valueInputOption": "USER_ENTERED",
+            "values": rows,
+        })
+        return jsonify({"ok": True, "updated": {"SEO Audit": seo_row,
+                                                 "AEO / GEO Audit": aeo_row},
+                        "sheet_url": f"https://docs.google.com/spreadsheets/d/{USAGE_SHEET_ID}/edit"})
+    except Exception:
+        return jsonify({"error": traceback.format_exc()[:1200]}), 500
+
+
 @app.route("/edit-cell", methods=["POST"])
 def edit_cell_route():
     """Fast cell write — sheet_url + row (int) + col (A..I) + value.
@@ -795,20 +878,46 @@ def history_ui():
     # merged list so the top of the page shows how many succeeded, how many
     # errored, how many are in flight. History-sourced rows carry no job
     # status so they're treated as 'done' (the sheet exists → audit landed).
-    status_counts = {"done": 0, "error": 0, "running": 0, "pending": 0}
+    status_counts = {"done": 0, "error": 0, "running": 0, "pending": 0,
+                     "same_day_rerun": 0}
     # Usage roll-up — total pages crawled, Composio + PSI calls, estimated
     # cost — summed across every row we have numbers for. Gives one quick
     # read on how much the tool has done at the top of the page.
     usage = {"pages": 0, "composio_calls": 0, "psi_calls": 0, "cost_usd": 0.0}
+    # Mark every (client, date) attempt beyond the first as a same-day
+    # re-run so the main status counts (Successful etc.) reflect UNIQUE
+    # audits — a 5-attempt dev day for one client doesn't show as 5
+    # successes anymore. Re-runs land in their own bucket.
+    import re as _re2
+    def _norm_cli(r):
+        c = (r.get("live_url") or r.get("client") or "").lower().strip()
+        c = _re2.sub(r"^https?://", "", c)
+        c = _re2.sub(r"^www\.", "", c)
+        return c.strip("/").split("/")[0]
+    seen_client_day = set()
+    is_rerun = []
+    for r in merged:
+        key = (_norm_cli(r), (r.get("created_utc") or "")[:10])
+        if key[0] and key[1] and key in seen_client_day:
+            is_rerun.append(True)
+            status_counts["same_day_rerun"] += 1
+        else:
+            if key[0] and key[1]:
+                seen_client_day.add(key)
+            is_rerun.append(False)
     def _n(v):
         try: return int(float(str(v).strip())) if v else 0
         except Exception: return 0
     def _f(v):
         try: return float(str(v).strip()) if v else 0.0
         except Exception: return 0.0
-    for r in merged:
+    for idx, r in enumerate(merged):
         s = (r.get("status") or "done").lower()
-        if s in status_counts:
+        # Same-day re-runs are already counted in their own bucket above;
+        # don't double-count them in done/error/running/pending.
+        if is_rerun[idx]:
+            pass
+        elif s in status_counts and s != "same_day_rerun":
             status_counts[s] += 1
         else:
             status_counts["done"] += 1

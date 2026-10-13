@@ -11,5 +11,11 @@
       "src": "/(.*)",
       "dest": "app.py"
     }
+  ],
+  "crons": [
+    {
+      "path": "/update-usage-log",
+      "schedule": "0 2 * * *"
+    }
   ]
 }
