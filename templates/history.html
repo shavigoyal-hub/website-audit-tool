@@ -47,51 +47,57 @@
       {% if jobs_sheet_url %}<a href="{{ jobs_sheet_url }}" target="_blank">open jobs sheet →</a>{% endif %}
     </p>
 
-    {% if usage %}
-    <div style="background:linear-gradient(135deg,#4f46e5 0%,#6366f1 100%);color:#fff;border-radius:12px;padding:14px 20px;margin-bottom:14px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:12px;box-shadow:0 2px 12px rgba(79,70,229,0.15)">
-      <div style="font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.9">Tool usage</div>
-      <div style="display:flex;gap:28px;font-size:13px;font-weight:500">
-        <div><b style="font-size:18pt;font-weight:700;letter-spacing:-0.02em">{{ '{:,}'.format(usage.pages) }}</b> <span style="opacity:0.85;font-size:11px;text-transform:uppercase;letter-spacing:0.04em">pages crawled</span></div>
-        <div><b style="font-size:18pt;font-weight:700;letter-spacing:-0.02em">{{ '{:,}'.format(usage.composio_calls + usage.psi_calls) }}</b> <span style="opacity:0.85;font-size:11px;text-transform:uppercase;letter-spacing:0.04em">API calls</span></div>
-        <div><b style="font-size:18pt;font-weight:700;letter-spacing:-0.02em">${{ '{:,.2f}'.format(usage.cost_usd) }}</b> <span style="opacity:0.85;font-size:11px;text-transform:uppercase;letter-spacing:0.04em">spent</span></div>
+    {% set sc = status_counts or {} %}
+    <!-- Primary stat tiles: 3 big numbers that answer "how much work has
+         this tool done?" at a glance. Secondary status (errored / running
+         / pending / re-runs) collapses into one line below. -->
+    <div style="display:grid;grid-template-columns:repeat(3, 1fr);gap:14px;margin-bottom:12px">
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;box-shadow:0 2px 12px rgba(0,0,0,0.04)">
+        <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em">Clients audited</div>
+        <div style="font-size:30pt;font-weight:700;letter-spacing:-0.03em;color:#1a1a2e;line-height:1;margin-top:6px">{{ sc.get('clients', 0) }}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">distinct domains</div>
+      </div>
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;box-shadow:0 2px 12px rgba(0,0,0,0.04)">
+        <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em">Deliverables</div>
+        <div style="font-size:30pt;font-weight:700;letter-spacing:-0.03em;color:#1a1a2e;line-height:1;margin-top:6px">{{ sc.get('client_months', 0) }}</div>
+        <div style="font-size:11px;color:#6b7280;margin-top:4px">client-months</div>
+      </div>
+      <div style="background:linear-gradient(135deg,#4f46e5 0%,#6366f1 100%);color:#fff;border-radius:12px;padding:16px 20px;box-shadow:0 2px 12px rgba(79,70,229,0.18)">
+        <div style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.08em;opacity:0.9">Total runs</div>
+        <div style="font-size:30pt;font-weight:700;letter-spacing:-0.03em;line-height:1;margin-top:6px">{{ total_count or (runs|length) }}</div>
+        <div style="font-size:11px;opacity:0.85;margin-top:4px">
+          {% if usage %}{{ '{:,}'.format(usage.pages) }} pages crawled · ${{ '{:,.2f}'.format(usage.cost_usd) }} spent{% else %}across all time{% endif %}
+        </div>
       </div>
     </div>
-    {% endif %}
 
-    <div style="display:grid;grid-template-columns:220px 220px 1fr;gap:14px;margin-bottom:22px;align-items:stretch">
-      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;justify-content:center;box-shadow:0 2px 12px rgba(0,0,0,0.04)">
-        <div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em">Total audits</div>
-        <div style="font-size:34pt;font-weight:700;letter-spacing:-0.03em;color:#1a1a2e;line-height:1;margin-top:6px">{{ total_count or (runs|length) }}</div>
-        <div style="font-size:11px;color:#6b7280;margin-top:4px">across all time</div>
-      </div>
-      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:5px;box-shadow:0 2px 12px rgba(0,0,0,0.04)">
-        <div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Breakdown</div>
-        {% set sc = status_counts or {} %}
-        <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#4f46e5;font-weight:600">◆ Clients</span><span style="font-size:14pt;font-weight:700;color:#4f46e5">{{ sc.get('clients', 0) }}</span></div>
-        <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#4f46e5;font-weight:600">◆ Client-months</span><span style="font-size:14pt;font-weight:700;color:#4f46e5">{{ sc.get('client_months', 0) }}</span></div>
-        <div style="border-top:1px solid #f3f4f6;margin:2px 0"></div>
-        <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#166534;font-weight:600">● Successful</span><span style="font-size:14pt;font-weight:700;color:#166534">{{ sc.get('done', 0) }}</span></div>
-        <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#991b1b;font-weight:600">● Errored</span><span style="font-size:14pt;font-weight:700;color:#991b1b">{{ sc.get('error', 0) }}</span></div>
-        <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#1e40af;font-weight:600">● Running</span><span style="font-size:14pt;font-weight:700;color:#1e40af">{{ sc.get('running', 0) }}</span></div>
-        <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#92400e;font-weight:600">● Pending</span><span style="font-size:14pt;font-weight:700;color:#92400e">{{ sc.get('pending', 0) }}</span></div>
-        <div style="display:flex;align-items:center;justify-content:space-between;border-top:1px solid #f3f4f6;padding-top:4px;margin-top:2px"><span style="font-size:11px;color:#6b7280;font-weight:600">↻ Same-day re-runs</span><span style="font-size:14pt;font-weight:700;color:#6b7280">{{ sc.get('same_day_rerun', 0) }}</span></div>
-      </div>
-      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px;box-shadow:0 2px 12px rgba(0,0,0,0.04)">
-        <div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:10px">Last 12 weeks</div>
-        {% if weekly %}
-          {% set wmax = (weekly|map(attribute='count')|max) %}
-          {% set wmax = wmax if wmax > 0 else 1 %}
-          <div style="display:flex;align-items:flex-end;gap:6px;height:90px">
-            {% for w in weekly %}
-              <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0">
-                <div style="font-size:9pt;font-weight:600;color:#4f46e5">{{ w.count or '' }}</div>
-                <div style="width:100%;height:{{ (w.count * 70 / wmax)|round(1) }}px;background:linear-gradient(180deg,#4f46e5,#818cf8);border-radius:4px 4px 0 0;min-height:2px"></div>
-                <div style="font-size:9pt;color:#6b7280;white-space:nowrap">{{ w.label }}</div>
-              </div>
-            {% endfor %}
-          </div>
-        {% endif %}
-      </div>
+    <!-- Compact one-line status strip. Only shows non-zero statuses so
+         it stays quiet when there's nothing to action. -->
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:12px 20px;margin-bottom:14px;display:flex;align-items:center;flex-wrap:wrap;gap:22px;font-size:12px;box-shadow:0 2px 12px rgba(0,0,0,0.04)">
+      <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;margin-right:4px">Status</div>
+      <span style="color:#166534;font-weight:600">● {{ sc.get('done', 0) }} successful</span>
+      {% if sc.get('error', 0) %}<span style="color:#991b1b;font-weight:600">● {{ sc.error }} errored</span>{% endif %}
+      {% if sc.get('running', 0) %}<span style="color:#1e40af;font-weight:600">● {{ sc.running }} running</span>{% endif %}
+      {% if sc.get('pending', 0) %}<span style="color:#92400e;font-weight:600">● {{ sc.pending }} pending</span>{% endif %}
+      {% if sc.get('same_day_rerun', 0) %}<span style="color:#6b7280;font-weight:600" title="Attempts beyond the first for the same client on the same day — dev iterations">↻ {{ sc.same_day_rerun }} same-day re-runs</span>{% endif %}
+    </div>
+
+    <!-- Weekly trend as its own row -->
+    <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:16px 20px;margin-bottom:22px;box-shadow:0 2px 12px rgba(0,0,0,0.04)">
+      <div style="font-size:10px;font-weight:700;color:#6b7280;text-transform:uppercase;letter-spacing:0.08em;margin-bottom:12px">Last 12 weeks</div>
+      {% if weekly %}
+        {% set wmax = (weekly|map(attribute='count')|max) %}
+        {% set wmax = wmax if wmax > 0 else 1 %}
+        <div style="display:flex;align-items:flex-end;gap:8px;height:88px">
+          {% for w in weekly %}
+            <div style="flex:1;display:flex;flex-direction:column;align-items:center;gap:4px;min-width:0">
+              <div style="font-size:9pt;font-weight:600;color:#4f46e5">{{ w.count or '' }}</div>
+              <div style="width:100%;height:{{ (w.count * 68 / wmax)|round(1) }}px;background:linear-gradient(180deg,#4f46e5,#818cf8);border-radius:4px 4px 0 0;min-height:2px"></div>
+              <div style="font-size:9pt;color:#6b7280;white-space:nowrap">{{ w.label }}</div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
     </div>
 
     <div class="top">
