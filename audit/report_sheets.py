@@ -48,6 +48,10 @@ def _clean_stat_row(s):
     m = _rss.match(r"^([+\-]?\d+(?:\.\d+)?%)$", s)
     if m:
         return m.group(1)
+    # Time deltas (−3s, +12 ms, -0.5s) are legitimate speed stats
+    m = _rss.match(r"^([+\-]?\d+(?:\.\d+)?\s*(?:s|sec|ms|secs|seconds))$", s, _rss.I)
+    if m:
+        return m.group(1)
     m = _rss.match(r"^(\d+x|\d+)$", s)
     if m:
         return m.group(1)

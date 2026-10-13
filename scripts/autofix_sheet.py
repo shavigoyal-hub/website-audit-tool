@@ -81,6 +81,10 @@ _METRIC_WORDS = (
     "click", "clicks", "impression", "impressions", "snippet",
     "serp", "conversion", "conversions", "bounce", "traffic",
     "citation", "citations", "share", "equity", "authority",
+    # Speed / CWV metrics — a 'faster LCP' sentence is clearly a metric
+    # even though it doesn't use the word 'ranking'.
+    "lcp", "cwv", "speed", "load", "loading", "performance",
+    "latency", "ms", "second", "seconds", "sec", "faster", "slower",
 )
 _STAT_START_RE = re.compile(
     r"^\s*(?:[+\-]?\d+(?:[.,-]\d+)?\s*(?:%|x)|"
