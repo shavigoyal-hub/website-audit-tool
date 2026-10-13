@@ -203,13 +203,24 @@
       if (!sheet) return;
       const el = document.getElementById("sheet_url");
       if (el) el.value = sheet;
-      // Reveal both panels + show a small banner so the user sees which
-      // sheet they're editing.
+      // Reveal everything + show a small banner so the user sees which
+      // sheet they're editing. When they arrive via a history-row link,
+      // the deck has usually been built already — show its live link and
+      // the post-build chatbot right away so they can tweak without
+      // clicking Build first.
       document.getElementById("appendBox").style.display = "block";
       document.getElementById("deckForm").style.display = "block";
+      document.getElementById("postBuildChat").style.display = "block";
       const banner = document.getElementById("sheetBanner");
       banner.style.display = "block";
       banner.innerHTML = `Editing sheet: <a href="${sheet}" target="_blank" style="color:#4f46e5;font-weight:600;word-break:break-all">${sheet}</a>`;
+      // Convenience: a quick deck link up top so the user can open the
+      // existing deck in a new tab while tweaking.
+      const deckResult = document.getElementById("deckResult");
+      const deckHref = BASE + "/deck?sheet=" + encodeURIComponent(sheet);
+      deckResult.style.display = "block";
+      deckResult.style.marginTop = "12px";
+      deckResult.innerHTML = `<a href="${deckHref}" target="_blank" style="display:inline-block;padding:8px 14px;background:#eef2ff;color:#4f46e5;border-radius:8px;text-decoration:none;font-weight:600;font-size:13px">🖼 Open current deck →</a>`;
     })();
 
     document.getElementById("auditForm").addEventListener("submit", async function (e) {
