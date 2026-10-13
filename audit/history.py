@@ -109,16 +109,42 @@ def get_url():
     return f"https://docs.google.com/spreadsheets/d/{sid}" if sid else None
 
 
-def _read_rows(sid):
+_READ_CACHE = {"ts": 0.0, "sid": "", "rows": []}
+_READ_TTL_SEC = 60  # how long a warm lambda reuses the last read
+
+def _read_rows(sid, bypass_cache=False):
+    """Read the history tab, caching results for ~60s per warm serverless
+    instance. Google Sheets' per-user read quota is 60/min — /history-ui,
+    /chat ensure_registered, /build-deck + the daily cron were each
+    firing 2-4 reads per request, so a dozen page loads blew past the
+    limit. Cache survives warm Vercel invocations (module globals persist
+    inside a container) and expires automatically.
+
+    Mutations (append_run, update_deck) call _invalidate_read_cache() so
+    subsequent reads refresh.
+    """
+    import time
+    now = time.time()
+    if (not bypass_cache
+            and _READ_CACHE["sid"] == sid
+            and (now - _READ_CACHE["ts"]) < _READ_TTL_SEC
+            and _READ_CACHE["rows"]):
+        return _READ_CACHE["rows"]
     try:
         resp = _cx("GOOGLESHEETS_BATCH_GET", {
             "spreadsheet_id": sid, "ranges": [f"{HISTORY_TAB}!A1:J"],
         })
     except Exception as exc:
         print(f"[history] read failed: {exc}")
-        return []
+        return _READ_CACHE["rows"] if _READ_CACHE["sid"] == sid else []
     ranges = (resp.get("valueRanges") if isinstance(resp, dict) else None) or []
-    return (ranges[0].get("values") or []) if ranges else []
+    rows = (ranges[0].get("values") or []) if ranges else []
+    _READ_CACHE.update({"ts": now, "sid": sid, "rows": rows})
+    return rows
+
+
+def _invalidate_read_cache():
+    _READ_CACHE["ts"] = 0.0
 
 
 def _next_free_row(sid):
@@ -150,6 +176,7 @@ def append_run(client, live_url, sheet_url, metrics=None):
                         counts.get("psi_calls", ""),
                         cost]],
         })
+        _invalidate_read_cache()
         return row_num
     except Exception as exc:
         print(f"[history] append failed: {exc}")
@@ -214,6 +241,7 @@ def update_deck(sheet_url, deck_url="", pdf_url=""):
             "valueInputOption": "USER_ENTERED",
             "values": [[deck_url or "", pdf_url or ""]],
         })
+        _invalidate_read_cache()
         return True
     except Exception as exc:
         print(f"[history] update deck failed: {exc}")

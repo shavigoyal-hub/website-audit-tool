@@ -61,15 +61,36 @@ def _ensure_tab(sid):
         print(f"[jobs] ensure_tab: {exc}")
 
 
-def _read_rows(sid):
+_READ_CACHE = {"ts": 0.0, "sid": "", "rows": []}
+_READ_TTL_SEC = 30  # shorter than history (jobs tab mutates every poll)
+
+def _read_rows(sid, bypass_cache=False):
+    """Same TTL cache idea as history.py — read once per 30s per warm
+    serverless instance so /history-ui / /job/<id> page loads don't each
+    chew a Sheets read-quota slot. Mutations invalidate the cache so
+    status flips (claim_next, mark_done) are visible immediately.
+    """
+    import time
+    now = time.time()
+    if (not bypass_cache
+            and _READ_CACHE["sid"] == sid
+            and (now - _READ_CACHE["ts"]) < _READ_TTL_SEC
+            and _READ_CACHE["rows"]):
+        return _READ_CACHE["rows"]
     try:
         resp = _cx("GOOGLESHEETS_BATCH_GET", {
             "spreadsheet_id": sid, "ranges": [f"{JOBS_TAB}!A1:P"]})
     except Exception as exc:
         print(f"[jobs] read: {exc}")
-        return []
+        return _READ_CACHE["rows"] if _READ_CACHE["sid"] == sid else []
     ranges = (resp.get("valueRanges") if isinstance(resp, dict) else None) or []
-    return (ranges[0].get("values") or []) if ranges else []
+    rows = (ranges[0].get("values") or []) if ranges else []
+    _READ_CACHE.update({"ts": now, "sid": sid, "rows": rows})
+    return rows
+
+
+def _invalidate_read_cache():
+    _READ_CACHE["ts"] = 0.0
 
 
 def _now():
@@ -118,6 +139,7 @@ def enqueue(client, live_url, source=""):
             "insertDataOption": "INSERT_ROWS",
             "values": [row],
         })
+        _invalidate_read_cache()
         return jid
     except Exception as exc:
         LAST_ENQUEUE_ERROR = f"append: {exc}"[:300]
@@ -125,7 +147,7 @@ def enqueue(client, live_url, source=""):
     # Fallback: ensure tab exists and retry with BATCH_UPDATE at next row.
     try:
         _ensure_tab(sid)
-        rows = _read_rows(sid)
+        rows = _read_rows(sid, bypass_cache=True)
         row_num = (len(rows) + 1) if rows else 1
         _cx("GOOGLESHEETS_BATCH_UPDATE", {
             "spreadsheet_id": sid, "sheet_name": JOBS_TAB,
@@ -133,6 +155,7 @@ def enqueue(client, live_url, source=""):
             "valueInputOption": "USER_ENTERED",
             "values": [row],
         })
+        _invalidate_read_cache()
         return jid
     except Exception as exc:
         LAST_ENQUEUE_ERROR = f"batch_update: {exc}"[:300]
@@ -201,6 +224,7 @@ def claim_next(worker_id):
                 if isinstance(_v, tuple) and _now_ts - _v[1] > _CLAIMED_TTL_SEC:
                     _CLAIMED_ROWS.pop(_k, None)
             _CLAIMED_ROWS[r[0]] = (i, _now_ts)
+            _invalidate_read_cache()
             return dict(zip(JOB_HEADER, r))
     return None
 
@@ -225,6 +249,7 @@ def mark_done(job_id, sheet_url, crawler="", pages="",
                         psi_calls if psi_calls != "" else "",
                         cost_usd if cost_usd != "" else ""]],
         })
+        _invalidate_read_cache()
         return True
     except Exception as exc:
         # On 429 (quota), swallow — the audit sheet was already built, we
@@ -255,6 +280,7 @@ def mark_error(job_id, err):
             "valueInputOption": "USER_ENTERED",
             "values": [["error", "", "", _now(), "", (err or "")[:3000]]],
         })
+        _invalidate_read_cache()
         return True
     except Exception as exc:
         print(f"[jobs] mark_error quota/err: {exc}")
