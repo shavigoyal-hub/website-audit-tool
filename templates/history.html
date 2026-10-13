@@ -135,10 +135,17 @@
                 <span class="kv" style="font-weight:600;color:#1e40af">chat / tool</span>
               {% endif %}
             </td>
-            <td>{{ r.pages or '—' }}</td>
+            <td>
+              {% if r.pages %}{{ r.pages }}
+              {% elif r.source == 'chat / tool' or not r.id %}
+                <span class="muted" title="This sheet wasn't crawled by the pipeline — pages aren't tracked" style="font-size:11px">not crawled</span>
+              {% else %}—{% endif %}
+            </td>
             <td>
               {% if r.cost_usd %}
-              <span class="cost">${{ '%.4f'|format(r.cost_usd|float) }}</span>
+                <span class="cost">${{ '%.4f'|format(r.cost_usd|float) }}</span>
+              {% elif r.source == 'chat / tool' or not r.id %}
+                <span class="muted" title="Cost is only tracked for pipeline-crawled runs; chat/tool sheets have no cost record" style="font-size:11px">n/a</span>
               {% else %}<span class="muted">—</span>{% endif %}
             </td>
             <td>
