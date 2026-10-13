@@ -301,7 +301,29 @@
         const fd = new FormData(this);
         const res = await fetch(BASE + "/run", { method: "POST", body: fd });
         const data = await res.json();
-        if (data.job_id) {
+        if (data.duplicate) {
+          // Backend found a run for this URL that's already in progress
+          // or finished within the last 2h. Offer to open it instead of
+          // launching another; user can still force a fresh run.
+          result.style.display = "block";
+          result.className = "";
+          result.innerHTML = `
+            <div style="padding:14px 16px;background:#fef9c3;border:1px solid #fde047;border-radius:10px;font-size:13px;color:#713f12">
+              <b>${(data.existing_status||"").toUpperCase()}</b> — ${data.message}
+              <div style="margin-top:10px;display:flex;gap:8px;flex-wrap:wrap">
+                ${data.sheet_url ? `<a href="${data.sheet_url}" target="_blank" style="padding:8px 14px;background:#1e40af;color:#fff;border-radius:8px;text-decoration:none;font-weight:600">Open existing sheet</a>` : ""}
+                <button type="button" id="forceRunBtn" style="padding:8px 14px;background:#fff;color:#991b1b;border:1px solid #fecaca;border-radius:8px;font-weight:600;cursor:pointer">Run again anyway</button>
+              </div>
+            </div>`;
+          document.getElementById("forceRunBtn")?.addEventListener("click", async () => {
+            fd.append("force", "1");
+            btn.disabled = true; btnText.style.display = "none"; spinner.style.display = "block";
+            const r2 = await fetch(BASE + "/run", { method: "POST", body: fd });
+            const d2 = await r2.json();
+            if (d2.job_id) { renderQueue({id: d2.job_id, status: "pending"}); pollJob(d2.job_id); }
+            else renderFinal(d2);
+          });
+        } else if (data.job_id) {
           renderQueue({id: data.job_id, status: "pending"});
           pollJob(data.job_id);
         } else {

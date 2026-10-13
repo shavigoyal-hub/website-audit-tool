@@ -108,10 +108,60 @@ def run_audit():
             return jsonify({"error": "Live URL is required."}), 400
 
         sync = request.form.get("sync", "").lower() in ("1", "true", "yes", "on")
+        # Pass force=1 to override the dedupe guard below and re-run anyway.
+        force = request.form.get("force", "").lower() in ("1", "true", "yes", "on")
 
         m = re.match(r"https?://(?:www\.)?([^/]+)", live_url)
         domain = m.group(1) if m else live_url
         client_name = re.sub(r"\.[^.]+$", "", domain).replace(".", "_").lower()
+
+        # Dedupe guard — if a run exists for the SAME live_url that is
+        # pending/running right now, or finished within the last 2 hours,
+        # don't enqueue another. Return the existing job + its sheet so
+        # the UI can offer "load that one" instead. The caller can force
+        # a true re-run by setting force=1.
+        if not force and not sync:
+            try:
+                import datetime as _dt2
+                def _norm_u(u):
+                    u = (u or "").strip().lower()
+                    u = re.sub(r"^https?://", "", u)
+                    u = re.sub(r"^www\.", "", u)
+                    return u.strip("/").split("/")[0]
+                target = _norm_u(live_url)
+                now = _dt2.datetime.utcnow()
+                recent_cutoff = now - _dt2.timedelta(hours=2)
+                for j in jobs.list_recent(50):
+                    if _norm_u(j.get("live_url", "")) != target:
+                        continue
+                    status = (j.get("status") or "").lower()
+                    created = j.get("created_utc") or ""
+                    try:
+                        when = _dt2.datetime.fromisoformat(created.rstrip("Z"))
+                    except Exception:
+                        when = None
+                    if status in ("pending", "running"):
+                        return jsonify({
+                            "ok": True, "duplicate": True,
+                            "existing_job_id": j.get("id"),
+                            "existing_status": status,
+                            "sheet_url": j.get("sheet_url", "") or "",
+                            "message": f"An audit for {domain} is already {status} "
+                                       f"(job {j.get('id')}). Load that one, or "
+                                       f"re-submit with force=1 to run again.",
+                        }), 200
+                    if status == "done" and when and when > recent_cutoff and j.get("sheet_url"):
+                        return jsonify({
+                            "ok": True, "duplicate": True,
+                            "existing_job_id": j.get("id"),
+                            "existing_status": "done",
+                            "sheet_url": j.get("sheet_url"),
+                            "message": f"An audit for {domain} finished "
+                                       f"{int((now - when).total_seconds() // 60)} min ago. "
+                                       f"Load that one, or re-submit with force=1 to re-run.",
+                        }), 200
+            except Exception as exc:
+                print(f"[run] dedupe check skipped: {exc}")
 
         if sync:
             result = pipeline.run(live_url)
