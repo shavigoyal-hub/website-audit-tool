@@ -203,19 +203,28 @@
       if (!sheet) return;
       const el = document.getElementById("sheet_url");
       if (el) el.value = sheet;
-      // Reveal everything + show a small banner so the user sees which
-      // sheet they're editing. When they arrive via a history-row link,
-      // the deck has usually been built already — show its live link and
-      // the post-build chatbot right away so they can tweak without
-      // clicking Build first.
+      // Edit mode: hide intro / Run Audit / How-it-works. The user came
+      // here to tweak an existing audit, not start a new one.
+      document.querySelector("h1").style.display = "none";
+      document.querySelector(".subtitle").style.display = "none";
+      document.getElementById("auditForm").style.display = "none";
+      const steps = document.querySelector(".steps");
+      if (steps) steps.style.display = "none";
+      // Reveal the chatbot + deck controls + existing deck link.
       document.getElementById("appendBox").style.display = "block";
       document.getElementById("deckForm").style.display = "block";
-      document.getElementById("postBuildChat").style.display = "block";
+      // The 'tweak this deck' panel duplicated the chatbot — hide it in
+      // edit mode since the top chatbot already does the same thing.
+      const pbc = document.getElementById("postBuildChat");
+      if (pbc) pbc.style.display = "none";
       const banner = document.getElementById("sheetBanner");
       banner.style.display = "block";
-      banner.innerHTML = `Editing sheet: <a href="${sheet}" target="_blank" style="color:#4f46e5;font-weight:600;word-break:break-all">${sheet}</a>`;
-      // Convenience: a quick deck link up top so the user can open the
-      // existing deck in a new tab while tweaking.
+      banner.style.marginTop = "0";
+      banner.style.background = "transparent";
+      banner.style.border = "none";
+      banner.style.padding = "0";
+      banner.innerHTML = `<a href="${sheet}" target="_blank" style="color:#4f46e5;font-weight:600;font-size:13px;text-decoration:none">✏ Edit the sheet →</a>`;
+      // Deck link up top (quick open, no need to click Build to see it).
       const deckResult = document.getElementById("deckResult");
       const deckHref = BASE + "/deck?sheet=" + encodeURIComponent(sheet);
       deckResult.style.display = "block";
