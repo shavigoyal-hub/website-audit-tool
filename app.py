@@ -926,6 +926,20 @@ def history_ui():
         usage["psi_calls"]       += _n(r.get("psi_calls"))
         usage["cost_usd"]        += _f(r.get("cost_usd"))
     usage["cost_usd"] = round(usage["cost_usd"], 2)
+    # Distinct clients + client-months across the merged list, counted
+    # from the SAME normalized key the same-day-rerun dedupe used — so
+    # the three numbers (clients / client-months / same-day re-runs)
+    # add up to a coherent story.
+    _clients = set()
+    _client_months = set()
+    for r in merged:
+        c = _norm_cli(r)
+        if not c: continue
+        _clients.add(c)
+        ym = (r.get("created_utc") or "")[:7]
+        if ym: _client_months.add((c, ym))
+    status_counts["clients"] = len(_clients)
+    status_counts["client_months"] = len(_client_months)
     return render_template("history.html", runs=merged,
                            total_count=len(merged),
                            status_counts=status_counts,

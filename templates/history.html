@@ -64,9 +64,12 @@
         <div style="font-size:34pt;font-weight:700;letter-spacing:-0.03em;color:#1a1a2e;line-height:1;margin-top:6px">{{ total_count or (runs|length) }}</div>
         <div style="font-size:11px;color:#6b7280;margin-top:4px">across all time</div>
       </div>
-      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:6px;box-shadow:0 2px 12px rgba(0,0,0,0.04)">
-        <div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">By status</div>
+      <div style="background:#fff;border:1px solid #e5e7eb;border-radius:12px;padding:18px 20px;display:flex;flex-direction:column;gap:5px;box-shadow:0 2px 12px rgba(0,0,0,0.04)">
+        <div style="font-size:11px;font-weight:600;color:#6b7280;text-transform:uppercase;letter-spacing:0.06em;margin-bottom:4px">Breakdown</div>
         {% set sc = status_counts or {} %}
+        <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#4f46e5;font-weight:600">◆ Clients</span><span style="font-size:14pt;font-weight:700;color:#4f46e5">{{ sc.get('clients', 0) }}</span></div>
+        <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#4f46e5;font-weight:600">◆ Client-months</span><span style="font-size:14pt;font-weight:700;color:#4f46e5">{{ sc.get('client_months', 0) }}</span></div>
+        <div style="border-top:1px solid #f3f4f6;margin:2px 0"></div>
         <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#166534;font-weight:600">● Successful</span><span style="font-size:14pt;font-weight:700;color:#166534">{{ sc.get('done', 0) }}</span></div>
         <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#991b1b;font-weight:600">● Errored</span><span style="font-size:14pt;font-weight:700;color:#991b1b">{{ sc.get('error', 0) }}</span></div>
         <div style="display:flex;align-items:center;justify-content:space-between"><span style="font-size:11px;color:#1e40af;font-weight:600">● Running</span><span style="font-size:14pt;font-weight:700;color:#1e40af">{{ sc.get('running', 0) }}</span></div>
