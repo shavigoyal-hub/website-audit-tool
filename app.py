@@ -796,15 +796,31 @@ def history_ui():
     # errored, how many are in flight. History-sourced rows carry no job
     # status so they're treated as 'done' (the sheet exists → audit landed).
     status_counts = {"done": 0, "error": 0, "running": 0, "pending": 0}
+    # Usage roll-up — total pages crawled, Composio + PSI calls, estimated
+    # cost — summed across every row we have numbers for. Gives one quick
+    # read on how much the tool has done at the top of the page.
+    usage = {"pages": 0, "composio_calls": 0, "psi_calls": 0, "cost_usd": 0.0}
+    def _n(v):
+        try: return int(float(str(v).strip())) if v else 0
+        except Exception: return 0
+    def _f(v):
+        try: return float(str(v).strip()) if v else 0.0
+        except Exception: return 0.0
     for r in merged:
         s = (r.get("status") or "done").lower()
         if s in status_counts:
             status_counts[s] += 1
         else:
             status_counts["done"] += 1
+        usage["pages"]           += _n(r.get("pages"))
+        usage["composio_calls"]  += _n(r.get("composio_calls"))
+        usage["psi_calls"]       += _n(r.get("psi_calls"))
+        usage["cost_usd"]        += _f(r.get("cost_usd"))
+    usage["cost_usd"] = round(usage["cost_usd"], 2)
     return render_template("history.html", runs=merged,
                            total_count=len(merged),
                            status_counts=status_counts,
+                           usage=usage,
                            weekly=weekly,
                            jobs_sheet_url=_jobs_mod.get_url() if hasattr(_jobs_mod, "get_url") else "",
                            audit_host=_audit_host)
