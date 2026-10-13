@@ -482,6 +482,52 @@ def chat_route():
             OP_COL = {"skip": "A", "clear_support": "I",
                       "set_ctx": "F", "set_stat": "E",
                       "set_costs": "H", "set_category": "A"}
+            # LLM-rewrite trigger — when the user asks to "rewrite /
+            # revamp / rephrase / shorten / polish / improve / make
+            # better / clean up" instead of handing over exact copy, the
+            # value field holds an INSTRUCTION, not final text. Detect
+            # that and ask the LLM to generate the new line from the
+            # current cell + the instruction.
+            import re as _r_rw
+            REWRITE_RE = _r_rw.compile(
+                r"\b(rewrite|revamp|rephrase|reword|rework|shorten|lengthen|"
+                r"polish|improve|clean\s*up|tighten|make\s+(?:it|that)\s+"
+                r"(?:better|shorter|clearer|punchier|simpler))\b", _r_rw.I)
+            def _llm_rewrite(current_text, instruction, column_kind):
+                """One-shot OpenAI call: rewrite `current_text` per the
+                `instruction`. Returns the new text, or the original if
+                the key / call fails."""
+                import os as _os_rw
+                key = _os_rw.environ.get("OPENAI_API_KEY", "").strip()
+                if not key: return current_text
+                import requests as _rq
+                kind_hint = {
+                    "ctx":   "a one-sentence slide subheading, 10-18 words, lead with the gain (e.g. 'more leads once...').",
+                    "costs": "a 1-2 sentence 'What it costs you' body, concrete, no corporate hedging.",
+                }.get(column_kind, "a short cell value")
+                sys = ("You rewrite one cell of an SEO audit deck. "
+                       "Return ONLY the new text, no quotes, no preamble, "
+                       "no 'Here is the rewrite'. Target: " + kind_hint)
+                user = f"Current text:\n{current_text or '(empty)'}\n\nInstruction: {instruction}"
+                try:
+                    rr = _rq.post(
+                        "https://api.openai.com/v1/chat/completions",
+                        headers={"Authorization": f"Bearer {key}",
+                                 "Content-Type": "application/json"},
+                        json={"model": "gpt-4o-mini",
+                              "messages": [{"role": "system", "content": sys},
+                                            {"role": "user", "content": user}],
+                              "temperature": 0.3, "max_tokens": 180},
+                        timeout=25)
+                    if rr.ok:
+                        out = (rr.json().get("choices") or [{}])[0].get("message", {}).get("content", "").strip()
+                        # Strip stray quotes
+                        if out.startswith(("'", '"')) and out.endswith(("'", '"')):
+                            out = out[1:-1].strip()
+                        return out or current_text
+                except Exception as exc:
+                    print(f"[chat] llm_rewrite failed: {exc}")
+                return current_text
             for e in intent["edits"]:
                 tgt = e["target"]
                 op = e["op"]
@@ -503,6 +549,20 @@ def chat_route():
                     errors.append(f"'{tgt}': no matching row")
                     continue
                 col = OP_COL.get(op)
+                # For set_ctx / set_costs, decide whether the user supplied
+                # final copy OR an instruction to rewrite. Heuristic:
+                # - Short value with a rewrite verb → instruction, call LLM
+                # - Empty value → instruction = full prompt text, call LLM
+                # - Long sentence (>40 chars, has a space, no rewrite verb) → use as-is
+                if op in ("set_ctx", "set_costs"):
+                    cur_row = rows[row_num - 1] if row_num - 1 < len(rows) else []
+                    cur_col_idx = 5 if op == "set_ctx" else 7
+                    cur_text = str(cur_row[cur_col_idx] if cur_col_idx < len(cur_row) else "").strip()
+                    is_rewrite = bool(REWRITE_RE.search(val)) or len(val) < 25
+                    if is_rewrite:
+                        instruction = val or prompt
+                        val = _llm_rewrite(cur_text, instruction,
+                                           "ctx" if op == "set_ctx" else "costs")
                 if op == "skip":
                     new_val = "SKIP"
                 elif op == "clear_support":

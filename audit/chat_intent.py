@@ -78,12 +78,18 @@ message; classify it and return STRICT JSON with ONE of these shapes:
    Trigger phrases → op mapping:
      - "skip Finding X" / "remove X slide" / "don't show X"           → skip
      - "remove ss from X" / "clear screenshot on X" / "no supp on X"  → clear_support
-     - "change ctx of X to ..." / "rewrite header of X to ..."        → set_ctx
+     - "change ctx of X to <text>"                                    → set_ctx
      - "set stat of X to +9%" / "make X +12%"                         → set_stat
-     - "shorten costs on X to ..." / "rewrite what-it-costs on X ..." → set_costs
+     - "shorten costs on X to <text>"                                 → set_costs
      - "rename X to Y"                                                → set_category
    target is a category phrase (fuzzy matched) OR a row number ("row 5").
-   value is the new text — exact string the user supplied, no rewriting.
+   value is EITHER the final text the user handed over, OR a rewrite
+   instruction when the user asks to 'rewrite', 'revamp', 'rephrase',
+   'reword', 'shorten', 'polish', 'improve', 'clean up', 'tighten',
+   'make it better/shorter/clearer' — in those cases, put the user's
+   instruction verbatim in value (including the trigger word) so the
+   downstream handler can call the LLM to generate the actual copy.
+   NEVER write the trigger word by itself as the new cell value.
    Return one edits[] entry per distinct ask. Multiple ops on the SAME
    row/target → multiple edits entries.
 
