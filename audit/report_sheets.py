@@ -1225,13 +1225,36 @@ def _recompute_intro_from_rows(obs_rows):
     if intro is None:
         return
     findings = [r for r in obs_rows if r["slide_type"] == "finding"]
+    # Fuzzy fallback: when a category isn't an exact key in the weights
+    # map (e.g. 'Bad Title Tags' is custom but semantically = Title Tags),
+    # pick the weight by substring match against a few canonical topics.
+    # Was dropping real findings out of the lead sum just because their
+    # category wording was slightly different from the catalog.
+    _TOPIC_WEIGHT_FALLBACK = (
+        (("title",),             15),  # Bad Title Tags, Short Titles, etc.
+        (("meta descr", "meta"), 5.8),
+        (("thin",),              25),
+        (("page speed", "lcp", "slow", "performance"), 24),
+        (("cta",),               35),
+        (("sitemap",),           20),
+        (("h1",),                15),
+        (("schema", "structured data"), 5),
+        (("content visib", "render"), 30),
+        (("navigation", "menu"), 15),
+    )
+    def _weight_for(cat):
+        w = _LEAD_CATEGORY_WEIGHTS.get(cat)
+        if w is not None: return w
+        for subs, wt in _TOPIC_WEIGHT_FALLBACK:
+            if any(s in cat for s in subs): return wt
+        return None
     picks = []
     seen = set()
     for r in findings:
         cat = (r.get("category") or "").strip().lower()
         if not cat or cat in seen:
             continue
-        weight = _LEAD_CATEGORY_WEIGHTS.get(cat)
+        weight = _weight_for(cat)
         if weight is None:
             continue
         # Only sum into the lead formula if the slide's own hook_ctx
