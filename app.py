@@ -465,6 +465,72 @@ def chat_route():
                 "message": f"Attached {len(markers)} image(s) to row {row_num} ({cat}).",
             })
 
+        if intent["action"] == "deck_edit":
+            # Execute each edit against the sheet. Target resolution:
+            # digit → row; else fuzzy-match against col A (category) of
+            # all finding rows. First substring hit wins.
+            if not sheet_url:
+                return jsonify({"error": "sheet_url required"}), 400
+            from audit.report_sheets import (
+                _composio_execute as _cx2, _extract_first_range as _efr,
+                _extract_sheet_id as _esid)
+            sid = _esid(sheet_url)
+            rows = _efr(_cx2("GOOGLESHEETS_BATCH_GET", {
+                "spreadsheet_id": sid, "ranges": ["Observations!A1:I"]})) or []
+            results = []
+            errors = []
+            OP_COL = {"skip": "A", "clear_support": "I",
+                      "set_ctx": "F", "set_stat": "E",
+                      "set_costs": "H", "set_category": "A"}
+            for e in intent["edits"]:
+                tgt = e["target"]
+                op = e["op"]
+                val = e["value"]
+                row_num = None
+                if tgt.isdigit():
+                    row_num = int(tgt)
+                else:
+                    tgt_lc = tgt.lower()
+                    best = (0, None)
+                    for i, r in enumerate(rows[1:], start=2):
+                        cat = str(r[0] if r and len(r) > 0 else "").lower().strip()
+                        if not cat: continue
+                        if tgt_lc in cat or cat in tgt_lc:
+                            score = len(set(tgt_lc.split()) & set(cat.split())) + (10 if tgt_lc == cat else 0)
+                            if score > best[0]: best = (score, i)
+                    row_num = best[1]
+                if not row_num or row_num < 2:
+                    errors.append(f"'{tgt}': no matching row")
+                    continue
+                col = OP_COL.get(op)
+                if op == "skip":
+                    new_val = "SKIP"
+                elif op == "clear_support":
+                    new_val = ""
+                elif op == "set_stat":
+                    new_val = val if val.startswith(("+", "-")) else "+" + val
+                else:
+                    new_val = val
+                try:
+                    _cx2("GOOGLESHEETS_BATCH_UPDATE", {
+                        "spreadsheet_id": sid, "sheet_name": "Observations",
+                        "first_cell_location": f"{col}{row_num}",
+                        "valueInputOption": "USER_ENTERED",
+                        "values": [[new_val]],
+                    })
+                    results.append(f"row {row_num} {col}: {op} ({tgt[:30]}) → {str(new_val)[:40]!r}")
+                except Exception as exc:
+                    errors.append(f"row {row_num} {col}: {str(exc)[:120]}")
+            try: history.ensure_registered(sheet_url)
+            except Exception: pass
+            return jsonify({
+                "ok": True, "action": "deck_edit",
+                "applied": len(results),
+                "results": results, "errors": errors,
+                "message": (f"Applied {len(results)} edit(s)." if results
+                            else "No edits applied — targets not found."),
+            })
+
         if intent["action"] == "unknown":
             return jsonify({
                 "ok": False, "action": "unknown",

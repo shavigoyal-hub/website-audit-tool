@@ -69,7 +69,25 @@ message; classify it and return STRICT JSON with ONE of these shapes:
    row 5'. The target is matched case-insensitive against the category
    column — longest prefix match wins. A pure number means the row index.
 
-4. Ambiguous / unrelated:
+4. Editing one row of the CURRENT audit sheet (deck tweaks):
+   {"action": "deck_edit",
+    "edits": [{"target": "<category phrase or row number>",
+               "op":     "<skip | clear_support | set_ctx | set_stat | set_costs | set_category>",
+               "value":  "<new text, omit for skip/clear_support>"}]}
+
+   Trigger phrases → op mapping:
+     - "skip Finding X" / "remove X slide" / "don't show X"           → skip
+     - "remove ss from X" / "clear screenshot on X" / "no supp on X"  → clear_support
+     - "change ctx of X to ..." / "rewrite header of X to ..."        → set_ctx
+     - "set stat of X to +9%" / "make X +12%"                         → set_stat
+     - "shorten costs on X to ..." / "rewrite what-it-costs on X ..." → set_costs
+     - "rename X to Y"                                                → set_category
+   target is a category phrase (fuzzy matched) OR a row number ("row 5").
+   value is the new text — exact string the user supplied, no rewriting.
+   Return one edits[] entry per distinct ask. Multiple ops on the SAME
+   row/target → multiple edits entries.
+
+5. Ambiguous / unrelated:
    {"action": "unknown", "reason": "<short reason>"}
 
 RULES:
@@ -156,6 +174,23 @@ def _sanitise(data, prompt):
         if not target:
             return _fallback(prompt)
         return {"action": "attach_to_row", "target": target}
+
+    if action == "deck_edit":
+        VALID_OPS = {"skip", "clear_support", "set_ctx", "set_stat",
+                     "set_costs", "set_category"}
+        edits = []
+        for e in (data.get("edits") or []):
+            if not isinstance(e, dict):
+                continue
+            target = str(e.get("target", "")).strip()
+            op = str(e.get("op", "")).strip().lower()
+            val = str(e.get("value", "")).strip()
+            if not target or op not in VALID_OPS:
+                continue
+            edits.append({"target": target, "op": op, "value": val})
+        if not edits:
+            return _fallback(prompt)
+        return {"action": "deck_edit", "edits": edits}
 
     if action == "edit_parameter":
         edits = []
