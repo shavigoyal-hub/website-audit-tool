@@ -154,7 +154,7 @@ HOOK_COPY = {
     "h1_missing": {
         "hook_stat": "+15%",
         "hook_ctx":  "more leads when key pages have a proper H1. Pages with no H1 give Google no topic to rank for.",
-        "costs":     "Missing H1s give Google no topic to rank the page for, directly hurting rankings and leads.",
+        "costs":     "A clear H1 is Google's primary topic signal — add one and the page earns a shot at ranking for its target query.",
         "support":   "Backlinko on-page correlation study: pages with a keyword-rich H1 rank higher.",
     },
     "h1_multiple": {
@@ -179,12 +179,12 @@ HOOK_COPY = {
     "meta_long": {
         "hook_stat": "-3%",
         "hook_ctx":  "CTR loss from truncated descriptions in search.",
-        "costs":     "Over-length descriptions get cut mid-sentence, hurting click-through.",
+        "costs":     "Over-length descriptions get cut mid-sentence; tightening to 140-155 chars reclaims the full snippet.",
         "support":   "",
     },
     "meta_short": {
         "hook_stat": "-2%",
-        "hook_ctx":  "snippet space wasted on descriptions under 70 chars.",
+        "hook_ctx":  "more snippet real estate once descriptions use the full 140-155 char slot.",
         "costs":     "Short descriptions under-use the snippet and lower click-through.",
         "support":   "",
     },
@@ -197,7 +197,7 @@ HOOK_COPY = {
     # ── Title tags ────────────────────────────────────────────────────────
     "title_missing": {
         "hook_stat": "-35%",
-        "hook_ctx":  "leads lost when the title tag is missing.",
+        "hook_ctx":  "more leads once every page has a title tag.",
         "costs":     "Missing titles severely weaken relevance signals, rankings and leads.",
         "support":   "Moz on-page factors: title tag is the #1 on-page ranking signal (secondary: pages without titles rank ~35% lower on average).",
     },
@@ -205,11 +205,11 @@ HOOK_COPY = {
         "hook_stat": "-3%",
         "hook_ctx":  "CTR loss when titles get truncated in the SERP.",
         "costs":     "Truncated titles in search reduce click-through and rankings.",
-        "support":   "Portent CTR study (2024): truncated titles lose about 3% CTR at same position.",
+        "support":   "Portent CTR study (2024): titles that fit the SERP slot earn ~3% more CTR at the same position.",
     },
     "title_short": {
         "hook_stat": "-3%",
-        "hook_ctx":  "SERP space wasted on titles under 30 chars.",
+        "hook_ctx":  "more SERP real estate once titles use the full 50-60 char slot.",
         "costs":     "Short titles under-describe the page and waste SERP space.",
         "support":   "Directional benchmark based on SERP-CTR studies.",
     },
@@ -222,7 +222,7 @@ HOOK_COPY = {
     "title_stuffed": {
         "hook_stat": "-5%",
         "hook_ctx":  "ranking risk from keyword-stuffed titles that Google flags as spam.",
-        "costs":     "Keyword stuffing looks spammy and can hurt rankings.",
+        "costs":     "Keyword stuffing reads as spam; a natural, benefit-led title ranks better and converts more clicks.",
         "support":   "Google spam policies flag keyword stuffing as a violation.",
     },
     # ── Schema / structured data ─────────────────────────────────────────
@@ -235,7 +235,7 @@ HOOK_COPY = {
     "faq_missing": {
         "hook_stat": "+5%",
         "hook_ctx":  "click-through when FAQ answers show under your listing.",
-        "costs":     "You lose People-Also-Ask real estate to competitors who mark up their answers.",
+        "costs":     "FAQ schema wins People-Also-Ask placements that competitors are currently capturing.",
         "support":   "Google PAA carousel drives approx 5% CTR uplift on match; source: Semrush 2024 SERP study.",
     },
     "schema_product_missing": {
@@ -280,7 +280,7 @@ HOOK_COPY = {
         "hook_stat": "+30%",
         "hook_ctx":  "more leads once the key page's content is visible to Google in raw HTML.",
         "costs":     "If the content only appears after JS runs, Google indexes an empty shell — the page doesn't earn ranking signals.",
-        "support":   "Google renders JS but with a delay — pages that need rendering lose ranking signal weight for days or weeks.",
+        "support":   "Google renders JS with a delay — HTML-first pages carry full ranking weight from day one.",
     },
     "canonical_missing": {
         "hook_stat": "-25%",
@@ -297,14 +297,14 @@ HOOK_COPY = {
     # ── Errors / crawlability ────────────────────────────────────────────
     "error_404": {
         "hook_stat": "-12%",
-        "hook_ctx":  "authority lost through dead links and 404s.",
-        "costs":     "Dead links lose traffic and dilute site authority.",
+        "hook_ctx":  "authority recovered once dead links and 404s are fixed.",
+        "costs":     "Replacing dead links recovers traffic and keeps authority flowing to money pages.",
         "support":   "",
     },
     "error_404_money": {
         "hook_stat": "-40%",
-        "hook_ctx":  "leads lost when money pages 404. Visitors bounce, Google drops the URL.",
-        "costs":     "Broken product, service, or checkout pages kill conversions and let Google demote the URL.",
+        "hook_ctx":  "more leads once money-page 404s are redirected to live equivalents.",
+        "costs":     "Fixing broken product / service / checkout pages re-opens the conversion path and tells Google the URL is live.",
         "support":   "Ahrefs 2023 broken-links study: 4xx on commercial URLs correlates with a ~40% traffic drop.",
     },
     "error_5xx": {
@@ -316,26 +316,26 @@ HOOK_COPY = {
     "render_error": {
         "hook_stat": "0%",
         "hook_ctx":  "chance of leads from pages Google can't render at all.",
-        "costs":     "Rendering / JS errors mean affected pages may not be indexed and produce zero leads.",
+        "costs":     "Resolving render / JS errors gets the affected pages indexed so they can start producing leads.",
         "support":   "Google JavaScript SEO docs: pages with hydration errors get dropped from the index.",
     },
     "render_blocked": {
         "hook_stat": "-35%",
-        "hook_ctx":  "leads lost when critical resources are blocked from crawl.",
+        "hook_ctx":  "more leads once critical resources are reachable by Google's crawler.",
         "costs":     "Blocked resources stop Google from seeing the full page, dropping rankings and leads.",
-        "support":   "Google Search Central: sites blocking CSS/JS in robots.txt lose visibility.",
+        "support":   "Google Search Central: sites that let Googlebot read CSS/JS keep their full ranking visibility.",
     },
     "render_js_dependent": {
         "hook_stat": "-35%",
-        "hook_ctx":  "leads lost when the page needs JS to become useful content.",
+        "hook_ctx":  "more leads once the page's main content renders in raw HTML.",
         "costs":     "JS-dependent content is indexed slower — and sometimes not at all, so leads never arrive.",
         "support":   "Onely 2023: JS-only content is indexed up to 9x slower than server-rendered HTML.",
     },
     # ── Speed / Core Web Vitals ─────────────────────────────────────────
     "lcp_high": {
         "hook_stat": "-24%",
-        "hook_ctx":  "leads and rankings lost when LCP is above 4 seconds.",
-        "costs":     "Slow load kills the click before the page loads, and Google pushes slow pages down on mobile.",
+        "hook_ctx":  "leads and rankings earned back once LCP drops under 2.5 s.",
+        "costs":     "A fast page keeps the click and earns Google's mobile ranking boost; most organic traffic lives there.",
         "support":   "Google 2020 field study: 53% of mobile visits leave if a page takes over 3s.",
     },
     "lcp_medium": {
@@ -346,8 +346,8 @@ HOOK_COPY = {
     },
     "cls_high": {
         "hook_stat": "-14%",
-        "hook_ctx":  "leads lost when layout shifts move buttons under the click.",
-        "costs":     "Layout shift causes mis-clicks + bounce, and Google demotes pages with CLS above 0.25.",
+        "hook_ctx":  "more leads once layout is stable and buttons stay where users expect.",
+        "costs":     "Stable layout keeps users on the right button and clears Google's CLS ranking signal.",
         "support":   "Web.dev CLS study: CLS >0.25 correlates with ~14% higher bounce.",
     },
     "perf_low": {
@@ -364,8 +364,8 @@ HOOK_COPY = {
     },
     "unoptimized_images": {
         "hook_stat": "-15%",
-        "hook_ctx":  "load speed lost to unoptimised images.",
-        "costs":     "Heavy images push LCP over the limit and hurt Core Web Vitals.",
+        "hook_ctx":  "faster load once hero and gallery images are compressed.",
+        "costs":     "Compressed images pull LCP under the Core Web Vitals threshold, unlocking the mobile ranking boost.",
         "support":   "",
     },
     "image_large": {
@@ -377,13 +377,13 @@ HOOK_COPY = {
     "high_carbon": {
         "hook_stat": "+40%",
         "hook_ctx":  "page weight vs the mobile median. Slow to load, slow to rank.",
-        "costs":     "Heavy pages fail Core Web Vitals and lose mobile ranking.",
+        "costs":     "Lighter pages pass Core Web Vitals and earn the mobile ranking boost.",
         "support":   "",
     },
     "render_blocking": {
         "hook_stat": "-35%",
-        "hook_ctx":  "leads lost when render-blocking scripts delay first paint.",
-        "costs":     "Render-blocking resources delay the first meaningful paint, hurting rankings and leads.",
+        "hook_ctx":  "more leads once render-blocking scripts stop delaying first paint.",
+        "costs":     "Deferring render-blocking resources speeds first paint, which Google rewards with ranking lift.",
         "support":   "Web.dev render-blocking audit: eliminating them typically saves 200-500ms LCP.",
     },
     # ── URL / internal linking ────────────────────────────────────────────
@@ -396,7 +396,7 @@ HOOK_COPY = {
     "low_inlinks": {
         "hook_stat": "-20%",
         "hook_ctx":  "crawl priority for pages with very few internal links.",
-        "costs":     "Google under-values pages nothing else on the site links to.",
+        "costs":     "Internal links concentrate authority on the pages you want to rank; adding them tells Google what matters.",
         "support":   "",
     },
     "flat_architecture": {
@@ -414,13 +414,13 @@ HOOK_COPY = {
     "about_missing": {
         "hook_stat": "-25%",
         "hook_ctx":  "SERP click-through and LLM citation rate when there is no About page.",
-        "costs":     "No About page hurts E-E-A-T and stops LLMs from citing the brand as a source.",
+        "costs":     "An About page earns E-E-A-T credit and gives LLMs a canonical source to cite your brand from.",
         "support":   "About pages are the strongest single signal LLMs use to decide who to quote.",
     },
     "hub_subdomain": {
         "hook_stat": "-30%",
         "hook_ctx":  "domain authority when the content hub lives on a separate subdomain.",
-        "costs":     "A subdomain hub splits authority — the money site loses the topical strength the blog builds.",
+        "costs":     "Hosting the blog on the main domain concentrates topical authority on the money site where it drives revenue.",
         "support":   "Moving blog.example.com to example.com/blog concentrates PageRank on one domain.",
     },
     "orphan_page": {
@@ -444,8 +444,8 @@ HOOK_COPY = {
     },
     "cta_missing": {
         "hook_stat": "+35%",
-        "hook_ctx":  "more leads when pages get a clear CTA. Right now visitors have nothing to click.",
-        "costs":     "Visitors arrive but there's nothing for them to do, so traffic doesn't turn into leads.",
+        "hook_ctx":  "more leads once every money page carries a clear above-the-fold CTA.",
+        "costs":     "A clear above-the-fold CTA turns traffic into leads instead of letting it bounce.",
         "support":   "",
     },
     # ── Spelling / grammar ───────────────────────────────────────────────
@@ -458,7 +458,7 @@ HOOK_COPY = {
     # ── Site infrastructure ──────────────────────────────────────────────
     "sitemap_missing": {
         "hook_stat": "-20%",
-        "hook_ctx":  "leads lost when Google discovers pages 2x slower without a sitemap.",
+        "hook_ctx":  "faster indexation of new money pages once a sitemap is submitted.",
         "costs":     "No sitemap slows indexation and hides new pages from Google for weeks.",
         "support":   "Google docs: XML sitemap is required for large sites and news / video content.",
     },
@@ -488,14 +488,14 @@ HOOK_COPY = {
     },
     "crawl_budget_wasted": {
         "hook_stat": "-3%",
-        "hook_ctx":  "index efficiency wasted on redirect, error and noindex URLs.",
-        "costs":     "Wasted crawl budget delays discovery of new money pages.",
+        "hook_ctx":  "crawl budget recovered once redirect, error and noindex URLs are cleaned up.",
+        "costs":     "Cleaning the crawl path means new money pages get discovered faster.",
         "support":   "Google crawl budget guide.",
     },
     "contact_missing": {
         "hook_stat": "-10%",
         "hook_ctx":  "SERP click-through and LLM citation rate when there is no clear contact or booking page.",
-        "costs":     "No contact page kills the direct lead path and weakens E-E-A-T.",
+        "costs":     "A clear contact page opens the direct-lead path and strengthens E-E-A-T signals.",
         "support":   "Google helpful content: contact info is a core E-E-A-T signal.",
     },
     # ── Site architecture (extras) ───────────────────────────────────────
@@ -541,14 +541,14 @@ HOOK_COPY = {
     },
     "homepage_images_broken": {
         "hook_stat": "-10%",
-        "hook_ctx":  "bounce and lost Google Image traffic when homepage images render as broken.",
+        "hook_ctx":  "lower bounce and more Google Image traffic once homepage images render cleanly.",
         "costs":     "Broken images increase first-visit bounce and cost image-search entries.",
         "support":   "",
     },
     "homepage_media_broken": {
         "hook_stat": "-8%",
-        "hook_ctx":  "engagement lost when the homepage video / banner does not render.",
-        "costs":     "A broken hero banner hurts engagement and bounce.",
+        "hook_ctx":  "more engagement once the homepage hero video / banner renders cleanly.",
+        "costs":     "A working hero banner keeps engagement high and bounce low.",
         "support":   "",
     },
     "duplicate_homepage": {
@@ -579,13 +579,13 @@ HOOK_COPY = {
     "viewport_pinch_zoom_blocked": {
         "hook_stat": "-10%",
         "hook_ctx":  "mobile usability score when the viewport blocks pinch zoom.",
-        "costs":     "Blocking pinch zoom fails Google's mobile-friendly test and hurts accessibility.",
+        "costs":     "Allowing pinch zoom passes Google's mobile-friendly test and keeps the site accessible.",
         "support":   "Google mobile-friendly test rejects pages that disable user scaling.",
     },
     "dead_nav_links": {
         "hook_stat": "-15%",
         "hook_ctx":  "conversion path broken when primary-nav links point at '#' instead of a real page.",
-        "costs":     "Dead nav links break the money-page crawl path and hurt UX.",
+        "costs":     "Live nav links keep the money-page crawl path open and give users a clean route to buy.",
         "support":   "Google Search Central: navigation links pass topical authority to key pages.",
     },
     "wwwredir_temp": {
