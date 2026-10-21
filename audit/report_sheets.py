@@ -977,6 +977,7 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         #    separate workflows for CS.
         try:
             _write_slide_review_tab(sid, header, intro_row, ending_row)
+            _hide_tab(sid, "Slide Review")
         except Exception as exc:
             print(f"[sheets] slide review tab (non-fatal): {exc}")
 
@@ -985,6 +986,11 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         #     the taxonomy source-of-truth travels with the sheet.
         try:
             _write_parameters_tab(sid)
+            _hide_tab(sid, "Parameters")
+        try:
+            _middle_align_observations(sid)
+        except Exception as exc:
+            print(f"[sheets] middle-align (non-fatal): {exc}")
         except Exception as exc:
             print(f"[sheets] parameters tab (non-fatal): {exc}")
 
@@ -1335,6 +1341,49 @@ def _recompute_intro_from_rows(obs_rows):
         _ctx_body = _re.sub(r"^\s*[+\-]?\d+(?:[.,]\d+)?%\s*", "", _ctx)
         if _ctx_body != _ctx:
             r["hook_ctx"] = f"{new_stat} {_ctx_body}"
+
+
+def _hide_tab(spreadsheet_id, tab_title):
+    """Hide a tab so CS sees only Observations. Internal tabs (Slide
+    Review, Parameters) are kept for traceability but shouldn't show."""
+    try:
+        from audit.composio_exec import proxy as _p
+        info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                                  {"spreadsheet_id": spreadsheet_id}) or {}
+        for s in (info.get("sheets") or []):
+            props = s.get("properties") or {}
+            if props.get("title") == tab_title:
+                _p(endpoint=f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}:batchUpdate",
+                   method="POST",
+                   body={"requests": [{"updateSheetProperties": {
+                       "properties": {"sheetId": props.get("sheetId"), "hidden": True},
+                       "fields": "hidden"}}]})
+                return
+    except Exception as exc:
+        print(f"[sheets] hide_tab {tab_title}: {exc}")
+
+
+def _middle_align_observations(spreadsheet_id):
+    """Vertical-center every cell in the Observations tab so long body
+    text doesn't bottom-stick inside tall rows (default Sheets alignment)."""
+    try:
+        from audit.composio_exec import proxy as _p
+        info = _composio_execute("GOOGLESHEETS_GET_SPREADSHEET_INFO",
+                                  {"spreadsheet_id": spreadsheet_id}) or {}
+        for s in (info.get("sheets") or []):
+            props = s.get("properties") or {}
+            if props.get("title") == "Observations":
+                _p(endpoint=f"https://sheets.googleapis.com/v4/spreadsheets/{spreadsheet_id}:batchUpdate",
+                   method="POST",
+                   body={"requests": [{"repeatCell": {
+                       "range": {"sheetId": props.get("sheetId")},
+                       "cell": {"userEnteredFormat": {
+                           "verticalAlignment": "MIDDLE",
+                           "wrapStrategy": "WRAP"}},
+                       "fields": "userEnteredFormat(verticalAlignment,wrapStrategy)"}}]})
+                return
+    except Exception as exc:
+        print(f"[sheets] middle_align: {exc}")
 
 
 def _write_slide_review_tab(spreadsheet_id, header, intro_row, ending_row):
