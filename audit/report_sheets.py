@@ -830,12 +830,33 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
                 elif u.startswith("/"):
                     labelled.append((u, label))
             # Belt-and-braces: if the reference gave us nothing, scrape URLs
-            # from the observation text.
+            # from the observation text. Catch both full `https://` URLs
+            # and relative paths (`/Partners/`, `/solutions`) — relative
+            # paths get the client's host prepended so the deck shows a
+            # clickable link, not a bare slug.
             if not labelled:
-                for m_url in _url_pat.finditer(r.get("observation", "") or ""):
+                obs_txt = r.get("observation", "") or ""
+                for m_url in _url_pat.finditer(obs_txt):
                     labelled.append((m_url.group(0).rstrip(".,;"), default_label))
-                    if len(labelled) >= 3:
-                        break
+                    if len(labelled) >= 5: break
+                if not labelled:
+                    # Fallback: pick relative paths out of the observation,
+                    # drop the probe-trace tail ('|| LABEL=…'), and prefix
+                    # with the live host when available.
+                    live_host = ""
+                    _live = (meta or {}).get("live_url", "") if isinstance(meta, dict) else ""
+                    m_lh = _url_pat.search(_live) if _live else None
+                    if m_lh:
+                        from urllib.parse import urlparse as _urp
+                        p = _urp(m_lh.group(0))
+                        live_host = f"{p.scheme}://{p.netloc}"
+                    import re as _rp
+                    for m_rel in _rp.finditer(r"(?<![\w/:])(/[a-zA-Z0-9][\w\-/]*(?:/)?)", obs_txt):
+                        slug = m_rel.group(1).rstrip(".,;")
+                        if slug in ("/", "/sitemap.xml"): continue
+                        full = (live_host + slug) if live_host else slug
+                        labelled.append((full, default_label))
+                        if len(labelled) >= 5: break
             # Site-wide findings — flat architecture, nav_missing,
             # sitemap_missing, robots_missing, etc. Don't show the homepage
             # URL as evidence (misleading); write 'Sitewide | <label>'

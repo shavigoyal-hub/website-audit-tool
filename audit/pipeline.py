@@ -472,8 +472,10 @@ def _expand_thin_content(findings, live_url, max_pages=40):
     findings.append({
         "key": "thin_content", "count": len(thin_urls),
         "examples": thin_urls,
-        "evidence": ("Thin Content (probed)",
-                     ["Address"], [[u] for u in thin_urls]),
+        # NOTE: do NOT set 'evidence' here. _row() prefers evidence[0]
+        # over examples; a plain-string label like 'Thin Content (probed)'
+        # would then wipe the actual URLs out of the sheet's reference
+        # column, leaving the deck's 'What we found' card empty.
     })
     return findings
 
