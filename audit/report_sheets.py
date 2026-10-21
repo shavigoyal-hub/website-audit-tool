@@ -987,12 +987,12 @@ def build(spreadsheet_title, obs_rows, evidence_tabs,
         try:
             _write_parameters_tab(sid)
             _hide_tab(sid, "Parameters")
+        except Exception as exc:
+            print(f"[sheets] parameters tab (non-fatal): {exc}")
         try:
             _middle_align_observations(sid)
         except Exception as exc:
             print(f"[sheets] middle-align (non-fatal): {exc}")
-        except Exception as exc:
-            print(f"[sheets] parameters tab (non-fatal): {exc}")
 
         # 7) Sources tab (hidden by default — reviewer can un-hide from Sheets)
         try:
